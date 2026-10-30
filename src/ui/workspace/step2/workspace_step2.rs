@@ -432,6 +432,10 @@ fn render_popups(
     action: &mut Option<Step2Action>,
     palette: crate::ui::shared::redesign_tokens::ThemePalette,
 ) {
+    crate::ui::step2::installer_answers_step2::bind_workspace(
+        &mut orchestrator.wizard_state,
+        orchestrator.workspace_view.loaded_workspace_id.as_deref(),
+    );
     let outcome =
         crate::ui::step2::compat_window_step2::render(ui, &mut orchestrator.wizard_state, palette);
     crate::ui::step2::prompt_popup_step2::render_prompt_popup(ui, &mut orchestrator.wizard_state);
@@ -443,7 +447,14 @@ fn render_popups(
     }
 
     if orchestrator.wizard_state.step2.update_selected_popup_open {
+        orchestrator.wizard_state.step2.installer_answers = None;
         crate::ui::workspace::versions::versions_drawer::render(ctx, orchestrator, action, palette);
+    } else if crate::ui::step2::installer_answers_panel_step2::render(
+        ctx,
+        &mut orchestrator.wizard_state,
+        palette,
+    ) {
+        orchestrator.mark_workspace_dirty();
     }
 }
 

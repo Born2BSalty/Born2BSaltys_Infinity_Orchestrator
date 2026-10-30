@@ -153,6 +153,32 @@ impl VersionsDrawerUi {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct InstallerAnswerDraft {
+    pub(crate) text: String,
+    pub(crate) blank_enter: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InstallerAnswerTarget {
+    pub(crate) game_tab: String,
+    pub(crate) package_path: String,
+    pub(crate) tp_file: String,
+    pub(crate) component_id: String,
+    pub(crate) language: u8,
+    pub(crate) original_line: String,
+    pub(crate) title: String,
+    pub(crate) questions: String,
+    pub(crate) answers: Vec<InstallerAnswerDraft>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct InstallerAnswersEditor {
+    pub(crate) targets: Vec<InstallerAnswerTarget>,
+    pub(crate) active: usize,
+    pub(crate) status: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Step2State<Flag = bool> {
     pub search_query: String,
@@ -172,6 +198,8 @@ pub struct Step2State<Flag = bool> {
     pub compat_popup_open: Flag,
     pub compat_popup_issue_override: Option<crate::app::compat_issue::CompatIssue>,
     pub compat_popup_filter: String,
+    pub(crate) installer_answers: Option<InstallerAnswersEditor>,
+    pub(crate) installer_answers_workspace: Option<String>,
     pub prompt_popup_open: Flag,
     pub prompt_popup_mode: PromptPopupMode,
     pub prompt_popup_title: String,
@@ -272,6 +300,8 @@ impl Default for Step2State {
             compat_popup_open: false,
             compat_popup_issue_override: None,
             compat_popup_filter: "All".to_string(),
+            installer_answers: None,
+            installer_answers_workspace: None,
             prompt_popup_open: false,
             prompt_popup_mode: PromptPopupMode::Text,
             prompt_popup_title: String::new(),

@@ -10,6 +10,27 @@
 #////////////////////////////////////////////////#
 
 [[mods]]
+name = "Miscellaneous Tweaks"
+tp2 = "A7-MiscTweaks"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "argent77"
+  label = "Argent77"
+  type = "github"
+  url = "https://github.com/Argent77/A7-MiscTweaks"
+  repo = "Argent77/A7-MiscTweaks"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
 name = "Improved Archer Kit"
 tp2 = "A7#ImprovedArcher"
 aliases = []
@@ -21,6 +42,27 @@ config_files = []
   type = "github"
   url = "https://github.com/Argent77/A7-ImprovedArcher"
   repo = "Argent77/A7-ImprovedArcher"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Afaaq, the Djinni Companion"
+tp2 = "DjinniCompanion"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "argent77"
+  label = "Argent77"
+  type = "github"
+  url = "https://github.com/Argent77/DjinniCompanion"
+  repo = "Argent77/DjinniCompanion"
   commit = ""
   tag = ""
   branch = ""
@@ -306,6 +348,69 @@ config_files = []
 #////////////////////////////////////////////////#
 #//                Gibberlings3                //#
 #////////////////////////////////////////////////#
+
+[[mods]]
+name = "Sword and Fist"
+tp2 = "sword_and_fist"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "gibberlings3"
+  label = "Gibberlings3"
+  type = "github"
+  url = "https://github.com/Gibberlings3/sword_and_fist"
+  repo = "Gibberlings3/sword_and_fist"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Gavin NPC for BG1"
+tp2 = "gavin"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "gibberlings3"
+  label = "Gibberlings3"
+  type = "github"
+  url = "https://github.com/Gibberlings3/Gavin_BG"
+  repo = "Gibberlings3/Gavin_BG"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Project Javelin"
+tp2 = "cd_project_javelin"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "gibberlings3"
+  label = "Gibberlings3"
+  type = "github"
+  url = "https://github.com/Gibberlings3/Project_Javelin"
+  repo = "Gibberlings3/Project_Javelin"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Ajantis BG1 Expansion Modification"
@@ -1362,6 +1467,27 @@ config_files = []
 #////////////////////////////////////////////////#
 
 [[mods]]
+name = "Spell-50"
+tp2 = "spell50"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "pocket-plane-group"
+  label = "Pocket-Plane-Group"
+  type = "github"
+  url = "https://github.com/Pocket-Plane-Group/spell50"
+  repo = "Pocket-Plane-Group/spell50"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
 name = "Assassinations"
 tp2 = "assassinations"
 aliases = []
@@ -1874,6 +2000,174 @@ config_files = []
 #////////////////////////////////////////////////#
 
 [[mods]]
+name = "Auror Ranger Kit"
+tp2 = "A4Auror"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "the-gate-project"
+  label = "The-Gate-Project"
+  type = "github"
+  url = "https://github.com/The-Gate-Project/A4Auror"
+  repo = "The-Gate-Project/A4Auror"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = "A4AU_4.4.1.BG2EE.rar"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Domains of Dread"
+tp2 = "DofD"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "the-gate-project"
+  label = "The-Gate-Project"
+  type = "github"
+  url = "https://github.com/The-Gate-Project/Domains-of-Dread"
+  repo = "The-Gate-Project/Domains-of-Dread"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "IRStore"
+tp2 = "irstore"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "the-gate-project"
+  label = "The-Gate-Project"
+  type = "github"
+  url = "https://github.com/The-Gate-Project/IRStore"
+  repo = "The-Gate-Project/IRStore"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Icewind Dale in EET"
+tp2 = "iwd1_eet"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "the-gate-project"
+  label = "The-Gate-Project"
+  type = "github"
+  url = "https://github.com/The-Gate-Project/IWD1_EET"
+  repo = "The-Gate-Project/IWD1_EET"
+  commit = ""
+  tag = ""
+  branch = "main"
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Icewind Dale II in EET"
+tp2 = "iwd2_eet"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "the-gate-project"
+  label = "The-Gate-Project"
+  type = "github"
+  url = "https://github.com/The-Gate-Project/IWD2_EET"
+  repo = "The-Gate-Project/IWD2_EET"
+  commit = ""
+  tag = ""
+  branch = "main"
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "IWD EET End"
+tp2 = "iwd_eet_end"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "the-gate-project"
+  label = "The-Gate-Project"
+  type = "github"
+  url = "https://github.com/The-Gate-Project/IWD_EET_End"
+  repo = "The-Gate-Project/IWD_EET_End"
+  commit = ""
+  tag = ""
+  branch = "main"
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Nanstein"
+tp2 = "nanstein"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "the-gate-project"
+  label = "The-Gate-Project"
+  type = "github"
+  url = "https://github.com/The-Gate-Project/Nanstein"
+  repo = "The-Gate-Project/Nanstein"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Volcanic Armoury"
+tp2 = "VolcanicArmoury"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "the-gate-project"
+  label = "The-Gate-Project"
+  type = "github"
+  url = "https://github.com/The-Gate-Project/VolcanicArmoury"
+  repo = "The-Gate-Project/VolcanicArmoury"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = "volcanic-armoury-1.6.zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
 name = "Alcool"
 tp2 = "ALCOOL"
 aliases = []
@@ -2211,7 +2505,7 @@ config_files = []
 
 [[mods]]
 name = "Sir Renal"
-tp2 = "sir_renal"
+tp2 = "renal"
 aliases = []
 config_files = []
 
@@ -3545,6 +3839,174 @@ config_files = []
 #////////////////////////////////////////////////#
 
 [[mods]]
+name = "Sylmar Battlefield"
+tp2 = "1sylm"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/Sylmar-Battlefield"
+  repo = "Spellhold-Studios/Sylmar-Battlefield"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "BG1 NPCs for SoA & ToB"
+tp2 = "BG1NPCSoA"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/BG1-NPCs-for-SoA-ToB"
+  repo = "Spellhold-Studios/BG1-NPCs-for-SoA-ToB"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Check the Bodies"
+tp2 = "ctb"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/Check-the-Bodies"
+  repo = "Spellhold-Studios/Check-the-Bodies"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Hubelpot the Vegetable Merchant"
+tp2 = "hubelpot"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/Hubelpot-NPC"
+  repo = "Spellhold-Studios/Hubelpot-NPC"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Icewind Dale Graphical Overhaul"
+tp2 = "iwdgo"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/Icewind-Dale-Graphical-Overhaul"
+  repo = "Spellhold-Studios/Icewind-Dale-Graphical-Overhaul"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Kiara-Zaiya"
+tp2 = "kiara-zaiya"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/Kiara-Zaiya"
+  repo = "Spellhold-Studios/Kiara-Zaiya"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Luxley Family"
+tp2 = "luxleysoa"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/Luxley-Family"
+  repo = "Spellhold-Studios/Luxley-Family"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Ninde NPC"
+tp2 = "ninde"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/Ninde-NPC"
+  repo = "Spellhold-Studios/Ninde-NPC"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
 name = "Adrian NPC"
 tp2 = "Adrian"
 aliases = []
@@ -3923,7 +4385,7 @@ config_files = []
   pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
-name = "The Darkest Day"
+name = "The Darkest Day (TDDz EE Installer)"
 tp2 = "TDDZ"
 aliases = []
 config_files = []
@@ -4208,6 +4670,119 @@ config_files = []
   pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
+#//                 toopok4k3                  //#
+#////////////////////////////////////////////////#
+
+[[mods]]
+name = "Morg NPC for BGEE"
+tp2 = "k4morgul"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "toopok4k3"
+  label = "toopok4k3"
+  type = "github"
+  url = "https://github.com/toopok4k3/Morg_BG1"
+  repo = "toopok4k3/Morg_BG1"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+#////////////////////////////////////////////////#
+#//                    11jo                    //#
+#////////////////////////////////////////////////#
+
+[[mods]]
+name = "Planar Sphere Mod"
+tp2 = "planarspheremod"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "11jo"
+  label = "11jo"
+  type = "github"
+  url = "https://github.com/11jo/PlanarSphere"
+  repo = "11jo/PlanarSphere"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Paladins of Faerun Quest Pack"
+tp2 = "PoFQuestPack"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "11jo"
+  label = "11jo"
+  type = "github"
+  url = "https://github.com/11jo/Paladins-of-Faerun-Quest-Pack"
+  repo = "11jo/Paladins-of-Faerun-Quest-Pack"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = "PoFqp.v3.3.7z"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Continuous End"
+tp2 = "Continuous_End"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "11jo"
+  label = "11jo"
+  type = "github"
+  url = "https://github.com/11jo/Continuous_End"
+  repo = "11jo/Continuous_End"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "JOining Party"
+tp2 = "joining_party_select"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "11jo"
+  label = "11jo"
+  type = "github"
+  url = "https://github.com/11jo/JOining_Party"
+  repo = "11jo/JOining_Party"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+#////////////////////////////////////////////////#
 #//              UnearthedArcana               //#
 #////////////////////////////////////////////////#
 
@@ -4234,7 +4809,7 @@ config_files = []
 
 [[mods]]
 name = "5E Spellcasting"
-tp2 = "d5_5e_casting"
+tp2 = "5E_spellcasting"
 aliases = []
 config_files = []
 
@@ -4338,8 +4913,150 @@ config_files = []
   pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
+#//                 ScrierOne                  //#
+#////////////////////////////////////////////////#
+
+[[mods]]
+name = "Assorted Adjustments"
+tp2 = "assortedadjustments"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "scrierone"
+  label = "ScrierOne"
+  type = "github"
+  url = "https://github.com/ScrierOne/Assorted-Adjustments"
+  repo = "ScrierOne/Assorted-Adjustments"
+  commit = ""
+  tag = ""
+  branch = "main"
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+#////////////////////////////////////////////////#
+#//                Incrementis                 //#
+#////////////////////////////////////////////////#
+
+[[mods]]
+name = "Akun's Gear"
+tp2 = "akgear"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "incrementis"
+  label = "Incrementis"
+  type = "github"
+  url = "https://github.com/Incrementis/Akuns-Gear-"
+  repo = "Incrementis/Akuns-Gear-"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+#////////////////////////////////////////////////#
+#//                  ahungry                   //#
+#////////////////////////////////////////////////#
+
+[[mods]]
+name = "The Heart of Baldur's Gate"
+tp2 = "ahungry_heart"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "ahungry"
+  label = "ahungry"
+  type = "github"
+  url = "https://github.com/ahungry/ahungry_heart"
+  repo = "ahungry/ahungry_heart"
+  commit = ""
+  tag = ""
+  branch = "master"
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+#////////////////////////////////////////////////#
+#//              ShadowfireAngel               //#
+#////////////////////////////////////////////////#
+
+[[mods]]
+name = "Aelar's Emporium of Magical Wares"
+tp2 = "Aelar-Wares"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "shadowfireangel"
+  label = "ShadowfireAngel"
+  type = "github"
+  url = "https://github.com/ShadowfireAngel/Aelar-Wares"
+  repo = "ShadowfireAngel/Aelar-Wares"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+#////////////////////////////////////////////////#
 #//                   Gitjas                   //#
 #////////////////////////////////////////////////#
+
+[[mods]]
+name = "Husam NPC"
+tp2 = "c#husam"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "gitjas"
+  label = "Gitjas"
+  type = "github"
+  url = "https://github.com/Gitjas/Husam_NPC"
+  repo = "Gitjas/Husam_NPC"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Ascalon's Breagar"
+tp2 = "acbre"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "gitjas"
+  label = "Gitjas"
+  type = "github"
+  url = "https://github.com/Gitjas/Ascalons_Breagar"
+  repo = "Gitjas/Ascalons_Breagar"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Ascalon's Questpack"
@@ -4363,8 +5080,29 @@ config_files = []
   pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
+name = "Solaufein's Rescue"
+tp2 = "c#solaufein"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "gitjas"
+  label = "Gitjas"
+  type = "github"
+  url = "https://github.com/Gitjas/Solaufeins_Rescue_NPC"
+  repo = "Gitjas/Solaufeins_Rescue_NPC"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
 name = "Brandock the Mage"
-tp2 = "BrandockTheMage"
+tp2 = "c#brandock"
 aliases = []
 config_files = []
 
@@ -4428,6 +5166,27 @@ config_files = []
 #////////////////////////////////////////////////#
 #//                GraionDilach                //#
 #////////////////////////////////////////////////#
+
+[[mods]]
+name = "Random Graion Magic"
+tp2 = "zgmagic"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "graiondilach"
+  label = "GraionDilach"
+  type = "github"
+  url = "https://github.com/GraionDilach/RandomGraionMagic"
+  repo = "GraionDilach/RandomGraionMagic"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "BGEE Leveling Spawns"
@@ -5483,12 +6242,58 @@ config_files = []
   pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
+#//              ThorThunderfist               //#
+#////////////////////////////////////////////////#
+
+[[mods]]
+name = "Passive Warrior HLAs"
+tp2 = "passive_warrior_hlas"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "thorthunderfist"
+  label = "ThorThunderfist"
+  type = "github"
+  url = "https://github.com/ThorThunderfist/Passive-Warrior-HLAs"
+  repo = "ThorThunderfist/Passive-Warrior-HLAs"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+#////////////////////////////////////////////////#
 #//                Glittergear                 //#
 #////////////////////////////////////////////////#
 
 [[mods]]
+name = "A Party to Die For"
+tp2 = "PartyToDieFor"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "glittergear"
+  label = "Glittergear"
+  type = "github"
+  url = "https://github.com/Glittergear/PartyToDieFor"
+  repo = "Glittergear/PartyToDieFor"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
 name = "Blood and Faith"
-tp2 = "BLOODFAITH"
+tp2 = "BloodAndFaith"
 aliases = []
 config_files = []
 
@@ -5638,8 +6443,75 @@ config_files = []
   pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
+#//                 MindTyrant                 //#
+#////////////////////////////////////////////////#
+
+[[mods]]
+name = "Eldritch Magic Reborn"
+tp2 = "emreborn"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "mindtyrant"
+  label = "MindTyrant"
+  type = "github"
+  url = "https://github.com/MindTyrant/Eldritch-Magic-Reborn"
+  repo = "MindTyrant/Eldritch-Magic-Reborn"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = "preonly"
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+#////////////////////////////////////////////////#
 #//                 Deratiseur                 //#
 #////////////////////////////////////////////////#
+
+[[mods]]
+name = "The Interplan"
+tp2 = "derats_magasin_2"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "deratiseur"
+  label = "Deratiseur"
+  type = "github"
+  url = "https://github.com/Deratiseur/Interplan"
+  repo = "Deratiseur/Interplan"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Telim'Gar's Insurmountable Challenges"
+tp2 = "derats_defis"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "deratiseur"
+  label = "Deratiseur"
+  type = "github"
+  url = "https://github.com/Deratiseur/Defis"
+  repo = "Deratiseur/Defis"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Derat's Archery"
@@ -5726,8 +6598,179 @@ config_files = []
   pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
+#//              The-Mod-Elephant              //#
+#////////////////////////////////////////////////#
+
+[[mods]]
+name = "Pits of Despair"
+tp2 = "zbpod"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "the-mod-elephant"
+  label = "The-Mod-Elephant"
+  type = "github"
+  url = "https://github.com/The-Mod-Elephant/Pits-of-Despair"
+  repo = "The-Mod-Elephant/Pits-of-Despair"
+  commit = ""
+  tag = ""
+  branch = "main"
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+#////////////////////////////////////////////////#
+#//                    Zut9                    //#
+#////////////////////////////////////////////////#
+
+[[mods]]
+name = "Zutroy's Item Pack"
+tp2 = "z9ip0"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "zut9"
+  label = "Zut9"
+  type = "github"
+  url = "https://github.com/Zut9/Zutroy-Item-Pack"
+  repo = "Zut9/Zutroy-Item-Pack"
+  commit = ""
+  tag = ""
+  branch = "main"
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+#////////////////////////////////////////////////#
+#//                  HotaruPL                  //#
+#////////////////////////////////////////////////#
+
+[[mods]]
+name = "Chronicles of the Sword Coast"
+tp2 = "qac"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "hotarupl"
+  label = "HotaruPL"
+  type = "github"
+  url = "https://github.com/HotaruPL/Chronicles-of-the-Sword-Coast"
+  repo = "HotaruPL/Chronicles-of-the-Sword-Coast"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+#////////////////////////////////////////////////#
+#//                The-Draiken                 //#
+#////////////////////////////////////////////////#
+
+[[mods]]
+name = "The Vecna Campaign (Vecna-Fix)"
+tp2 = "vecna"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "the-draiken"
+  label = "The-Draiken"
+  type = "github"
+  url = "https://github.com/The-Draiken/Vecna-Fix"
+  repo = "The-Draiken/Vecna-Fix"
+  commit = ""
+  tag = ""
+  branch = "main"
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+#////////////////////////////////////////////////#
+#//               Secretum-Nexum               //#
+#////////////////////////////////////////////////#
+
+[[mods]]
+name = "The Forgotten Edge"
+tp2 = "TheForgottenEdge"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "secretum-nexum"
+  label = "Secretum-Nexum"
+  type = "github"
+  url = "https://github.com/Secretum-Nexum/TheForgottenEdge"
+  repo = "Secretum-Nexum/TheForgottenEdge"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+#////////////////////////////////////////////////#
+#//              StandardAwesome               //#
+#////////////////////////////////////////////////#
+
+[[mods]]
+name = "Standard Awesome Modpack"
+tp2 = "standard-awesome-modpack"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "standardawesome"
+  label = "StandardAwesome"
+  type = "github"
+  url = "https://github.com/StandardAwesome/bgee-modpack"
+  repo = "StandardAwesome/bgee-modpack"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+#////////////////////////////////////////////////#
 #//                 Austin-BG                  //#
 #////////////////////////////////////////////////#
+
+[[mods]]
+name = "Detective Guild of Athkatla"
+tp2 = "searchguild"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "austin-bg"
+  label = "Austin-BG"
+  type = "github"
+  url = "https://github.com/Austin-BG/SearchGuild"
+  repo = "Austin-BG/SearchGuild"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Heroes Thieves and Moneylenders"
@@ -5751,8 +6794,79 @@ config_files = []
   pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
+#//                    sad0                    //#
+#////////////////////////////////////////////////#
+
+[[mods]]
+name = "SadoEE"
+tp2 = "SadoEE"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "sad0"
+  label = "sad0"
+  type = "github"
+  url = "https://github.com/sad0/SadoEE"
+  repo = "sad0/SadoEE"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+#////////////////////////////////////////////////#
+#//                 Dziadekkk                  //#
+#////////////////////////////////////////////////#
+
+[[mods]]
+name = "Rogue Double Dealing"
+tp2 = "RogueDoubleDealing"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "dziadekkk"
+  label = "Dziadekkk"
+  type = "github"
+  url = "https://github.com/Dziadekkk/RogueDoubleDealing"
+  repo = "Dziadekkk/RogueDoubleDealing"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+#////////////////////////////////////////////////#
 #//                  AciferBG                  //#
 #////////////////////////////////////////////////#
+
+[[mods]]
+name = "Poisoned Pathways"
+tp2 = "poisoned_pathways"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "aciferbg"
+  label = "AciferBG"
+  type = "github"
+  url = "https://github.com/AciferBG/Poisoned-Pathways"
+  repo = "AciferBG/Poisoned-Pathways"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Call of the Lost Goddess"
@@ -6579,8 +7693,8 @@ config_files = []
 
 [[mods]]
 name = "Baeloth"
-tp2 = "BAEBG2"
-aliases = []
+tp2 = "zdbae"
+aliases = ["BAEBG2"]
 config_files = []
 
   [[mods.sources]]
@@ -6598,9 +7712,147 @@ config_files = []
   pkg_linux = "lin,rar,7z,zip"
   pkg_macos = "mac,rar,7z,zip"
 
+[[mods]]
+name = "Subrace Mod"
+tp2 = "subrace"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "dark0dave"
+  label = "dark0dave"
+  type = "github"
+  url = "https://github.com/dark0dave/Subrace-mod"
+  repo = "dark0dave/Subrace-mod"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+#////////////////////////////////////////////////#
+#//               the-overdriven               //#
+#////////////////////////////////////////////////#
+
+[[mods]]
+name = "Random Loot"
+tp2 = "bg-random-loot"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "the-overdriven"
+  label = "the-overdriven"
+  type = "github"
+  url = "https://github.com/the-overdriven/bg-random-loot"
+  repo = "the-overdriven/bg-random-loot"
+  commit = ""
+  tag = ""
+  branch = "main"
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+#////////////////////////////////////////////////#
+#//                zach-hopkins                //#
+#////////////////////////////////////////////////#
+
+[[mods]]
+name = "BG Pathfinding Redux"
+tp2 = "bg-redux-movement"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "zach-hopkins"
+  label = "zach-hopkins"
+  type = "github"
+  url = "https://github.com/zach-hopkins/bg-pathfinding-redux"
+  repo = "zach-hopkins/bg-pathfinding-redux"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = "pre-release"
+  asset = "bg-redux-movement-0.1.11-preview-windows.zip"
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+#////////////////////////////////////////////////#
+#//                abalabokhin                 //#
+#////////////////////////////////////////////////#
+
+[[mods]]
+name = "Neverwinter Nights for Baldur's Gate"
+tp2 = "nwnforbg"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "abalabokhin"
+  label = "abalabokhin"
+  type = "github"
+  url = "https://github.com/abalabokhin/NWNForBG"
+  repo = "abalabokhin/NWNForBG"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
 #////////////////////////////////////////////////#
 #//                Plutonium-X                 //#
 #////////////////////////////////////////////////#
+
+[[mods]]
+name = "The Tortured Soul Quest"
+tp2 = "TTSQ"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "plutonium-x"
+  label = "Plutonium-X"
+  type = "github"
+  url = "https://github.com/Plutonium-X/1D_NPC_Tortured"
+  repo = "Plutonium-X/1D_NPC_Tortured"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Mortis Mini Mod"
+tp2 = "mortis"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "plutonium-x"
+  label = "Plutonium-X"
+  type = "github"
+  url = "https://github.com/Plutonium-X/MISC_Mortis"
+  repo = "Plutonium-X/MISC_Mortis"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Alassa NPC"
@@ -6975,8 +8227,125 @@ config_files = ["configurations/zstweaks_prefixes.txt", "configurations/zstweaks
   pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
+#//                  Raduziel                  //#
+#////////////////////////////////////////////////#
+
+[[mods]]
+name = "Deities of Faerun"
+tp2 = "DeitiesOffaerun"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "raduziel"
+  label = "Raduziel"
+  type = "github"
+  url = "https://github.com/Raduziel/Deities-Of-Faerun"
+  repo = "Raduziel/Deities-Of-Faerun"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+#////////////////////////////////////////////////#
+#//                  BE-Mods                   //#
+#////////////////////////////////////////////////#
+
+[[mods]]
+name = "Areen the Wild Mage"
+tp2 = "AreenWildMage"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "be-mods"
+  label = "BE-Mods"
+  type = "github"
+  url = "https://github.com/BE-Mods/Areen1"
+  repo = "BE-Mods/Areen1"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+#////////////////////////////////////////////////#
+#//                Maltodaxtrin                //#
+#////////////////////////////////////////////////#
+
+[[mods]]
+name = "Dax Tweaks"
+tp2 = "daxtweaks"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "maltodaxtrin"
+  label = "Maltodaxtrin"
+  type = "github"
+  url = "https://github.com/Maltodaxtrin/Dax-Tweaks"
+  repo = "Maltodaxtrin/Dax-Tweaks"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+#////////////////////////////////////////////////#
 #//                subtledoctor                //#
 #////////////////////////////////////////////////#
+
+[[mods]]
+name = "IWD EET Integration"
+tp2 = "IWD_EET_integration"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "subtledoctor"
+  label = "subtledoctor"
+  type = "github"
+  url = "https://github.com/subtledoctor/IWD_EET_Integration"
+  repo = "subtledoctor/IWD_EET_Integration"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Combat Skills and Proficiencies"
+tp2 = "Combat_Skill_Proficiencies"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "subtledoctor"
+  label = "subtledoctor"
+  type = "github"
+  url = "https://github.com/subtledoctor/Combat_Skill_Proficiencies"
+  repo = "subtledoctor/Combat_Skill_Proficiencies"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "SubtleD's Item Tweaks"
@@ -7193,7 +8562,7 @@ config_files = []
   repo = "OlvynChuru/Olvyn-Tweaks"
   commit = ""
   tag = ""
-  branch = ""
+  branch = "master"
   channel = ""
   asset = ""
   pkg_windows = "wzp,rar,7z,zip"
@@ -7522,7 +8891,7 @@ config_files = []
 #////////////////////////////////////////////////#
 
 [[mods]]
-name = "Unofficial Item Pack"
+name = "Item Pack"
 tp2 = "Item_Pack"
 aliases = []
 config_files = []
@@ -7545,6 +8914,27 @@ config_files = []
 #////////////////////////////////////////////////#
 #//                  Llewren                   //#
 #////////////////////////////////////////////////#
+
+[[mods]]
+name = "Smoldering Tweaks"
+tp2 = "smolderingtweaks"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "llewren"
+  label = "Llewren"
+  type = "github"
+  url = "https://github.com/Llewren/SmolderingTweaks"
+  repo = "Llewren/SmolderingTweaks"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Ophysia BG1"
@@ -7628,31 +9018,6 @@ config_files = []
   commit = ""
   tag = ""
   branch = ""
-  channel = ""
-  asset = ""
-  pkg_windows = "wzp,rar,7z,zip"
-  pkg_linux = "lin,rar,7z,zip"
-  pkg_macos = "mac,rar,7z,zip"
-
-#////////////////////////////////////////////////#
-#//            Alexander12-creator             //#
-#////////////////////////////////////////////////#
-
-[[mods]]
-name = "Arcane Treasury"
-tp2 = "AL_ITEM_PACK"
-aliases = []
-config_files = []
-
-  [[mods.sources]]
-  id = "alexander12-creator"
-  label = "Alexander12-creator"
-  type = "github"
-  url = "https://github.com/Alexander12-creator/Arcane-Treasury-mod"
-  repo = "Alexander12-creator/Arcane-Treasury-mod"
-  commit = ""
-  tag = ""
-  branch = "main"
   channel = ""
   asset = ""
   pkg_windows = "wzp,rar,7z,zip"
@@ -7890,6 +9255,46 @@ config_files = []
   pkg_macos = "mac,rar,7z,zip"
 
 #////////////////////////////////////////////////#
+#//       Weigo87 & Spellhold-Studios          //#
+#////////////////////////////////////////////////#
+
+[[mods]]
+name = "The Darkest Day"
+tp2 = "TDD"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "weigo87"
+  label = "Weigo87 - v2.0 alpha"
+  type = "github"
+  url = "https://github.com/weigo87/The_Darkest_Day"
+  repo = "weigo87/The_Darkest_Day"
+  commit = ""
+  tag = ""
+  branch = "main"
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+  [[mods.sources]]
+  id = "spellhold-studios"
+  label = "Spellhold-Studios - Original v1.14"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/The-Darkest-Day"
+  repo = "Spellhold-Studios/The-Darkest-Day"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+#////////////////////////////////////////////////#
 #//      Spellhold-Studios & RoxanneSHS        //#
 #////////////////////////////////////////////////#
 
@@ -8070,9 +9475,189 @@ config_files = []
   pkg_linux = "lin,rar,7z,zip"
   pkg_macos = "mac,rar,7z,zip"
 
+#////////////////////////////////////////////////#
+#//             CelestialFury-BG               //#
+#////////////////////////////////////////////////#
+
+[[mods]]
+name = "Solaufein EE"
+tp2 = "solaufeinEE"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "celestialfury-bg"
+  label = "CelestialFury-BG"
+  type = "github"
+  url = "https://github.com/CelestialFury-BG/SolaufeinEE"
+  repo = "CelestialFury-BG/SolaufeinEE"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+#////////////////////////////////////////////////#
+#//            bucketfulofsunshine             //#
+#////////////////////////////////////////////////#
+
+[[mods]]
+name = "Baldurian Bar Hop"
+tp2 = "baldurianbarhop"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "bucketfulofsunshine"
+  label = "bucketfulofsunshine"
+  type = "github"
+  url = "https://github.com/bucketfulofsunshine/baldurian-bar-hop"
+  repo = "bucketfulofsunshine/baldurian-bar-hop"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Lunia for Good Parties"
+tp2 = "lfgp"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "bucketfulofsunshine"
+  label = "bucketfulofsunshine"
+  type = "github"
+  url = "https://github.com/bucketfulofsunshine/Lunia-For-Good-Parties"
+  repo = "bucketfulofsunshine/Lunia-For-Good-Parties"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Peacespeaker, the Anti-Violence Sword"
+tp2 = "peacespeaker"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "bucketfulofsunshine"
+  label = "bucketfulofsunshine"
+  type = "github"
+  url = "https://github.com/bucketfulofsunshine/peacespeaker"
+  repo = "bucketfulofsunshine/peacespeaker"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "The Pursuit of Justice"
+tp2 = "tpoj"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "bucketfulofsunshine"
+  label = "bucketfulofsunshine"
+  type = "github"
+  url = "https://github.com/bucketfulofsunshine/the-pursuit-of-justice"
+  repo = "bucketfulofsunshine/the-pursuit-of-justice"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+#////////////////////////////////////////////////#
+#//             threetimesdavey                //#
+#////////////////////////////////////////////////#
+
+[[mods]]
+name = "BG2EE Unofficial Item Pack"
+tp2 = "unofficialitempack"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "threetimesdavey"
+  label = "threetimesdavey"
+  type = "github"
+  url = "https://github.com/threetimesdavey/unofficialitempack"
+  repo = "threetimesdavey/unofficialitempack"
+  commit = ""
+  tag = ""
+  branch = "main"
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
 #/////////////////////////////////////////////////////////////////////////////////////////#
 #//                              Direct Archive Downloads                               //#
 #/////////////////////////////////////////////////////////////////////////////////////////#
+
+[[mods]]
+name = "Arcane Treasury"
+tp2 = "AL_ITEM_PACK"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "alexander12-creator"
+  label = "Alexander12-creator"
+  type = "url"
+  url = "https://raw.githubusercontent.com/Alexander12-creator/Arcane-Treasury-mod/main/Arcane_treasury_mod_v_1_160321.zip"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Ayden Project"
+tp2 = "Ayden"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "author-download"
+  label = "Author download"
+  type = "url"
+  url = "https://dl.dropboxusercontent.com/s/zodzuo13k3lij3f/Ayden.BGEE.zip"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 name = "Tenya Thermidor"
@@ -9994,7 +11579,53 @@ config_files = []
   pkg_macos = "mac,rar,7z,zip"
 
 #/////////////////////////////////////////////////////////////////////////////////////////#
-#//                                  Source Pages                                       //#
+#//                                     Nexus Mods                                      //#
+#/////////////////////////////////////////////////////////////////////////////////////////#
+
+[[mods]]
+name = "Neh'taniel NPC"
+tp2 = "Neh'taniel"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Source"
+  type = "url"
+  url = "https://www.nexusmods.com/baldursgate2ee/mods/60"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Oublek's Jobs"
+tp2 = "wl_oublek"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "nexusmods"
+  label = "Nexus Mods"
+  type = "url"
+  url = "https://www.nexusmods.com/baldursgateenhancededition/mods/7"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+#/////////////////////////////////////////////////////////////////////////////////////////#
+#//                                   Beamdog Forums                                    //#
 #/////////////////////////////////////////////////////////////////////////////////////////#
 
 [[mods]]
@@ -10019,6 +11650,178 @@ config_files = []
   pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
+name = "TeamBG's Armours for EET"
+tp2 = "BGeeARWe"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Source"
+  type = "url"
+  url = "https://forums.beamdog.com/discussion/13314/mod-teambgs-armor-pack-for-bg-ee-bg2ee-bgt-amp-tutu"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Sheena"
+tp2 = "Sheena"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Source"
+  type = "url"
+  url = "https://forums.beamdog.com/discussion/60784/npc-mod-sheena-the-half-dragon-tale/"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Disrupting Torch"
+tp2 = "DisruptingTorch"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Source"
+  type = "url"
+  url = "https://forums.beamdog.com/discussion/comment/1156843/#Comment_1156843"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Improved Rods"
+tp2 = "IMPROVEDRODS"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Source"
+  type = "url"
+  url = "https://forums.beamdog.com/discussion/comment/1170437/#Comment_1170437"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Seducer Kit"
+tp2 = "SEDUCERKIT"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Source"
+  type = "url"
+  url = "https://forums.beamdog.com/discussion/63566/seducer-kit-for-thieves-v1-21"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "JTweaks"
+tp2 = "jtweaks"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Source"
+  type = "url"
+  url = "https://forums.beamdog.com/discussion/83360/mod-jmerrys-tweak-collection"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Allow Stacking Potions"
+tp2 = "Allow_Stacking_Potions"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Source"
+  type = "url"
+  url = "https://forums.beamdog.com/discussion/comment/1164166/#Comment_1164166"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Trap Overhaul"
+tp2 = "Trap_Overhaul"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Source"
+  type = "url"
+  url = "https://forums.beamdog.com/discussion/71763/trap-detection-recovery-evasion/p1"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+#/////////////////////////////////////////////////////////////////////////////////////////#
+#//                               Spellhold Studios Source                              //#
+#/////////////////////////////////////////////////////////////////////////////////////////#
+
+[[mods]]
 name = "SpellFix Visual Effects"
 tp2 = "SpellFix_Visual_Effects"
 aliases = []
@@ -10038,6 +11841,241 @@ config_files = []
   pkg_windows = "wzp,rar,7z,zip"
   pkg_linux = "lin,rar,7z,zip"
   pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Fishing for Trouble"
+tp2 = "FishingForTrouble"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Source"
+  type = "url"
+  url = "http://www.shsforums.net/files/file/1084-fishing-for-trouble/"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Mercenaries of the Sword Coast"
+tp2 = "mercenaries"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Source"
+  type = "url"
+  url = "https://www.shsforums.net/topic/59496-mod-mercenaries-of-sword-coast-for-eet/"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Freedom's Reign"
+tp2 = "FR_ROV"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Source"
+  type = "url"
+  url = "https://www.shsforums.net/files/file/121-freedoms-reign-reign-of-virtue/"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Valerie NPC for BG"
+tp2 = "valerie"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Source"
+  type = "url"
+  url = "http://www.shsforums.net/files/file/1041-valerie/"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Haer'Dalis Romance"
+tp2 = "haerdalisromance"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Source"
+  type = "url"
+  url = "http://www.shsforums.net/files/file/984-haerdalis-romance/"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Sarevok Romance"
+tp2 = "sarevokromance"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Source"
+  type = "url"
+  url = "http://www.shsforums.net/files/file/810-sarevok-romance/"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Trials of the Luremaster"
+tp2 = "A7-TotLM-BG2EE"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Source"
+  type = "url"
+  url = "http://www.shsforums.net/files/file/1251-trials-of-the-luremaster-for-bg2ee/"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "TB Tweaks"
+tp2 = "tb#tweaks"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Source"
+  type = "url"
+  url = "http://www.shsforums.net/topic/60984-help-with-"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "AC Miscellaneous Tweaks"
+tp2 = "ac-miscellaneous"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Source"
+  type = "url"
+  url = "https://www.shsforums.net/files/file/1282-acs-miscellaneous-tweaks/"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Sequencer Colored Text"
+tp2 = "Sequencer_ColoredText"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Source"
+  type = "url"
+  url = "https://www.shsforums.net/files/file/1273-sequencer-coloredtext/"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "PaintBG Portrait Pack"
+tp2 = "PaintBG"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Source"
+  type = "url"
+  url = "http://www.spellholdstudios.net/ie/portraits"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+#/////////////////////////////////////////////////////////////////////////////////////////#
+#//                                  Gibberlings Three                                  //#
+#/////////////////////////////////////////////////////////////////////////////////////////#
 
 [[mods]]
 name = "Baldur's Gate Romantic Encounters Modification (BG1RE)"
@@ -10124,90 +12162,6 @@ config_files = []
   pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
-name = "Fishing for Trouble"
-tp2 = "FishingForTrouble"
-aliases = []
-config_files = []
-
-  [[mods.sources]]
-  id = "primary"
-  label = "Source"
-  type = "url"
-  url = "http://www.shsforums.net/files/file/1084-fishing-for-trouble/"
-  repo = ""
-  commit = ""
-  tag = ""
-  branch = ""
-  channel = ""
-  asset = ""
-  pkg_windows = "wzp,rar,7z,zip"
-  pkg_linux = "lin,rar,7z,zip"
-  pkg_macos = "mac,rar,7z,zip"
-
-[[mods]]
-name = "Mercenaries of the Sword Coast"
-tp2 = "mercenaries"
-aliases = []
-config_files = []
-
-  [[mods.sources]]
-  id = "primary"
-  label = "Source"
-  type = "url"
-  url = "https://www.shsforums.net/topic/59496-mod-mercenaries-of-sword-coast-for-eet/"
-  repo = ""
-  commit = ""
-  tag = ""
-  branch = ""
-  channel = ""
-  asset = ""
-  pkg_windows = "wzp,rar,7z,zip"
-  pkg_linux = "lin,rar,7z,zip"
-  pkg_macos = "mac,rar,7z,zip"
-
-[[mods]]
-name = "Freedom's Reign"
-tp2 = "FR_ROV"
-aliases = []
-config_files = []
-
-  [[mods.sources]]
-  id = "primary"
-  label = "Source"
-  type = "url"
-  url = "https://www.shsforums.net/files/file/121-freedoms-reign-reign-of-virtue/"
-  repo = ""
-  commit = ""
-  tag = ""
-  branch = ""
-  channel = ""
-  asset = ""
-  pkg_windows = "wzp,rar,7z,zip"
-  pkg_linux = "lin,rar,7z,zip"
-  pkg_macos = "mac,rar,7z,zip"
-
-[[mods]]
-name = "TeamBG's Armours for EET"
-tp2 = "BGeeARWe"
-aliases = []
-config_files = []
-
-  [[mods.sources]]
-  id = "primary"
-  label = "Source"
-  type = "url"
-  url = "https://forums.beamdog.com/discussion/13314/mod-teambgs-armor-pack-for-bg-ee-bg2ee-bgt-amp-tutu"
-  repo = ""
-  commit = ""
-  tag = ""
-  branch = ""
-  channel = ""
-  asset = ""
-  pkg_windows = "wzp,rar,7z,zip"
-  pkg_linux = "lin,rar,7z,zip"
-  pkg_macos = "mac,rar,7z,zip"
-
-[[mods]]
 name = "Fix Wheels of Prophecy"
 tp2 = "c7-fixwheels"
 aliases = []
@@ -10229,27 +12183,6 @@ config_files = []
   pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
-name = "Valerie NPC for BG"
-tp2 = "valerie"
-aliases = []
-config_files = []
-
-  [[mods.sources]]
-  id = "primary"
-  label = "Source"
-  type = "url"
-  url = "http://www.shsforums.net/files/file/1041-valerie/"
-  repo = ""
-  commit = ""
-  tag = ""
-  branch = ""
-  channel = ""
-  asset = ""
-  pkg_windows = "wzp,rar,7z,zip"
-  pkg_linux = "lin,rar,7z,zip"
-  pkg_macos = "mac,rar,7z,zip"
-
-[[mods]]
 name = "Glam NPC Pack"
 tp2 = "glamnpcpack"
 aliases = []
@@ -10260,27 +12193,6 @@ config_files = []
   label = "Source"
   type = "url"
   url = "https://www.gibberlings3.net/mods/npcs/glam-npc-pack/"
-  repo = ""
-  commit = ""
-  tag = ""
-  branch = ""
-  channel = ""
-  asset = ""
-  pkg_windows = "wzp,rar,7z,zip"
-  pkg_linux = "lin,rar,7z,zip"
-  pkg_macos = "mac,rar,7z,zip"
-
-[[mods]]
-name = "Solaufein's Rescue"
-tp2 = "jasteys_solaufein"
-aliases = []
-config_files = []
-
-  [[mods.sources]]
-  id = "primary"
-  label = "Source"
-  type = "url"
-  url = "https://www.baldurs-gate.de/index.php?resources/jasteys-solaufein-npc-mod-for-bgii-solaufeins-rescue.13/"
   repo = ""
   commit = ""
   tag = ""
@@ -10355,27 +12267,6 @@ config_files = []
   pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
-name = "Sheena"
-tp2 = "Sheena"
-aliases = []
-config_files = []
-
-  [[mods.sources]]
-  id = "primary"
-  label = "Source"
-  type = "url"
-  url = "https://forums.beamdog.com/discussion/60784/npc-mod-sheena-the-half-dragon-tale/"
-  repo = ""
-  commit = ""
-  tag = ""
-  branch = ""
-  channel = ""
-  asset = ""
-  pkg_windows = "wzp,rar,7z,zip"
-  pkg_linux = "lin,rar,7z,zip"
-  pkg_macos = "mac,rar,7z,zip"
-
-[[mods]]
 name = "Evandra"
 tp2 = "evandra"
 aliases = []
@@ -10407,48 +12298,6 @@ config_files = []
   label = "Source"
   type = "url"
   url = "https://www.gibberlings3.net/mods/npcs/zakrion_bg2/"
-  repo = ""
-  commit = ""
-  tag = ""
-  branch = ""
-  channel = ""
-  asset = ""
-  pkg_windows = "wzp,rar,7z,zip"
-  pkg_linux = "lin,rar,7z,zip"
-  pkg_macos = "mac,rar,7z,zip"
-
-[[mods]]
-name = "Afaaq, the Djinni Companion"
-tp2 = "a7-djinnicompanion"
-aliases = []
-config_files = []
-
-  [[mods.sources]]
-  id = "primary"
-  label = "Source"
-  type = "url"
-  url = "http://www.shsforums.net/forum/651-djinni-companion/"
-  repo = ""
-  commit = ""
-  tag = ""
-  branch = ""
-  channel = ""
-  asset = ""
-  pkg_windows = "wzp,rar,7z,zip"
-  pkg_linux = "lin,rar,7z,zip"
-  pkg_macos = "mac,rar,7z,zip"
-
-[[mods]]
-name = "Neh'taniel NPC"
-tp2 = "Neh'taniel"
-aliases = []
-config_files = []
-
-  [[mods.sources]]
-  id = "primary"
-  label = "Source"
-  type = "url"
-  url = "https://www.nexusmods.com/baldursgate2ee/mods/60"
   repo = ""
   commit = ""
   tag = ""
@@ -10502,27 +12351,6 @@ config_files = []
   pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
-name = "Haer'Dalis Romance"
-tp2 = "haerdalisromance"
-aliases = []
-config_files = []
-
-  [[mods.sources]]
-  id = "primary"
-  label = "Source"
-  type = "url"
-  url = "http://www.shsforums.net/files/file/984-haerdalis-romance/"
-  repo = ""
-  commit = ""
-  tag = ""
-  branch = ""
-  channel = ""
-  asset = ""
-  pkg_windows = "wzp,rar,7z,zip"
-  pkg_linux = "lin,rar,7z,zip"
-  pkg_macos = "mac,rar,7z,zip"
-
-[[mods]]
 name = "The Beaurin Legacy"
 tp2 = "TheBeaurinLegacy"
 aliases = []
@@ -10533,48 +12361,6 @@ config_files = []
   label = "Source"
   type = "url"
   url = "https://www.gibberlings3.net/files/file/998-beaurin-legacy/"
-  repo = ""
-  commit = ""
-  tag = ""
-  branch = ""
-  channel = ""
-  asset = ""
-  pkg_windows = "wzp,rar,7z,zip"
-  pkg_linux = "lin,rar,7z,zip"
-  pkg_macos = "mac,rar,7z,zip"
-
-[[mods]]
-name = "Jan Quest"
-tp2 = "JanQuest"
-aliases = []
-config_files = []
-
-  [[mods.sources]]
-  id = "primary"
-  label = "Source"
-  type = "url"
-  url = "https://akadis.baldursgateworld.fr/Jan/JansQuestEn.html"
-  repo = ""
-  commit = ""
-  tag = ""
-  branch = ""
-  channel = ""
-  asset = ""
-  pkg_windows = "wzp,rar,7z,zip"
-  pkg_linux = "lin,rar,7z,zip"
-  pkg_macos = "mac,rar,7z,zip"
-
-[[mods]]
-name = "Sarevok Romance"
-tp2 = "sarevokromance"
-aliases = []
-config_files = []
-
-  [[mods.sources]]
-  id = "primary"
-  label = "Source"
-  type = "url"
-  url = "http://www.shsforums.net/files/file/810-sarevok-romance/"
   repo = ""
   commit = ""
   tag = ""
@@ -10670,90 +12456,6 @@ config_files = []
   pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
-name = "Disrupting Torch"
-tp2 = "DisruptingTorch"
-aliases = []
-config_files = []
-
-  [[mods.sources]]
-  id = "primary"
-  label = "Source"
-  type = "url"
-  url = "https://forums.beamdog.com/discussion/comment/1156843/#Comment_1156843"
-  repo = ""
-  commit = ""
-  tag = ""
-  branch = ""
-  channel = ""
-  asset = ""
-  pkg_windows = "wzp,rar,7z,zip"
-  pkg_linux = "lin,rar,7z,zip"
-  pkg_macos = "mac,rar,7z,zip"
-
-[[mods]]
-name = "Improved Rods"
-tp2 = "IMPROVEDRODS"
-aliases = []
-config_files = []
-
-  [[mods.sources]]
-  id = "primary"
-  label = "Source"
-  type = "url"
-  url = "https://forums.beamdog.com/discussion/comment/1170437/#Comment_1170437"
-  repo = ""
-  commit = ""
-  tag = ""
-  branch = ""
-  channel = ""
-  asset = ""
-  pkg_windows = "wzp,rar,7z,zip"
-  pkg_linux = "lin,rar,7z,zip"
-  pkg_macos = "mac,rar,7z,zip"
-
-[[mods]]
-name = "Trials of the Luremaster"
-tp2 = "A7-TotLM-BG2EE"
-aliases = []
-config_files = []
-
-  [[mods.sources]]
-  id = "primary"
-  label = "Source"
-  type = "url"
-  url = "http://www.shsforums.net/files/file/1251-trials-of-the-luremaster-for-bg2ee/"
-  repo = ""
-  commit = ""
-  tag = ""
-  branch = ""
-  channel = ""
-  asset = ""
-  pkg_windows = "wzp,rar,7z,zip"
-  pkg_linux = "lin,rar,7z,zip"
-  pkg_macos = "mac,rar,7z,zip"
-
-[[mods]]
-name = "Seducer Kit"
-tp2 = "SEDUCERKIT"
-aliases = []
-config_files = []
-
-  [[mods.sources]]
-  id = "primary"
-  label = "Source"
-  type = "url"
-  url = "https://forums.beamdog.com/discussion/63566/seducer-kit-for-thieves-v1-21"
-  repo = ""
-  commit = ""
-  tag = ""
-  branch = ""
-  channel = ""
-  asset = ""
-  pkg_windows = "wzp,rar,7z,zip"
-  pkg_linux = "lin,rar,7z,zip"
-  pkg_macos = "mac,rar,7z,zip"
-
-[[mods]]
 name = "Bardic Appraisal"
 tp2 = "cd_bardic_appraisal"
 aliases = []
@@ -10764,195 +12466,6 @@ config_files = []
   label = "Source"
   type = "url"
   url = "https://www.gibberlings3.net/mods/tweaks/appraisal/"
-  repo = ""
-  commit = ""
-  tag = ""
-  branch = ""
-  channel = ""
-  asset = ""
-  pkg_windows = "wzp,rar,7z,zip"
-  pkg_linux = "lin,rar,7z,zip"
-  pkg_macos = "mac,rar,7z,zip"
-
-[[mods]]
-name = "Pathfinder Hit Dice"
-tp2 = "PathfinderHitDice"
-aliases = []
-config_files = []
-
-  [[mods.sources]]
-  id = "primary"
-  label = "Source"
-  type = "url"
-  url = "https://gitlab.com/InfinityEngineGames/BaldursGate/RulesandTweaks/PathfinderHitDice"
-  repo = ""
-  commit = ""
-  tag = ""
-  branch = ""
-  channel = ""
-  asset = ""
-  pkg_windows = "wzp,rar,7z,zip"
-  pkg_linux = "lin,rar,7z,zip"
-  pkg_macos = "mac,rar,7z,zip"
-
-[[mods]]
-name = "TB Tweaks"
-tp2 = "tb#tweaks"
-aliases = []
-config_files = []
-
-  [[mods.sources]]
-  id = "primary"
-  label = "Source"
-  type = "url"
-  url = "http://www.shsforums.net/topic/60984-help-with-"
-  repo = ""
-  commit = ""
-  tag = ""
-  branch = ""
-  channel = ""
-  asset = ""
-  pkg_windows = "wzp,rar,7z,zip"
-  pkg_linux = "lin,rar,7z,zip"
-  pkg_macos = "mac,rar,7z,zip"
-
-[[mods]]
-name = "JTweaks"
-tp2 = "jtweaks"
-aliases = []
-config_files = []
-
-  [[mods.sources]]
-  id = "primary"
-  label = "Source"
-  type = "url"
-  url = "https://forums.beamdog.com/discussion/83360/mod-jmerrys-tweak-collection"
-  repo = ""
-  commit = ""
-  tag = ""
-  branch = ""
-  channel = ""
-  asset = ""
-  pkg_windows = "wzp,rar,7z,zip"
-  pkg_linux = "lin,rar,7z,zip"
-  pkg_macos = "mac,rar,7z,zip"
-
-[[mods]]
-name = "Ultravision"
-tp2 = "Ultravision"
-aliases = []
-config_files = []
-
-  [[mods.sources]]
-  id = "primary"
-  label = "Source"
-  type = "url"
-  url = "https://www.gibberlings3.net/forums/topic/31265-ultravision-mod-probably-for-ee/"
-  repo = ""
-  commit = ""
-  tag = ""
-  branch = ""
-  channel = ""
-  asset = ""
-  pkg_windows = "wzp,rar,7z,zip"
-  pkg_linux = "lin,rar,7z,zip"
-  pkg_macos = "mac,rar,7z,zip"
-
-[[mods]]
-name = "Allow Stacking Potions"
-tp2 = "Allow_Stacking_Potions"
-aliases = []
-config_files = []
-
-  [[mods.sources]]
-  id = "primary"
-  label = "Source"
-  type = "url"
-  url = "https://forums.beamdog.com/discussion/comment/1164166/#Comment_1164166"
-  repo = ""
-  commit = ""
-  tag = ""
-  branch = ""
-  channel = ""
-  asset = ""
-  pkg_windows = "wzp,rar,7z,zip"
-  pkg_linux = "lin,rar,7z,zip"
-  pkg_macos = "mac,rar,7z,zip"
-
-[[mods]]
-name = "Trap Overhaul"
-tp2 = "Trap_Overhaul"
-aliases = []
-config_files = []
-
-  [[mods.sources]]
-  id = "primary"
-  label = "Source"
-  type = "url"
-  url = "https://forums.beamdog.com/discussion/71763/trap-detection-recovery-evasion/p1"
-  repo = ""
-  commit = ""
-  tag = ""
-  branch = ""
-  channel = ""
-  asset = ""
-  pkg_windows = "wzp,rar,7z,zip"
-  pkg_linux = "lin,rar,7z,zip"
-  pkg_macos = "mac,rar,7z,zip"
-
-[[mods]]
-name = "AC Miscellaneous Tweaks"
-tp2 = "ac-miscellaneous"
-aliases = []
-config_files = []
-
-  [[mods.sources]]
-  id = "primary"
-  label = "Source"
-  type = "url"
-  url = "https://www.shsforums.net/files/file/1282-acs-miscellaneous-tweaks/"
-  repo = ""
-  commit = ""
-  tag = ""
-  branch = ""
-  channel = ""
-  asset = ""
-  pkg_windows = "wzp,rar,7z,zip"
-  pkg_linux = "lin,rar,7z,zip"
-  pkg_macos = "mac,rar,7z,zip"
-
-[[mods]]
-name = "Sequencer Colored Text"
-tp2 = "Sequencer_ColoredText"
-aliases = []
-config_files = []
-
-  [[mods.sources]]
-  id = "primary"
-  label = "Source"
-  type = "url"
-  url = "https://www.shsforums.net/files/file/1273-sequencer-coloredtext/"
-  repo = ""
-  commit = ""
-  tag = ""
-  branch = ""
-  channel = ""
-  asset = ""
-  pkg_windows = "wzp,rar,7z,zip"
-  pkg_linux = "lin,rar,7z,zip"
-  pkg_macos = "mac,rar,7z,zip"
-
-[[mods]]
-name = "Blink Dogs and Phase Spiders"
-tp2 = "BLINK DOGS AND PHASE SPIDERS"
-aliases = []
-config_files = []
-
-  [[mods.sources]]
-  id = "primary"
-  label = "Source"
-  type = "url"
-  url = "https://www.gibberlings3.net/forums/topic/34944-blink-dogs-and-phase-spiders-mod/"
   repo = ""
   commit = ""
   tag = ""
@@ -10985,8 +12498,8 @@ config_files = []
   pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
-name = "PaintBG Portrait Pack"
-tp2 = "PaintBG"
+name = "Blink Dogs and Phase Spiders"
+tp2 = "BLINK DOGS AND PHASE SPIDERS"
 aliases = []
 config_files = []
 
@@ -10994,7 +12507,74 @@ config_files = []
   id = "primary"
   label = "Source"
   type = "url"
-  url = "http://www.spellholdstudios.net/ie/portraits"
+  url = "https://www.gibberlings3.net/forums/topic/34944-blink-dogs-and-phase-spiders-mod/"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Ultravision"
+tp2 = "Ultravision"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Source"
+  type = "url"
+  url = "https://www.gibberlings3.net/forums/topic/31265-ultravision-mod-probably-for-ee/"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+#/////////////////////////////////////////////////////////////////////////////////////////#
+#//                                 Other Source Pages                                  //#
+#/////////////////////////////////////////////////////////////////////////////////////////#
+
+[[mods]]
+name = "Jan Quest"
+tp2 = "JanQuest"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Source"
+  type = "url"
+  url = "https://akadis.baldursgateworld.fr/Jan/JansQuestEn.html"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
+name = "Pathfinder Hit Dice"
+tp2 = "PathfinderHitDice"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Source"
+  type = "url"
+  url = "https://gitlab.com/InfinityEngineGames/BaldursGate/RulesandTweaks/PathfinderHitDice"
   repo = ""
   commit = ""
   tag = ""

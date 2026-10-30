@@ -33,12 +33,14 @@ pub(crate) fn clear_all_and_refresh_compat(state: &mut WizardState) {
 }
 
 pub(crate) fn select_visible_and_refresh_compat(state: &mut WizardState) {
+    let before = crate::ui::step2::installer_answers_step2::checked_snapshot(state);
     let filter = state.step2.search_query.trim().to_lowercase();
     let mut next_order = state.step2.next_selection_order;
     let mods = active_mods_mut(&mut state.step2);
     select_visible(mods, &filter, &mut next_order);
     state.step2.next_selection_order = next_order;
     refresh_compat(state);
+    crate::ui::step2::installer_answers_step2::open_newly_selected(state, &before);
 }
 
 pub(crate) const fn collapse_all(state: &mut WizardState) {

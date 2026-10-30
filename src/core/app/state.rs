@@ -21,6 +21,7 @@ pub use state_step2::{
     Step2UpdateRetryRequest, exact_log_ready_to_install, push_manual_download_request,
     update_selection_signature,
 };
+pub use state_step2::{InstallerAnswerDraft, InstallerAnswerTarget, InstallerAnswersEditor};
 pub use state_step2::{
     VersionsChip, VersionsDrawerUi, VersionsMenu, VersionsSheet, update_pipeline_busy,
     update_selection_stale,

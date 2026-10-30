@@ -23,6 +23,10 @@ pub mod details_paths_step2;
 pub mod details_selection_step2;
 pub mod format_step2;
 pub mod frame_step2;
+#[path = "prompt/installer_answers_panel_step2.rs"]
+pub mod installer_answers_panel_step2;
+#[path = "prompt/installer_answers_step2.rs"]
+pub mod installer_answers_step2;
 pub mod list_pane_step2;
 pub mod page_step2;
 #[path = "prompt/prompt_eval_vars_step2.rs"]
