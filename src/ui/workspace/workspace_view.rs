@@ -49,6 +49,13 @@ pub fn render(
 
     if outcome.next_clicked {
         if let Some(next) = current.next() {
+            if current == WorkspaceStep::Step3 {
+                request_step3_next(
+                    &mut orchestrator.wizard_state,
+                    &mut orchestrator.workspace_view,
+                );
+                return;
+            }
             if current == WorkspaceStep::Step2 {
                 sync_step3_from_step2_on_nav_edge(orchestrator);
             }
@@ -66,6 +73,32 @@ pub fn render(
         }
     }
 }
+
+pub(crate) fn request_step3_next(
+    state: &mut crate::app::state::WizardState,
+    view: &mut crate::ui::workspace::state_workspace::WorkspaceViewState,
+) -> bool {
+    if view.current_step != WorkspaceStep::Step3
+        || state.step2.is_scanning
+        || state.step5.install_running
+    {
+        return false;
+    }
+    if crate::ui::step3::installer_answers_step3::open_missing(state) {
+        state
+            .step3
+            .installer_answers_workspace
+            .clone_from(&view.loaded_workspace_id);
+        return false;
+    }
+    view.completed_steps.insert(WorkspaceStep::Step3);
+    view.current_step = WorkspaceStep::Step4;
+    true
+}
+
+#[cfg(test)]
+#[path = "step3/installer_answers_navigation_tests.rs"]
+mod installer_answers_navigation_tests;
 
 fn nav_status_text(orchestrator: &OrchestratorApp, current: WorkspaceStep) -> Option<String> {
     if current != WorkspaceStep::Step2 {

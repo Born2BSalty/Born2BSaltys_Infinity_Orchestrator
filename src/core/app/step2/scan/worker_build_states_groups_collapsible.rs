@@ -155,15 +155,18 @@ fn add_subcomponent_family_groups(
         else {
             continue;
         };
-        if !display_by_id.contains_key(parent_id.as_str()) {
+        let Some(parent_display) = display_by_id.get(parent_id.as_str()) else {
             continue;
-        }
+        };
         let Some(child_display) = display_by_id.get(child_id) else {
             continue;
         };
         let Some((header, _)) = split_subcomponent_display_label(child_display) else {
             continue;
         };
+        if !parent_display.trim().eq_ignore_ascii_case(&header) {
+            continue;
+        }
         if let Some(existing_header) = subcomponent_family_headers.get(parent_id.as_str()) {
             if !existing_header.eq_ignore_ascii_case(&header) {
                 subcomponent_family_conflicts.insert(parent_id.clone());

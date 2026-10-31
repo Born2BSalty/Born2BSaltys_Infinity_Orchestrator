@@ -183,18 +183,6 @@ pub(crate) fn collect_step3_prompt_toolbar_entries(
         .collect()
 }
 
-pub(crate) fn format_step3_prompt_popup(item: &Step3ItemState, body: &str) -> (String, String) {
-    (
-        format!("{} #{}", item.tp_file, item.component_id),
-        format!(
-            "Component: {} - {}\n\n{}",
-            item.component_id.trim(),
-            item.component_label.trim(),
-            body.trim()
-        ),
-    )
-}
-
 fn format_prompt_event_blocks(
     events: &[PromptSummaryEvent],
     prompt_eval: Option<&PromptEvalContext>,

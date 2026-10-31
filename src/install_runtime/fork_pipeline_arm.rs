@@ -269,6 +269,20 @@ pub fn fork_workspace_relpath(modlist_id: &str) -> PathBuf {
 
 #[cfg(test)]
 mod tests {
+
+    struct AmbientGuard(Option<std::path::PathBuf>);
+
+    impl AmbientGuard {
+        fn acquire() -> Self {
+            Self(crate::app::mod_downloads::active_modlist_dir())
+        }
+    }
+
+    impl Drop for AmbientGuard {
+        fn drop(&mut self) {
+            crate::app::mod_downloads::set_active_modlist_dir(self.0.take());
+        }
+    }
     use super::*;
     use crate::app::modlist_share::ForkAncestor;
     use crate::registry::model::{ModlistEntry, ModlistRegistry, ModlistState};
@@ -295,6 +309,7 @@ mod tests {
 
     fn preview(name: Option<&str>, author: Option<&str>, game: &str) -> ModlistSharePreview {
         ModlistSharePreview {
+            parser_choice_phrases: Vec::new(),
             bio_version: "x".to_string(),
             game_install: game.to_string(),
             game_version: None,
@@ -464,6 +479,10 @@ mod tests {
 
     #[test]
     fn fork_take_over_holds_the_old_owner_and_removes_its_data_dir() {
+        let _ambient_lock = crate::app::mod_downloads::AMBIENT_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _ambient_guard = AmbientGuard::acquire();
         let dest = TempDestGuard::new("fork-take-over");
         let mut app = OrchestratorApp::new_isolated_for_test("fork-take-over");
         app.registry.entries.push(ModlistEntry {

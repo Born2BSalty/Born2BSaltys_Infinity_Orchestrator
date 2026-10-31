@@ -55,6 +55,18 @@ pub(crate) fn start_step2_update_extract(
     step2_update_extract_rx: &mut Option<Receiver<Step2UpdateExtractEvent>>,
     install_ctx_installed_refs_path: Option<&Path>,
 ) -> bool {
+    if crate::app::app_step2_update_download::catalog_destination_busy(&state.step1.mods_folder)
+        || crate::app::app_step2_update_download::catalog_destination_busy(
+            &state.step1.mods_archive_folder,
+        )
+        || crate::app::app_step2_update_download::catalog_destination_busy(
+            &state.step1.mods_backup_folder,
+        )
+    {
+        state.step2.scan_status =
+            "Wait for the Catalog transfer to this Mods folder to finish".to_string();
+        return false;
+    }
     if state.step2.update_selected_extract_running {
         return false;
     }

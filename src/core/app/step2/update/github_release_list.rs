@@ -85,7 +85,13 @@ pub(crate) fn fetch_is_stale(fetch: &ReleaseListFetch, wanted: &str) -> bool {
 }
 
 pub(crate) fn poll_release_list(state: &mut WizardState, fetch: &mut Option<ReleaseListFetch>) {
-    let release_list = &state.step2.versions_ui.release_list;
+    poll_release_list_state(&mut state.step2.versions_ui.release_list, fetch);
+}
+
+pub(crate) fn poll_release_list_state(
+    release_list: &mut ReleaseListState,
+    fetch: &mut Option<ReleaseListFetch>,
+) {
     if release_list.status == ReleaseListStatus::Loading
         && fetch
             .as_ref()
@@ -104,8 +110,8 @@ pub(crate) fn poll_release_list(state: &mut WizardState, fetch: &mut Option<Rele
     match in_flight.rx.try_recv() {
         Ok(ReleaseListEvent::Finished { repo, result }) => {
             let finished_in_flight = repo == in_flight.repo;
-            if state.step2.versions_ui.release_list.repo == repo {
-                state.step2.versions_ui.release_list.status = match result {
+            if release_list.repo == repo {
+                release_list.status = match result {
                     Ok(releases) => ReleaseListStatus::Ready(releases),
                     Err(err) => ReleaseListStatus::Failed(err),
                 };

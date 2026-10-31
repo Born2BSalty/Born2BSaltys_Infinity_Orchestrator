@@ -1,95 +1,75 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-use std::collections::HashMap;
-use std::fs;
-use std::path::Path;
-
+use super::answer_capture::{CaptureComponentKey, ReplayEntry, ReplayPlan};
+use super::command_config::build_install_command_config;
+use crate::app::game_authority::GameSlot;
 use crate::app::state::Step1State;
-use crate::app::step5::command_config::build_install_command_config;
+use crate::app::wlb_inputs::{decode_answers, marker_spec, parse_identity};
 use crate::install::step5_command_log_paths::{resolve_bg2_log_file, resolve_bgee_log_file};
-use crate::platform_defaults::compose_component_key;
+use std::fs;
 
-use super::prompt_memory;
-
-#[must_use]
-pub fn load_from_step1(step1: &Step1State) -> HashMap<String, Vec<String>> {
-    let mut out: HashMap<String, Vec<String>> = HashMap::new();
-    for path in source_log_paths(step1) {
-        merge_from_path(&mut out, Path::new(&path));
-    }
-    merge_from_prompt_memory(&mut out);
-    out
-}
-
-fn merge_from_prompt_memory(dst: &mut HashMap<String, Vec<String>>) {
-    let memory_entries = prompt_memory::list_component_sequences();
-    for (component_key, inputs) in memory_entries {
-        if inputs.is_empty() {
-            continue;
-        }
-        dst.entry(component_key).or_insert(inputs);
-    }
-}
-
-fn source_log_paths(step1: &Step1State) -> Vec<String> {
-    let install_config = build_install_command_config(step1);
-    if install_config.game_install == "EET" {
-        vec![
-            resolve_bgee_log_file(&install_config),
-            resolve_bg2_log_file(&install_config),
-        ]
-    } else if install_config.game_install == "BG2EE" {
-        vec![resolve_bg2_log_file(&install_config)]
-    } else {
-        vec![resolve_bgee_log_file(&install_config)]
-    }
-}
-
-fn merge_from_path(dst: &mut HashMap<String, Vec<String>>, path: &Path) {
-    let Ok(raw) = fs::read_to_string(path) else {
-        return;
+pub(crate) fn load_from_step1(step1: &Step1State) -> Result<ReplayPlan, String> {
+    let config = build_install_command_config(step1);
+    let paths = match config.game_install.as_str() {
+        "EET" => vec![
+            (GameSlot::First, resolve_bgee_log_file(&config)),
+            (GameSlot::Second, resolve_bg2_log_file(&config)),
+        ],
+        "BG2EE" => vec![(GameSlot::Second, resolve_bg2_log_file(&config))],
+        _ => vec![(GameSlot::First, resolve_bgee_log_file(&config))],
     };
-    for line in raw.lines() {
-        if let Some((component, inputs)) = parse_line(line) {
-            if inputs.is_empty() {
+    let logs = paths
+        .into_iter()
+        .filter_map(|(slot, path)| fs::read_to_string(path).ok().map(|text| (slot, text)))
+        .collect::<Vec<_>>();
+    load_from_logs(
+        &logs,
+        super::prompt_memory::list_component_sequences()
+            .into_iter()
+            .collect(),
+    )
+}
+pub(crate) fn load_from_logs(
+    logs: &[(GameSlot, String)],
+    legacy_fallback: Vec<(String, Vec<String>)>,
+) -> Result<ReplayPlan, String> {
+    let mut plan = ReplayPlan::default();
+    for (slot, raw) in logs {
+        for line in raw.lines() {
+            let Some(spec) = marker_spec(line) else {
                 continue;
+            };
+            let identity = parse_identity(line)
+                .ok_or_else(|| "Invalid @wlb-inputs component identity".to_string())?;
+            let component = CaptureComponentKey {
+                slot: *slot,
+                identity,
+            };
+            if plan
+                .entries
+                .iter()
+                .any(|entry| entry.component == component)
+            {
+                return Err("Duplicate @wlb-inputs component identity".to_string());
             }
-            dst.entry(component).or_default().extend(inputs);
+            plan.entries.push(ReplayEntry {
+                component,
+                answers: decode_answers(spec)?,
+            });
         }
     }
-}
-
-fn parse_line(line: &str) -> Option<(String, Vec<String>)> {
-    let marker = "@wlb-inputs:";
-    let marker_pos = line.to_ascii_lowercase().find(marker)?;
-    let spec = line[marker_pos + marker.len()..].trim();
-    if spec.is_empty() {
-        return None;
-    }
-
-    let trimmed = line.trim();
-    if !trimmed.starts_with('~') {
-        return None;
-    }
-    let first = trimmed.find('~')?;
-    let rest = &trimmed[first + 1..];
-    let second_rel = rest.find('~')?;
-    let tp2 = &rest[..second_rel];
-    let after = rest[second_rel + 1..].trim_start();
-    let mut parts = after.split_whitespace();
-    let _lang = parts.next()?;
-    let comp = parts.next()?;
-    let comp = comp.trim_start_matches('#');
-    if comp.is_empty() {
-        return None;
-    }
-
-    let key = compose_component_key(tp2, comp);
-    let inputs = parse_inputs(spec);
-    Some((key, inputs))
-}
-
-fn parse_inputs(spec: &str) -> Vec<String> {
-    spec.split(',').map(|p| p.trim().to_string()).collect()
+    plan.legacy_fallback = legacy_fallback
+        .into_iter()
+        .filter(|(key, _)| {
+            !plan.entries.iter().any(|entry| {
+                key.rsplit_once('#').is_some_and(|(tp2, id)| {
+                    crate::app::mod_downloads::normalize_mod_download_tp2(tp2)
+                        == entry.component.identity.normalized_tp2
+                        && id.parse::<i64>().ok() == Some(entry.component.identity.component_id)
+                })
+            })
+        })
+        .collect();
+    Ok(plan)
 }

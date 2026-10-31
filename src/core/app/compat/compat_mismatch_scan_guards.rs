@@ -6,14 +6,35 @@ use std::fs;
 use std::sync::{Mutex, OnceLock};
 use std::time::SystemTime;
 
-use crate::app::compat_tp2_blocks::collect_tp2_component_blocks;
+use crate::app::compat_tp2_blocks::{
+    ComponentFlags, FamilyIdentity, PredicateFlag, PredicateFlagKind, collect_component_flags,
+};
 
 use super::super::compat_mismatch_eval::render_requirement_evidence;
+
+#[derive(Debug, Clone)]
+pub(super) struct GuardOrigin {
+    component_id: String,
+    line: usize,
+    kind: PredicateFlagKind,
+    inherited: bool,
+}
 
 #[derive(Debug, Clone)]
 pub(super) struct RequirementGuard {
     pub(super) display_line: String,
     pub(super) eval_text: String,
+    pub(super) origin: Option<GuardOrigin>,
+}
+
+impl RequirementGuard {
+    pub(super) fn inherited_provenance(&self) -> Option<String> {
+        let origin = self.origin.as_ref().filter(|origin| origin.inherited)?;
+        Some(format!(
+            "Shared requirement inherited from first subcomponent #{}, TP2 line {}.",
+            origin.component_id, origin.line
+        ))
+    }
 }
 
 pub(super) fn load_component_guards(tp2_path: &str) -> HashMap<String, Vec<RequirementGuard>> {
@@ -40,19 +61,66 @@ pub(super) fn load_component_guards(tp2_path: &str) -> HashMap<String, Vec<Requi
 }
 
 fn load_component_guards_uncached(tp2_path: &str) -> HashMap<String, Vec<RequirementGuard>> {
-    let Ok(tp2_text) = fs::read_to_string(tp2_path) else {
+    let Ok(tp2_text) = crate::app::compat_text::read_compat_text(std::path::Path::new(tp2_path))
+    else {
         return HashMap::new();
     };
-
+    let mut first_requirements = HashMap::<FamilyIdentity, Vec<RequirementGuard>>::new();
     let mut out = HashMap::<String, Vec<RequirementGuard>>::new();
-    for (component_id, block) in collect_tp2_component_blocks(&tp2_text) {
-        let guards = collect_requirement_guards(&block);
+    for component in collect_component_flags(&tp2_text) {
+        let mut guards = component_guards(&component);
+        if let Some(family) = component.family {
+            if let Some(inherited) = first_requirements.get(&family) {
+                guards.extend(inherited.iter().cloned().map(|mut guard| {
+                    if let Some(origin) = &mut guard.origin {
+                        origin.inherited = true;
+                    }
+                    guard
+                }));
+            } else {
+                first_requirements.insert(
+                    family,
+                    guards
+                        .iter()
+                        .filter(|guard| {
+                            guard
+                                .origin
+                                .as_ref()
+                                .is_some_and(|origin| origin.kind == PredicateFlagKind::Requirement)
+                        })
+                        .cloned()
+                        .collect(),
+                );
+            }
+        }
         if !guards.is_empty() {
-            out.insert(component_id, guards);
+            out.insert(component.component_id, guards);
         }
     }
-
     out
+}
+
+fn component_guards(component: &ComponentFlags) -> Vec<RequirementGuard> {
+    component
+        .predicates
+        .iter()
+        .map(|flag| requirement_guard(&component.component_id, flag))
+        .collect()
+}
+
+fn requirement_guard(component_id: &str, flag: &PredicateFlag) -> RequirementGuard {
+    let display_expression =
+        render_requirement_evidence(&flag.expression).unwrap_or_else(|| flag.expression.clone());
+    RequirementGuard {
+        display_line: format!("{} {display_expression}", flag.prefix),
+        eval_text: flag.expression.clone(),
+        origin: Some(GuardOrigin {
+            component_id: component_id.to_string(),
+            line: flag.line,
+            kind: flag.kind,
+            inherited: false,
+        }),
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -85,264 +153,9 @@ fn cache_stamp(tp2_path: &str) -> FileCacheStamp {
     )
 }
 
+#[cfg(test)]
 pub(super) fn collect_requirement_guards(block: &[&str]) -> Vec<RequirementGuard> {
-    let mut out = Vec::<RequirementGuard>::new();
-    let mut index = 0usize;
-
-    while index < block.len() {
-        let trimmed = block[index].trim();
-        let upper = trimmed.to_ascii_uppercase();
-        let strip = if upper.starts_with("REQUIRE_PREDICATE") {
-            strip_requirement_prefix as fn(&str) -> Option<String>
-        } else if upper.starts_with("SUBCOMPONENT ") {
-            strip_subcomponent_condition as fn(&str) -> Option<String>
-        } else {
-            index += 1;
-            continue;
-        };
-
-        let mut clean_line = strip_inline_comments(trimmed);
-        let mut eval_text = strip(&clean_line);
-        let mut next = index + 1;
-        while next < block.len() {
-            let candidate = block[next].trim();
-            let cleaned_candidate = strip_inline_comments(candidate);
-            let cleaned_candidate = cleaned_candidate.trim();
-            if cleaned_candidate.is_empty() {
-                next += 1;
-                continue;
-            }
-            if !should_extend_guard(eval_text.as_deref().unwrap_or(""), cleaned_candidate) {
-                break;
-            }
-            clean_line.push(' ');
-            clean_line.push_str(cleaned_candidate);
-            eval_text = strip(&clean_line);
-            next += 1;
-        }
-
-        if let Some(eval_text) = eval_text.filter(|text| !text.trim().is_empty()) {
-            let display_line = build_display_line(trimmed, &clean_line, &eval_text);
-            out.push(RequirementGuard {
-                display_line,
-                eval_text,
-            });
-        }
-        index = next;
-    }
-
-    out
-}
-
-fn build_display_line(trimmed: &str, clean_line: &str, eval_text: &str) -> String {
-    let display_expr = render_requirement_evidence(eval_text);
-    let upper = trimmed.to_ascii_uppercase();
-    if upper.starts_with("REQUIRE_PREDICATE") {
-        return display_expr.map_or_else(
-            || "REQUIRE_PREDICATE".to_string(),
-            |expr| format!("REQUIRE_PREDICATE {expr}"),
-        );
-    }
-    if upper.starts_with("SUBCOMPONENT") {
-        let prefix = clean_line
-            .split_once('(')
-            .map_or_else(|| trimmed.trim(), |(head, _)| head.trim());
-        return match display_expr {
-            Some(expr) if expr.starts_with('(') => format!("{prefix} {expr}"),
-            Some(expr) => format!("{prefix} ({expr})"),
-            None => prefix.to_string(),
-        };
-    }
-    display_expr.unwrap_or_else(|| clean_line.trim().to_string())
-}
-
-fn should_extend_guard(current: &str, next: &str) -> bool {
-    if next.to_ascii_uppercase().starts_with("REQUIRE_PREDICATE")
-        || next.to_ascii_uppercase().starts_with("SUBCOMPONENT ")
-        || next.to_ascii_uppercase().starts_with("BEGIN ")
-    {
-        return false;
-    }
-    if current.trim().is_empty() {
-        return next.starts_with('(');
-    }
-    paren_balance(current) > 0
-        || current.trim_end().ends_with("AND")
-        || current.trim_end().ends_with("OR")
-        || current.trim_end().ends_with("&&")
-        || current.trim_end().ends_with("||")
-        || current.trim_end().ends_with('(')
-        || next.to_ascii_uppercase().starts_with("AND ")
-        || next.to_ascii_uppercase().starts_with("OR ")
-        || next.starts_with("&&")
-        || next.starts_with("||")
-        || next.starts_with(')')
-}
-
-fn strip_requirement_prefix(line: &str) -> Option<String> {
-    let trimmed = line.trim_start();
-    let upper = trimmed.to_ascii_uppercase();
-    if !upper.starts_with("REQUIRE_PREDICATE") {
-        return None;
-    }
-    let tail = trimmed["REQUIRE_PREDICATE".len()..].trim_start();
-    let tail = trim_trailing_requirement_message(tail);
-    if tail.is_empty() {
-        None
-    } else {
-        Some(tail.to_string())
-    }
-}
-
-fn trim_trailing_requirement_message(input: &str) -> &str {
-    let without_tra = trim_trailing_tra_reference(input);
-    let Some(candidate) = trim_trailing_quoted_argument(without_tra) else {
-        return without_tra;
-    };
-    if render_requirement_evidence(candidate).is_some() {
-        candidate
-    } else {
-        without_tra
-    }
-}
-
-fn trim_trailing_tra_reference(input: &str) -> &str {
-    let trimmed = input.trim_end();
-    let Some(last_whitespace) = trimmed.rfind(char::is_whitespace) else {
-        return if is_tra_reference(trimmed) {
-            ""
-        } else {
-            trimmed
-        };
-    };
-    let (head, tail) = trimmed.split_at(last_whitespace);
-    let tail = tail.trim_start();
-    if is_tra_reference(tail) {
-        head.trim_end()
-    } else {
-        trimmed
-    }
-}
-
-fn is_tra_reference(token: &str) -> bool {
-    token
-        .strip_prefix('@')
-        .is_some_and(|digits| !digits.is_empty() && digits.chars().all(|ch| ch.is_ascii_digit()))
-}
-
-fn trim_trailing_quoted_argument(input: &str) -> Option<&str> {
-    let trimmed = input.trim_end();
-    let quote = trimmed.chars().last()?;
-    if !matches!(quote, '~' | '"') {
-        return None;
-    }
-    let last_quote = trimmed.len() - quote.len_utf8();
-    let start_quote = trimmed[..last_quote].rfind(quote)?;
-    let before = &trimmed[..start_quote];
-    if !before.chars().last().is_some_and(char::is_whitespace) {
-        return None;
-    }
-    let candidate = before.trim_end();
-    if candidate.is_empty() {
-        None
-    } else {
-        Some(candidate)
-    }
-}
-
-fn strip_subcomponent_condition(line: &str) -> Option<String> {
-    let trimmed = line.trim_start();
-    let upper = trimmed.to_ascii_uppercase();
-    if !upper.starts_with("SUBCOMPONENT") {
-        return None;
-    }
-    let tail = trimmed["SUBCOMPONENT".len()..].trim_start();
-    if tail.is_empty() {
-        return None;
-    }
-    let tail = match tail.chars().next() {
-        Some('~') => {
-            let rest = &tail[1..];
-            let end = rest.find('~')?;
-            &rest[end + 1..]
-        }
-        Some('"') => {
-            let rest = &tail[1..];
-            let end = rest.find('"')?;
-            &rest[end + 1..]
-        }
-        _ => {
-            let split = tail
-                .find(|ch: char| ch.is_whitespace() || ch == '/')
-                .unwrap_or(tail.len());
-            &tail[split..]
-        }
-    };
-    let tail = tail.trim_start();
-    if tail.is_empty() {
-        None
-    } else {
-        Some(tail.to_string())
-    }
-}
-
-fn strip_inline_comments(line: &str) -> String {
-    let chars: Vec<char> = line.chars().collect();
-    let mut out = String::new();
-    let mut index = 0usize;
-    let mut quote = None::<char>;
-
-    while index < chars.len() {
-        let ch = chars[index];
-        if let Some(active) = quote {
-            out.push(ch);
-            if ch == active {
-                quote = None;
-            }
-            index += 1;
-            continue;
-        }
-
-        if ch == '~' || ch == '"' {
-            quote = Some(ch);
-            out.push(ch);
-            index += 1;
-            continue;
-        }
-
-        if ch == '/' && chars.get(index + 1) == Some(&'/') {
-            break;
-        }
-        if ch == '/' && chars.get(index + 1) == Some(&'*') {
-            break;
-        }
-
-        out.push(ch);
-        index += 1;
-    }
-
-    out
-}
-
-fn paren_balance(input: &str) -> i32 {
-    let mut balance = 0i32;
-    let mut quote = None::<char>;
-    for ch in input.chars() {
-        if let Some(active) = quote {
-            if ch == active {
-                quote = None;
-            }
-            continue;
-        }
-        if ch == '~' || ch == '"' {
-            quote = Some(ch);
-            continue;
-        }
-        if ch == '(' {
-            balance += 1;
-        } else if ch == ')' {
-            balance -= 1;
-        }
-    }
-    balance
+    let text = block.join("\n");
+    let components = collect_component_flags(&text);
+    components.first().map_or_else(Vec::new, component_guards)
 }

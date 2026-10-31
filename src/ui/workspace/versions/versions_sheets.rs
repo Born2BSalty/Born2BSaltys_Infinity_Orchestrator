@@ -29,6 +29,8 @@ pub(crate) struct EditSourceEnv {
     pub(crate) busy: bool,
     pub(crate) logged_in: bool,
     pub(crate) release_list: ReleaseListState,
+    pub(crate) has_modlist_destination: bool,
+    pub(crate) id_salt: &'static str,
 }
 
 #[derive(Default)]
@@ -383,41 +385,34 @@ pub(crate) fn render_edit_source(
         .source_form
         .as_ref()
         .map_or_else(String::new, sheet_mod_name);
-    let mut outcome = render_sheet_shell(
-        ctx,
-        palette,
-        "versions_sheet_edit",
-        drawer_rect,
-        |ui, outcome| {
-            egui::Frame::default()
-                .inner_margin(egui::Margin::symmetric(22, 18))
-                .show(ui, |ui| {
-                    render_header(ui, palette, "Download source", &mod_name, outcome);
-                    ui.add_space(12.0);
-                    let footer_reserve = ui
-                        .spacing()
-                        .item_spacing
-                        .y
-                        .mul_add(2.0, redesign_btn_height(ui, true) + 12.0);
-                    let body_h = (ui.available_height() - footer_reserve).max(0.0);
-                    egui::ScrollArea::vertical()
-                        .auto_shrink([false, false])
-                        .max_height(body_h)
-                        .show(ui, |ui| {
-                            if let Some(action) =
-                                render_edit_source_body(ctx, ui, palette, step2, env)
-                                && outcome.action.is_none()
-                            {
-                                outcome.action = Some(action);
-                            }
-                        });
-                    ui.add_space(12.0);
-                    ui.horizontal(|ui| {
-                        render_edit_source_footer(ui, palette, step2, env.busy, outcome);
+    let mut outcome = render_sheet_shell(ctx, palette, env.id_salt, drawer_rect, |ui, outcome| {
+        egui::Frame::default()
+            .inner_margin(egui::Margin::symmetric(22, 18))
+            .show(ui, |ui| {
+                render_header(ui, palette, "Download source", &mod_name, outcome);
+                ui.add_space(12.0);
+                let footer_reserve = ui
+                    .spacing()
+                    .item_spacing
+                    .y
+                    .mul_add(2.0, redesign_btn_height(ui, true) + 12.0);
+                let body_h = (ui.available_height() - footer_reserve).max(0.0);
+                egui::ScrollArea::vertical()
+                    .auto_shrink([false, false])
+                    .max_height(body_h)
+                    .show(ui, |ui| {
+                        if let Some(action) = render_edit_source_body(ctx, ui, palette, step2, env)
+                            && outcome.action.is_none()
+                        {
+                            outcome.action = Some(action);
+                        }
                     });
+                ui.add_space(12.0);
+                ui.horizontal(|ui| {
+                    render_edit_source_footer(ui, palette, step2, env.busy, outcome);
                 });
-        },
-    );
+            });
+    });
     if escape_close {
         outcome.close = true;
     }
@@ -434,7 +429,7 @@ fn render_edit_source_body(
     step2: &mut Step2State,
     env: &EditSourceEnv,
 ) -> Option<Step2Action> {
-    let has_modlist_destination = mod_downloads::active_modlist_downloads_path().is_some();
+    let has_modlist_destination = env.has_modlist_destination;
     let form = step2.versions_ui.source_form.as_mut()?;
     let form_env = versions_form::FormEnv {
         has_modlist_destination,

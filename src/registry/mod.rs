@@ -23,3 +23,6 @@ pub use persistence_cycle::RegistryPersistenceCycle;
 pub use store::RegistryStore;
 pub use store_workspace::WorkspaceStore;
 pub use workspace_model::{ComponentRef, ModlistWorkspaceState, PromptOverride};
+
+#[cfg(test)]
+mod wlb_sharing_tests;

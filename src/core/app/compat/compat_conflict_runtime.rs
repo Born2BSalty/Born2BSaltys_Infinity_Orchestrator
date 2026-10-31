@@ -184,7 +184,7 @@ fn build_selected_conflict_graph(
                     target_component_id: conflict.target_component_id.clone(),
                     message: conflict.message.clone(),
                     source: item.tp2_path.clone(),
-                    raw_evidence: conflict.raw_line.clone(),
+                    raw_evidence: conflict.evidence(),
                 });
         }
     }
@@ -220,3 +220,7 @@ fn conflict_target_key(conflict: &ComponentConflict) -> String {
         conflict.target_component_id.trim()
     )
 }
+
+#[cfg(test)]
+#[path = "compat_conflict_runtime_tests.rs"]
+mod tests;

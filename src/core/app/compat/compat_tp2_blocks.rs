@@ -3,6 +3,14 @@
 
 use crate::app::tp2_component_begin::{code_part, component_begin_at, designated_id_in_code};
 
+#[path = "compat_tp2_flags.rs"]
+mod flags;
+
+pub(super) use flags::{
+    ComponentFlags, FamilyIdentity, ForbidFlag, PredicateFlag, PredicateFlagKind,
+    collect_component_flags,
+};
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum LineState {
     Code,

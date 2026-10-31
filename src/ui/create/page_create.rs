@@ -398,6 +398,9 @@ fn finish_start_scratch(orchestrator: &mut OrchestratorApp, name: &str, game: Ga
     }
 
     let new_id = entry.id;
+    orchestrator.wizard_state.pending_install_choice = Some("Create".to_string());
+    orchestrator.wizard_state.pending_install_source = Some("Create".to_string());
+    orchestrator.wizard_state.pending_install_choice_modlist_id = Some(new_id.clone());
     orchestrator.create_screen_state.modlist_name.clear();
     orchestrator.create_screen_state.destination.clear();
     orchestrator.create_screen_state.destination_choice = None;

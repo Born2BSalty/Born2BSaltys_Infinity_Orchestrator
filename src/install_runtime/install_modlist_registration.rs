@@ -344,7 +344,19 @@ fn register_new_install_start_modlist(
 
 fn persist_new_install_workspace(orchestrator: &mut OrchestratorApp, entry: &ModlistEntry) {
     let canonical_store = WorkspaceStore::new_for_id(&entry.id);
-    let empty = ModlistWorkspaceState::default();
+    let empty = ModlistWorkspaceState {
+        parser_choice_phrases: Some(
+            orchestrator
+                .install_screen_state
+                .parsed_preview
+                .as_ref()
+                .map_or_else(
+                    || orchestrator.wizard_state.parser_choice_phrases.clone(),
+                    |preview| preview.parser_choice_phrases.clone(),
+                ),
+        ),
+        ..Default::default()
+    };
     if let Err(err) = canonical_store.save(&empty) {
         warn!(
             target = "orchestrator",
@@ -410,6 +422,7 @@ mod tests {
         forked_from: Vec<ForkAncestor>,
     ) -> ModlistSharePreview {
         ModlistSharePreview {
+            parser_choice_phrases: Vec::new(),
             bio_version: "x".to_string(),
             game_install: game.to_string(),
             game_version: None,

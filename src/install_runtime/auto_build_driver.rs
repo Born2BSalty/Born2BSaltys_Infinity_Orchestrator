@@ -37,8 +37,12 @@ pub fn prepare_install_dirs_and_maybe_import(
         return Err("share-code-consuming workflow has no share code to import".to_string());
     }
 
-    import_modlist_share_code(wizard_state, share_code.trim())
-        .map_err(|err| format!("Could not import the share code: {err}"))?;
+    let pending_install_choice = wizard_state.pending_install_choice.clone();
+    let pending_install_source = wizard_state.pending_install_source.clone();
+    let import_result = import_modlist_share_code(wizard_state, share_code.trim());
+    wizard_state.pending_install_choice = pending_install_choice;
+    wizard_state.pending_install_source = pending_install_source;
+    import_result.map_err(|err| format!("Could not import the share code: {err}"))?;
 
     arm_explicit_reproduce(wizard_state);
 

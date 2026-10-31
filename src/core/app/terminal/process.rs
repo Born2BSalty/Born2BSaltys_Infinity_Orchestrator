@@ -56,11 +56,13 @@ mod lifecycle {
 
     use anyhow::Result;
 
-    use super::super::{EmbeddedTerminal, backend, scripted_inputs};
+    use super::super::{EmbeddedTerminal, backend};
 
     impl EmbeddedTerminal {
         pub fn start_process(&mut self, program: &str, args: &[String]) -> Result<()> {
             self.last_runtime_error = None;
+            self.exit_pending = None;
+            self.important_scan_tail.clear();
             let raw_log_path = self.raw_log_path.clone();
             if let Some(path) = raw_log_path.as_ref() {
                 if let Some(parent) = path.parent()
@@ -143,17 +145,22 @@ mod lifecycle {
 
         pub fn poll_output(&mut self) {
             self.events.has_new_data = false;
+            let mut disconnected = self.output_rx.is_none();
             if let Some(rx) = &self.output_rx {
                 let mut chunks: Vec<String> = Vec::new();
-                while let Ok(event) = rx.try_recv() {
-                    match event {
-                        backend::OutputEvent::Data(chunk) => chunks.push(chunk),
+                loop {
+                    match rx.try_recv() {
+                        Ok(backend::OutputEvent::Data(chunk)) => chunks.push(chunk),
+                        Err(std::sync::mpsc::TryRecvError::Empty) => break,
+                        Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                            disconnected = true;
+                            break;
+                        }
                     }
                 }
                 if !chunks.is_empty() {
                     let joined = chunks.join("");
                     self.update_boundary_events(&joined);
-                    scripted_inputs::update_current_component_from_output(self, &joined);
                     self.update_important_lines(&joined);
                     let raw_log_error = self.raw_log_file.as_mut().and_then(|raw| {
                         if let Err(err) = raw.write_all(joined.as_bytes()) {
@@ -183,23 +190,13 @@ mod lifecycle {
             if let Some(child) = self.child.as_mut() {
                 match child.try_wait() {
                     Ok(Some(status)) => {
-                        self.last_exit_code = status.code();
+                        self.exit_pending = Some(status.code().unwrap_or(1));
                         self.child = None;
                         self.stdin = None;
-                        self.output_rx = None;
-                        self.raw_log_file = None;
-                        self.bio_debug_log_file = None;
-                        self.current_component_key = None;
-                        self.current_component_tp2 = None;
-                        self.current_component_id = None;
-                        self.current_component_name = None;
-                        self.current_batch.clear();
-                        self.pending_display_patches.clear();
-                        self.events.saw_exit_event = true;
-                        self.events.has_new_data = true;
                     }
                     Ok(None) => {}
                     Err(err) => {
+                        self.invalidate_capture();
                         self.record_runtime_error(format!("process state error: {err}"));
                         self.last_exit_code = Some(1);
                         self.child = None;
@@ -217,6 +214,24 @@ mod lifecycle {
                         self.events.has_new_data = true;
                     }
                 }
+            }
+            if disconnected && let Some(code) = self.exit_pending.take() {
+                if !self.important_scan_tail.is_empty() {
+                    self.update_important_lines("\n");
+                }
+                self.invalidate_capture();
+                self.last_exit_code = Some(code);
+                self.output_rx = None;
+                self.raw_log_file = None;
+                self.bio_debug_log_file = None;
+                self.current_component_key = None;
+                self.current_component_tp2 = None;
+                self.current_component_id = None;
+                self.current_component_name = None;
+                self.current_batch.clear();
+                self.pending_display_patches.clear();
+                self.events.saw_exit_event = true;
+                self.events.has_new_data = true;
             }
         }
 
@@ -264,6 +279,17 @@ mod terminate {
         }
 
         fn terminate_process_tree(&mut self, marker: &str) {
+            if let Some(session) = self.capture_session.as_mut()
+                && let Some(component) = session.active_component().cloned()
+            {
+                session.observe_event(
+                    crate::app::step5::answer_capture::CaptureEvent::FinishComponent {
+                        component,
+                        outcome: crate::app::step5::answer_capture::ComponentOutcome::Cancelled,
+                    },
+                );
+            }
+            self.invalidate_capture();
             self.log_bio_debug(&format!("terminate_process_tree marker=\"{marker}\""));
             let pid = self.child.as_ref().map(std::process::Child::id);
             let kill_error = self

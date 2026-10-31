@@ -183,6 +183,17 @@ pub(crate) fn save_installed_records(
     Ok(())
 }
 
+pub(crate) fn save_folder_installed_records(
+    records: &[InstalledRecord],
+    target: &Path,
+    folder_label: &str,
+) -> io::Result<()> {
+    if records.is_empty() {
+        return Ok(());
+    }
+    write_records(target, Some(folder_label), records)
+}
+
 pub(crate) fn installed_source_refs_path() -> std::path::PathBuf {
     crate::app::mod_downloads::active_modlist_dir().map_or_else(
         || app_config_file(MOD_SOURCE_REFS_FILE_NAME, "config"),

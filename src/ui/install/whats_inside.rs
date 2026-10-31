@@ -266,6 +266,7 @@ mod tests {
 
     fn eet_preview() -> ModlistSharePreview {
         ModlistSharePreview {
+            parser_choice_phrases: Vec::new(),
             bio_version: "0.1.0-test".to_string(),
             game_install: "EET".to_string(),
             game_version: None,

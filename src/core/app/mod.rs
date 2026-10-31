@@ -91,6 +91,8 @@ pub mod compat_rules_model;
 pub mod compat_setup_tra;
 #[path = "compat/compat_step3_rules.rs"]
 pub mod compat_step3_rules;
+#[path = "compat/compat_text.rs"]
+pub(crate) mod compat_text;
 #[path = "compat/compat_tp2_blocks.rs"]
 pub mod compat_tp2_blocks;
 pub mod component_block_preview;
@@ -104,6 +106,7 @@ pub mod github_forks_list;
 pub mod github_release_list;
 pub mod mod_downloads;
 pub mod mod_downloads_migrate;
+pub mod mod_installer_parser;
 pub mod mod_source_history;
 #[path = "step2/update/mod_update_locks.rs"]
 pub mod mod_update_locks;
@@ -153,6 +156,11 @@ pub mod step4_weidu_log_export;
 pub mod step5;
 pub mod step5_runtime_status;
 pub mod terminal;
+pub mod tool_version_probe;
 pub mod tp2_component_begin;
 #[path = "step2/update/versions_view.rs"]
 pub mod versions_view;
+pub mod wlb_inputs;
+
+#[cfg(test)]
+mod wlb_inputs_tests;

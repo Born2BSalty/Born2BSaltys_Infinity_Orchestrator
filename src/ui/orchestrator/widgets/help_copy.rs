@@ -108,7 +108,9 @@ fn step3_text() -> HelpText {
                  click the pill to see them. Right-click the component \u{2192} \"Set \
                  @wlb-inputs\u{2026}\" and type the answers in the order they are asked, \
                  separated by commas (for example y,2,n). BIO types them for you during the \
-                 install, so it never stops to wait. \"Clear Prompt Data\" removes them.",
+                 install, so it never stops to wait. Manual answers from a successfully completed \
+                 component are saved for sharing. Blank answers, commas and surrounding spaces \
+                 use bio-json-v1 input data, which requires an updated BIO recipient. \"Clear Prompt Data\" removes them.",
             ),
             bullet(
                 "The padlock on a mod header holds that mod in place. Undo and Redo step \

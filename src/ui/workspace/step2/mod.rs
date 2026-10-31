@@ -2,6 +2,7 @@
 // Copyright (c) 2026 Born2BSalty
 
 pub mod step2_global_mods_confirm;
+pub mod step2_language_recovery;
 pub mod step2_log_confirm;
 pub mod step2_log_import_dialog;
 pub mod step2_rescan_reconcile;

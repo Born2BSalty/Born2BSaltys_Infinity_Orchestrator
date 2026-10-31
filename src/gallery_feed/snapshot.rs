@@ -177,3 +177,102 @@ mod tests {
         assert_eq!(entries_from_files(&files).len(), 0);
     }
 }
+
+#[cfg(test)]
+mod parser_sharing_tests {
+    use super::*;
+
+    #[test]
+    fn parser_sharing_biolist_snapshot_and_index_keep_canonical_phrase_metadata() {
+        let phrases = vec!["Default".to_string(), " Custom 世界 ".to_string()];
+        let original = &crate::ui::install::gallery::catalog::entries()[0].code;
+        let code =
+            crate::registry::share_export::enrich_share_code_with_phrases(original, &phrases)
+                .expect("enrich");
+        let bytes = crate::app::modlist_biolist::build_biolist(&code).expect("BIO export");
+        assert_eq!(
+            crate::app::modlist_biolist::read_share_code_from_bytes(&bytes)
+                .expect("canonical code"),
+            code
+        );
+        let meta = br#"{"id":"parser-sharing","name":"Parser sharing","author":"Author","description":"Parser sharing fixture","tags":[],"game":"EET","featured":false,"version":"1.0.0"}"#;
+        let entries = entries_from_files(&[
+            ("parser-sharing/entry.json", meta.as_slice()),
+            ("parser-sharing/modlist.biolist", bytes.as_slice()),
+        ]);
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].code, code);
+        assert_eq!(
+            crate::app::modlist_share::preview_modlist_share_code(&entries[0].code)
+                .expect("gallery preview")
+                .parser_choice_phrases,
+            phrases
+        );
+        assert_eq!(
+            crate::app::modlist_share::decode_share_payload(&entries[0].code)
+                .expect("import payload")
+                .parser_choice_phrases,
+            phrases
+        );
+    }
+
+    #[test]
+    fn manual_wlb_gallery_folder_snapshot_and_index_keep_enriched_canonical_code() {
+        use crate::registry::workspace_model::{ComponentRef, ModlistWorkspaceState};
+        let original = crate::app::modlist_share::encode_share_payload_text(r#"{"format_version":1,"game_install":"BGEE","install_mode":"start_from_scratch","weidu_logs":{"bgee":"~MOD/MOD.TP2~ #2 #17 // Label // @wlb-inputs: stale"},"parser_choice_phrases":["Custom"],"opaque":{"keep":42}}"#).expect("code");
+        let workspace = ModlistWorkspaceState {
+            order_bgee: vec![ComponentRef {
+                tp2: "MOD/MOD.TP2".to_string(),
+                id: 17,
+                language: 2,
+                wlb_inputs: Some("bio-json-v1:[\"a,b\",\"\"]".to_string()),
+            }],
+            ..Default::default()
+        };
+        let code = crate::registry::share_export::overlay_workspace_wlb(&original, &workspace)
+            .expect("overlay");
+        let bytes = crate::app::modlist_biolist::build_biolist(&code).expect("archive");
+        let meta = br#"{"id":"manual-wlb","name":"Manual WLB","author":"Author","description":"Manual WLB fixture","tags":[],"game":"BGEE","featured":false,"version":"1.0.0"}"#;
+        let entries = entries_from_files(&[
+            ("manual-wlb/entry.json", meta.as_slice()),
+            ("manual-wlb/modlist.biolist", bytes.as_slice()),
+        ]);
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].code, code);
+        let parsed: EntryMeta = serde_json::from_slice(meta).expect("metadata");
+        let index = IndexFile {
+            entries: vec![index_entry_from_meta("manual-wlb", parsed, false)],
+        };
+        let indexed = entries_from_index(index, &|path| {
+            (path == "manual-wlb/modlist.biolist").then_some(bytes.as_slice())
+        });
+        assert_eq!(indexed.len(), 1);
+        assert_eq!(indexed[0].code, code);
+        let payload =
+            crate::app::modlist_share::decode_share_payload(&indexed[0].code).expect("payload");
+        assert_eq!(payload.parser_choice_phrases, ["Custom"]);
+        assert!(
+            payload
+                .weidu_logs
+                .bgee
+                .expect("log")
+                .contains("bio-json-v1:")
+        );
+        let root =
+            std::env::temp_dir().join(format!("bio-manual-wlb-gallery-{}", std::process::id()));
+        let folder = root.join("manual-wlb");
+        std::fs::create_dir_all(&folder).expect("directory");
+        std::fs::write(folder.join("entry.json"), meta).expect("metadata file");
+        std::fs::write(folder.join("modlist.biolist"), &bytes).expect("archive file");
+        assert_eq!(crate::gallery_feed::folder::check_folder(&root), Ok(1));
+        assert_eq!(
+            crate::app::modlist_biolist::read_share_code(&folder.join("modlist.biolist"))
+                .expect("canonical"),
+            code
+        );
+        std::fs::remove_file(folder.join("entry.json")).expect("remove metadata");
+        std::fs::remove_file(folder.join("modlist.biolist")).expect("remove archive");
+        std::fs::remove_dir(folder).expect("remove folder");
+        std::fs::remove_dir(root).expect("remove root");
+    }
+}

@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-use std::collections::{HashMap, VecDeque};
+use crate::app::step5::answer_capture::ReplayPlan;
+use std::collections::VecDeque;
 
 use crate::platform_defaults::{compose_component_key, normalize_tp2_filename};
 
@@ -14,19 +15,25 @@ struct ComponentContext {
     component_name: Option<String>,
 }
 
-pub(super) fn set_scripted_inputs(
-    term: &mut EmbeddedTerminal,
-    entries: HashMap<String, Vec<String>>,
-) -> usize {
+pub(super) fn set_scripted_inputs(term: &mut EmbeddedTerminal, entries: ReplayPlan) -> usize {
     term.scripted_inputs_by_component.clear();
+    term.typed_scripted_inputs = entries
+        .entries
+        .into_iter()
+        .map(|entry| (entry.component, VecDeque::from(entry.answers)))
+        .collect();
     term.current_component_key = None;
     term.current_component_tp2 = None;
     term.current_component_id = None;
     term.current_component_name = None;
     term.current_batch.clear();
     term.pending_display_patches.clear();
-    let mut total = 0usize;
-    for (k, values) in entries {
+    let mut total = term
+        .typed_scripted_inputs
+        .iter()
+        .map(|(_, values)| values.len())
+        .sum::<usize>();
+    for (k, values) in entries.legacy_fallback {
         if values.is_empty() {
             continue;
         }
@@ -50,7 +57,32 @@ pub(super) fn update_current_component_from_output(term: &mut EmbeddedTerminal, 
 }
 
 pub(super) fn take_next_scripted_input_for_current(term: &mut EmbeddedTerminal) -> Option<String> {
+    if term
+        .capture_session
+        .as_ref()
+        .is_some_and(|session| session.phase().is_none())
+    {
+        return None;
+    }
+    if let Some(key) = term.capture_session.as_ref().and_then(|session| {
+        session
+            .active_component()
+            .or_else(|| session.replay_component(term.current_component_key.as_deref()?))
+    }) && let Some((_, queue)) = term
+        .typed_scripted_inputs
+        .iter_mut()
+        .find(|(component, _)| component == key)
+    {
+        return queue.pop_front();
+    }
     let current_key = term.current_component_key.as_ref()?;
+    if term
+        .capture_session
+        .as_ref()
+        .is_some_and(|session| !session.legacy_fallback_allowed(current_key))
+    {
+        return None;
+    }
     let queue = term.scripted_inputs_by_component.get_mut(current_key)?;
     let next = queue.pop_front();
     if queue.is_empty() {
@@ -60,7 +92,32 @@ pub(super) fn take_next_scripted_input_for_current(term: &mut EmbeddedTerminal) 
 }
 
 pub(super) fn peek_next_scripted_input_for_current(term: &EmbeddedTerminal) -> Option<&str> {
+    if term
+        .capture_session
+        .as_ref()
+        .is_some_and(|session| session.phase().is_none())
+    {
+        return None;
+    }
+    if let Some(key) = term.capture_session.as_ref().and_then(|session| {
+        session
+            .active_component()
+            .or_else(|| session.replay_component(term.current_component_key.as_deref()?))
+    }) && let Some((_, queue)) = term
+        .typed_scripted_inputs
+        .iter()
+        .find(|(component, _)| component == key)
+    {
+        return queue.front().map(String::as_str);
+    }
     let current_key = term.current_component_key.as_ref()?;
+    if term
+        .capture_session
+        .as_ref()
+        .is_some_and(|session| !session.legacy_fallback_allowed(current_key))
+    {
+        return None;
+    }
     let queue = term.scripted_inputs_by_component.get(current_key)?;
     queue.front().map(String::as_str)
 }
