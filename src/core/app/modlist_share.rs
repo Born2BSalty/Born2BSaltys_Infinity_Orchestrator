@@ -76,7 +76,11 @@ fn build_and_export_share_code(
     state: &WizardState,
     log_source: ExportLogSource,
 ) -> Result<String, String> {
-    let parser_choice_phrases = crate::app::mod_installer_parser::capture_local_choice_phrases()?;
+    let parser_choice_phrases = crate::app::mod_installer_parser::capture_local_choice_phrases()
+        .unwrap_or_else(|err| {
+            warn!("Share code exported without local parser phrases: {err}");
+            Vec::new()
+        });
     crate::app::mod_downloads::ensure_mod_downloads_files().map_err(|err| err.to_string())?;
 
     let include = checked_mod_tp2s(state);
@@ -131,10 +135,8 @@ pub(crate) fn export_modlist_share_code_with(
     state: &WizardState,
     sources: &ShareExportSources,
 ) -> Result<String, String> {
-    let phrases = crate::app::mod_installer_parser::union_phrases(&[
-        &state.parser_choice_phrases,
-        &sources.parser_choice_phrases,
-    ])?;
+    let phrases =
+        union_valid_phrases(&[&state.parser_choice_phrases, &sources.parser_choice_phrases]);
     let weidu_logs = export_weidu_logs(state, sources.log_source)?;
     let first_slot_export_text = weidu_logs.bgee.as_deref().or(weidu_logs.iwdee.as_deref());
     if relevant_weidu_text_is_empty(state, first_slot_export_text, weidu_logs.bg2ee.as_deref()) {
@@ -184,6 +186,21 @@ pub(crate) fn export_modlist_share_code_with(
             &crate::registry::workspace_model::ModlistWorkspaceState::default(),
         );
     crate::registry::share_export::overlay_workspace_wlb(&code, &workspace)
+}
+
+pub(crate) fn union_valid_phrases(groups: &[&[String]]) -> Vec<String> {
+    let mut result: Vec<String> = Vec::new();
+    for phrase in groups.iter().flat_map(|group| group.iter()) {
+        if result.contains(phrase) {
+            continue;
+        }
+        result.push(phrase.clone());
+        if let Err(err) = crate::app::mod_installer_parser::validate_phrases(&result) {
+            result.pop();
+            warn!("Share code dropped a parser phrase: {err}");
+        }
+    }
+    result
 }
 
 fn move_first_slot_log_to_iwdee_key(payload: &mut serde_json::Value, iwdee_text: Option<&str>) {
@@ -1563,6 +1580,49 @@ mod tests {
                 name: "Root build".to_string(),
                 author: "@root".to_string(),
             }]
+        );
+    }
+
+    #[test]
+    fn export_ignores_unreadable_local_parser_config() {
+        let _lock = crate::app::mod_downloads::AMBIENT_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let guard = ConfigDirGuard::new("unreadable_parser");
+        let parser = guard.0.join("parser.toml");
+        std::fs::write(&parser, "choice_phrase = 42").expect("malformed parser fixture");
+        let mut state = state_with_one_bgee_component();
+        state.parser_choice_phrases = vec!["Wizard".to_string()];
+
+        let code = crate::app::mod_installer_parser::with_parser_path_for_test(&parser, || {
+            export_modlist_share_code(&state)
+        })
+        .expect("a broken local parser config does not block export");
+
+        assert_eq!(
+            decode_share_payload(&code)
+                .expect("decode")
+                .parser_choice_phrases,
+            ["Wizard"]
+        );
+    }
+
+    #[test]
+    fn export_drops_invalid_parser_phrases_instead_of_failing() {
+        let mut state = state_with_one_bgee_component();
+        state.parser_choice_phrases = vec!["Wizard".to_string(), "   ".to_string()];
+        let sources = ShareExportSources {
+            parser_choice_phrases: vec!["x".repeat(8193), "Local".to_string()],
+            ..ShareExportSources::default()
+        };
+
+        let code = export_modlist_share_code_with(&state, &sources).expect("export");
+
+        assert_eq!(
+            decode_share_payload(&code)
+                .expect("decode")
+                .parser_choice_phrases,
+            ["Wizard", "Local"]
         );
     }
 

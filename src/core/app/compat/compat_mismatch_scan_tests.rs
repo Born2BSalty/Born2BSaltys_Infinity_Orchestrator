@@ -586,5 +586,90 @@ fn compat_three_fixes_legacy_guard_is_evaluated_in_genuine_context() {
     );
 }
 
+fn guards_before_next_line(next_line: &str) -> Vec<RequirementGuard> {
+    collect_requirement_guards(&[
+        "BEGIN ~Wrong game~ DESIGNATED 1",
+        "REQUIRE_PREDICATE GAME_IS ~bg2ee eet~",
+        next_line,
+    ])
+}
+
+#[test]
+fn require_predicate_followed_by_unlisted_action_keeps_guard() {
+    let expected = guards_before_next_line("COPY ~a~ ~b~");
+    assert_eq!(expected.len(), 1);
+    let context = mismatch_context("BGEE", "BGEE", &[]);
+    let expected_hit = preferred_guard_hit(&expected, &context).expect("COPY guard hit");
+    assert_eq!(expected_hit.kind, "mismatch");
+    for next_line in [
+        "ACTION_DEFINE_ARRAY names BEGIN ~a~ END",
+        "ACTION_MATCH ~%x%~ WITH ~a~ BEGIN END DEFAULT END",
+        "OUTER_FOR (i = 0; i < 2; ++i) BEGIN END",
+        "DEFINE_ACTION_FUNCTION helper BEGIN END",
+        "CLEAR_MEMORY",
+    ] {
+        let guards = guards_before_next_line(next_line);
+        assert_eq!(guards.len(), 1, "{next_line}");
+        assert_eq!(guards[0].eval_text, expected[0].eval_text, "{next_line}");
+        assert_eq!(
+            guards[0].display_line, expected[0].display_line,
+            "{next_line}"
+        );
+        let hit = preferred_guard_hit(&guards, &context).expect(next_line);
+        assert_eq!(hit.kind, expected_hit.kind, "{next_line}");
+        assert_eq!(hit.message, expected_hit.message, "{next_line}");
+    }
+}
+
+#[test]
+fn require_predicate_dangling_operator_before_unknown_line_is_dropped() {
+    let context = mismatch_context("BG2EE", "BG2EE", &[]);
+    for ending in ["OR", "AND", "NOT", "(", "||", "&&", "!"] {
+        let predicate = format!("REQUIRE_PREDICATE GAME_IS ~bgee~ {ending}");
+        let guards = collect_requirement_guards(&[
+            "BEGIN ~Dangling~ DESIGNATED 1",
+            predicate.as_str(),
+            "VARIABLE_IS_SET x",
+        ]);
+        assert!(guards.is_empty(), "{ending}");
+        assert!(preferred_guard_hit(&guards, &context).is_none(), "{ending}");
+    }
+}
+
+#[test]
+fn subcomponent_condition_followed_by_unlisted_action_keeps_family() {
+    use crate::app::compat_tp2_blocks::{
+        FamilyIdentity, PredicateFlagKind, collect_component_flags,
+    };
+    let flags = collect_component_flags(
+        "BEGIN ~A~ DESIGNATED 1 SUBCOMPONENT ~family~ (GAME_IS ~bg2ee~)\nACTION_DEFINE_ARRAY names BEGIN ~a~ END\n",
+    );
+    assert_eq!(flags.len(), 1);
+    assert_eq!(
+        flags[0].family,
+        Some(FamilyIdentity::Literal("family".to_string()))
+    );
+    assert_eq!(flags[0].predicates.len(), 1);
+    assert_eq!(flags[0].predicates[0].kind, PredicateFlagKind::Option);
+    assert_eq!(flags[0].predicates[0].expression, "( GAME_IS ~bg2ee~ )");
+}
+
+#[test]
+fn subcomponent_without_condition_followed_by_unlisted_action_keeps_family() {
+    use crate::app::compat_tp2_blocks::{FamilyIdentity, collect_component_flags};
+    for action in ["ACTION_DEFINE_ARRAY names BEGIN ~a~ END", "COPY ~a~ ~b~"] {
+        let flags = collect_component_flags(&format!(
+            "BEGIN ~A~ DESIGNATED 2 SUBCOMPONENT ~family~\n{action}\n"
+        ));
+        assert_eq!(flags.len(), 1, "{action}");
+        assert_eq!(
+            flags[0].family,
+            Some(FamilyIdentity::Literal("family".to_string())),
+            "{action}"
+        );
+        assert!(flags[0].predicates.is_empty(), "{action}");
+    }
+}
+
 #[path = "compat_three_fixes_corpus_tests.rs"]
 mod corpus;

@@ -60,6 +60,44 @@ fn manual_wlb_cached_share_uses_requested_workspace_and_refreshes_both_caches() 
 }
 
 #[test]
+fn share_falls_back_to_stored_code_when_overlay_fails() {
+    let mut app = OrchestratorApp::new_isolated_for_test("share-fallback-malformed");
+    let id = "FALLBACK0001";
+    let stored = "BIO-MODLIST-V1:!!!not-base64!!!".to_string();
+    app.registry.entries.push(ModlistEntry {
+        id: id.to_string(),
+        game: Game::BGEE,
+        latest_share_code: Some(stored.clone()),
+        ..Default::default()
+    });
+    app.workspace_state.insert(
+        id.to_string(),
+        ModlistWorkspaceState {
+            order_bgee: vec![ComponentRef {
+                tp2: "MOD/MOD.TP2".to_string(),
+                id: 17,
+                language: 0,
+                wlb_inputs: Some("y".to_string()),
+            }],
+            ..Default::default()
+        },
+    );
+    let code = app
+        .code_for_share_with_phrases(id, &["Local".to_string()])
+        .expect("a malformed stored code still shares")
+        .expect("code");
+    assert_eq!(code, stored);
+    assert_eq!(
+        app.registry
+            .find(id)
+            .expect("entry")
+            .latest_share_code
+            .as_deref(),
+        Some(stored.as_str())
+    );
+}
+
+#[test]
 fn manual_wlb_active_workspace_share_extracts_current_dirty_answers() {
     let mut app = OrchestratorApp::new_isolated_for_test("manual-wlb-active-share");
     let id = "MANUALWLB001";

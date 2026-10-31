@@ -310,13 +310,8 @@ where
         .spawn(move || {
             let program = resolve_mod_installer_binary(&step1.mod_installer_binary);
             let parser_result = prepare(Path::new(&program), &phrases);
-            let result = complete_install_preparation(
-                &step1,
-                &phrases,
-                needs_target_prep,
-                run_token,
-                parser_result,
-            );
+            let result =
+                complete_install_preparation(&step1, needs_target_prep, run_token, parser_result);
             let _ = tx.send(result);
         });
     rx
@@ -324,15 +319,13 @@ where
 
 fn complete_install_preparation(
     step1: &Step1State,
-    phrases: &[String],
     needs_target_prep: bool,
     run_token: u64,
     parser_result: Result<PreparedParser, String>,
 ) -> Result<InstallPreparation, String> {
     let (parser, parser_warning) = match parser_result {
         Ok(parser) => (Some(parser), None),
-        Err(error) if phrases.is_empty() => (None, Some(error)),
-        Err(error) => return Err(format!("Installer parser preparation failed: {error}")),
+        Err(error) => (None, Some(error)),
     };
     let target = if needs_target_prep {
         let prep = prepare_target_dirs_before_install(step1)
@@ -638,37 +631,51 @@ mod parser_sharing_tests {
     use super::*;
 
     #[test]
-    fn parser_sharing_required_error_blocks_target_preparation_but_legacy_is_warning() {
+    fn parser_preparation_failure_with_phrases_is_a_warning() {
         let state = Step1State::default();
-        let error = complete_install_preparation(
-            &state,
-            &["Imported".to_string()],
-            true,
-            71,
-            Err("fixture timeout".to_string()),
-        )
-        .err()
-        .expect("blocked");
-        assert_eq!(
-            error,
-            "Installer parser preparation failed: fixture timeout"
-        );
-        let result = complete_install_preparation(
-            &state,
-            &[],
-            false,
-            72,
-            Err("fixture bad exit".to_string()),
-        )
-        .unwrap_or_else(|error| panic!("legacy remains available: {error}"));
-        assert_eq!(result.run_token, 72);
+        let result =
+            complete_install_preparation(&state, false, 71, Err("fixture timeout".to_string()))
+                .unwrap_or_else(|error| panic!("parser failure must not block: {error}"));
+        assert_eq!(result.run_token, 71);
         assert!(result.target.is_none());
         assert!(result.parser.is_none());
-        assert_eq!(result.parser_warning.as_deref(), Some("fixture bad exit"));
+        assert_eq!(result.parser_warning.as_deref(), Some("fixture timeout"));
     }
 
     #[test]
-    fn parser_sharing_worker_receives_snapshots_and_cannot_prepare_target_after_error() {
+    fn target_prep_still_runs_and_stays_fatal_after_a_parser_warning() {
+        let untouched = Step1State {
+            prepare_target_dirs_before_install: false,
+            new_pre_eet_dir_enabled: false,
+            new_eet_dir_enabled: false,
+            generate_directory_enabled: false,
+            ..Default::default()
+        };
+        let prepared =
+            complete_install_preparation(&untouched, true, 74, Err("fixture timeout".to_string()))
+                .unwrap_or_else(|error| panic!("parser failure must not block: {error}"));
+        assert!(prepared.target.is_some());
+        assert_eq!(prepared.parser_warning.as_deref(), Some("fixture timeout"));
+
+        let missing_target = Step1State {
+            game_install: "BG2EE".to_string(),
+            generate_directory_enabled: true,
+            generate_directory: String::new(),
+            ..untouched
+        };
+        let error = complete_install_preparation(
+            &missing_target,
+            true,
+            75,
+            Err("fixture timeout".to_string()),
+        )
+        .err()
+        .expect("target verify failure still blocks");
+        assert!(error.starts_with("Target prep verify failed:"));
+    }
+
+    #[test]
+    fn parser_sharing_worker_receives_snapshots_and_reports_parser_failure_as_warning() {
         let step1 = Step1State {
             mod_installer_binary: "fixture-not-real.exe".to_string(),
             ..Default::default()
@@ -676,7 +683,7 @@ mod parser_sharing_tests {
         let receiver = spawn_install_preparation_with(
             step1,
             vec!["Imported".to_string()],
-            true,
+            false,
             73,
             |executable, phrases| {
                 let expected = if cfg!(windows) {
@@ -689,14 +696,15 @@ mod parser_sharing_tests {
                 Err("injected failure before cleanup".to_string())
             },
         );
-        let error = receiver
+        let result = receiver
             .recv_timeout(std::time::Duration::from_secs(2))
             .expect("worker result")
-            .err()
-            .expect("blocked");
+            .unwrap_or_else(|error| panic!("parser failure must not block: {error}"));
+        assert_eq!(result.run_token, 73);
+        assert!(result.parser.is_none());
         assert_eq!(
-            error,
-            "Installer parser preparation failed: injected failure before cleanup"
+            result.parser_warning.as_deref(),
+            Some("injected failure before cleanup")
         );
     }
 }

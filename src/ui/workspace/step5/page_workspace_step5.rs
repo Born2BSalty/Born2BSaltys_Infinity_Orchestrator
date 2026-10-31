@@ -256,6 +256,13 @@ fn start_workspace_install(orchestrator: &mut OrchestratorApp, modlist_id: &str)
                 "install-start hook failed for {modlist_id}: {err} \
                  (install not started)"
             );
+            let message = format!("Install could not start: {err}");
+            orchestrator
+                .wizard_state
+                .step5
+                .last_status_text
+                .clone_from(&message);
+            orchestrator.notification_manager.error(message);
         }
     }
 
