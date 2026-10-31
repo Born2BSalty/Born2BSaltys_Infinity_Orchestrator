@@ -6,6 +6,7 @@ use std::path::Path;
 
 use crate::app::scan::ScannedComponent;
 
+use super::super::order::normalize_component_order_label;
 use super::super::tp2_blocks::{
     parse_tp2_component_blocks_in_order, split_subcomponent_display_label,
 };
@@ -164,7 +165,9 @@ fn add_subcomponent_family_groups(
         let Some((header, _)) = split_subcomponent_display_label(child_display) else {
             continue;
         };
-        if !parent_display.trim().eq_ignore_ascii_case(&header) {
+        if normalize_component_order_label(parent_display)
+            != normalize_component_order_label(&header)
+        {
             continue;
         }
         if let Some(existing_header) = subcomponent_family_headers.get(parent_id.as_str()) {

@@ -393,11 +393,18 @@ fn rebake_share_code_after_save_draft(
             else {
                 return Err(err);
             };
-            let local = crate::app::mod_installer_parser::capture_local_choice_phrases()?;
-            let phrases = crate::app::mod_installer_parser::union_phrases(&[
+            let local = crate::app::mod_installer_parser::capture_local_choice_phrases()
+                .unwrap_or_else(|err| {
+                    tracing::warn!(
+                        target = "orchestrator",
+                        "save draft: share code for {id} keeps no local parser phrases ({err})"
+                    );
+                    Vec::new()
+                });
+            let phrases = crate::app::modlist_share::union_valid_phrases(&[
                 &orchestrator.wizard_state.parser_choice_phrases,
                 &local,
-            ])?;
+            ]);
             let workspace = workspace_state_loader::extract_workspace_state_from_wizard(
                 &orchestrator.wizard_state,
                 &orchestrator

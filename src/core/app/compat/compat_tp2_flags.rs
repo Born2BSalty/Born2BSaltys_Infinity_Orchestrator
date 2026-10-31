@@ -344,7 +344,8 @@ fn expression_end(tokens: &[SourceToken<'_>], start: usize) -> (usize, bool) {
             && token.kind == TokenKind::Word
             && !is_expression_word(token.text)
         {
-            return (index, false);
+            let complete = index == start || !is_dangling_operator(&tokens[index - 1]);
+            return (index, complete);
         }
         if token.text == "(" {
             depth += 1;
@@ -356,6 +357,13 @@ fn expression_end(tokens: &[SourceToken<'_>], start: usize) -> (usize, bool) {
         }
     }
     (tokens.len(), depth == 0)
+}
+
+fn is_dangling_operator(token: &SourceToken<'_>) -> bool {
+    token.is_word("AND")
+        || token.is_word("OR")
+        || token.is_word("NOT")
+        || matches!(token.text, "(" | "||" | "&&" | "!")
 }
 
 fn is_expression_word(text: &str) -> bool {
