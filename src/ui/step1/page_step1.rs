@@ -366,6 +366,7 @@ mod tests {
     #[test]
     fn import_preview_summary_shows_modlist_name_without_fork_details() {
         let preview = crate::app::modlist_share::ModlistSharePreview {
+            parser_choice_phrases: Vec::new(),
             bio_version: "0.1.0-test".to_string(),
             game_install: "EET".to_string(),
             game_version: None,

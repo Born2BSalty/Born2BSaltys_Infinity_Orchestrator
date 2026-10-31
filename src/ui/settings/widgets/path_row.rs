@@ -6,9 +6,9 @@ use eframe::egui;
 use crate::ui::orchestrator::widgets::{InputOpts, redesign_text_input};
 use crate::ui::settings::state_settings::PathStatusTone;
 use crate::ui::shared::redesign_tokens::{
-    REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_accent_deep, redesign_border_strong,
-    redesign_input_bg, redesign_pill_danger, redesign_success_soft, redesign_text_faint,
-    redesign_text_primary, redesign_warning_soft,
+    REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_accent, redesign_accent_deep,
+    redesign_border_strong, redesign_input_bg, redesign_pill_danger, redesign_success_soft,
+    redesign_text_faint, redesign_text_primary, redesign_warning_soft,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -51,6 +51,103 @@ pub fn render(
         render_hint(ui, palette, hint, tone, input_x_range);
     });
     ui.add_space(ROW_VERTICAL_GAP_PX);
+}
+
+#[derive(Clone, Copy)]
+pub struct PathRowHelp<'a> {
+    pub guidance: &'a str,
+    pub link_label: &'a str,
+    pub url: &'a str,
+}
+
+pub fn render_with_help(
+    ui: &mut egui::Ui,
+    palette: ThemePalette,
+    row: PathRow<'_>,
+    help: PathRowHelp<'_>,
+    mut on_change: impl FnMut(),
+) {
+    let PathRow {
+        label,
+        mono_value,
+        hint,
+        tone,
+        mode,
+    } = row;
+    let mut changed = false;
+    ui.vertical(|ui| {
+        let input_x_range =
+            render_row_controls(ui, palette, label, mono_value, tone, mode, &mut || {
+                changed = true;
+                on_change();
+            });
+        if let Some((x0, x1)) = input_x_range {
+            ui.horizontal(|ui| {
+                ui.add_space((x0 - ui.cursor().left()).max(0.0));
+                ui.allocate_ui_with_layout(
+                    egui::vec2((x1 - x0).max(1.0), 0.0),
+                    egui::Layout::top_down(egui::Align::LEFT),
+                    |ui| {
+                        ui.spacing_mut().item_spacing.y = 4.0;
+                        let (text, status_tone) = if changed {
+                            ("Checking tool…", PathStatusTone::Neutral)
+                        } else {
+                            (hint.unwrap_or_default(), tone)
+                        };
+                        if !text.is_empty() {
+                            ui.add(
+                                egui::Label::new(
+                                    egui::RichText::new(text)
+                                        .size(11.0)
+                                        .color(hint_color(palette, status_tone)),
+                                )
+                                .wrap(),
+                            );
+                        }
+                        ui.add(
+                            egui::Label::new(
+                                egui::RichText::new(help.guidance)
+                                    .size(12.0)
+                                    .color(redesign_text_faint(palette)),
+                            )
+                            .wrap(),
+                        );
+                        render_download_link(ui, palette, help);
+                    },
+                );
+            });
+        }
+    });
+    ui.add_space(12.0);
+}
+
+fn render_download_link(ui: &mut egui::Ui, palette: ThemePalette, help: PathRowHelp<'_>) {
+    let color = redesign_accent(palette);
+    let mut layout = egui::text::LayoutJob::default();
+    layout.append(
+        help.link_label,
+        0.0,
+        egui::TextFormat {
+            font_id: egui::FontId::proportional(12.0),
+            color,
+            underline: egui::Stroke::new(1.0_f32, color),
+            ..Default::default()
+        },
+    );
+    layout.append(
+        "\u{F08E}",
+        5.0,
+        egui::TextFormat {
+            font_id: egui::FontId::new(14.0, egui::FontFamily::Name("firacode_nerd".into())),
+            color,
+            ..Default::default()
+        },
+    );
+    ui.visuals_mut().hyperlink_color = color;
+    let response = ui.hyperlink_to(layout, help.url);
+    response.widget_info(|| {
+        egui::WidgetInfo::labeled(egui::WidgetType::Link, ui.is_enabled(), help.link_label)
+    });
 }
 
 fn render_row_controls(

@@ -14,3 +14,6 @@ pub mod widgets;
 pub use nav_destination::NavDestination;
 pub use nav_status::{PathValidationKind, PathValidationSummary};
 pub use orchestrator_app::OrchestratorApp;
+
+#[cfg(test)]
+mod wlb_sharing_tests;

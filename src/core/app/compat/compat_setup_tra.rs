@@ -55,7 +55,7 @@ pub(crate) fn load_tp2_setup_tra_map(tp2_path: &Path) -> HashMap<String, String>
 
     let mut merged = HashMap::new();
     for path in candidates {
-        if let Ok(text) = fs::read_to_string(&path) {
+        if let Ok(text) = super::compat_text::read_compat_text(&path) {
             for (key, value) in parse_tra_string_map(&text) {
                 merged.entry(key).or_insert(value);
             }

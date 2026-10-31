@@ -2,6 +2,7 @@
 // Copyright (c) 2026 Born2BSalty
 
 pub mod auto_answer;
+pub mod basic_install_report;
 pub mod command_config;
 pub mod diagnostics;
 pub mod install_flow;
@@ -10,3 +11,8 @@ pub mod prompt_memory;
 pub mod readiness;
 pub mod scripted;
 pub mod scripted_inputs;
+
+#[cfg(test)]
+mod answer_capture_tests;
+
+pub mod answer_capture;

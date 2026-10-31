@@ -26,6 +26,19 @@ pub mod zip_extract;
 pub(crate) fn extract_one_archive(
     job: &Step2UpdateExtractJob,
 ) -> Result<(PathBuf, InstalledRecord), String> {
+    extract_one_archive_with_context(job, true)
+}
+
+pub(crate) fn extract_one_archive_global(
+    job: &Step2UpdateExtractJob,
+) -> Result<(PathBuf, InstalledRecord), String> {
+    extract_one_archive_with_context(job, false)
+}
+
+fn extract_one_archive_with_context(
+    job: &Step2UpdateExtractJob,
+    restore_configs: bool,
+) -> Result<(PathBuf, InstalledRecord), String> {
     let temp_root = temp_extract_root(&job.tp_file);
     if temp_root.exists() {
         let _ = fs::remove_dir_all(&temp_root);
@@ -49,12 +62,14 @@ pub(crate) fn extract_one_archive(
             &job.backup_root,
             &job.backup_version_tag,
         )?;
-        crate::app::modlist_config_files::restore_pending_mod_configs_for_mod(
-            &job.tp_file,
-            job.installed_source_id.as_deref().unwrap_or_default(),
-            &job.aliases,
-            &target_root,
-        )?;
+        if restore_configs {
+            crate::app::modlist_config_files::restore_pending_mod_configs_for_mod(
+                &job.tp_file,
+                job.installed_source_id.as_deref().unwrap_or_default(),
+                &job.aliases,
+                &target_root,
+            )?;
+        }
         Ok((target_root, installed_record(job)))
     })();
 

@@ -74,6 +74,43 @@ pub fn flip_to_installed(
 
     let new_code = build_verified_code(id, entry_ref, wizard_state, held_code, &archive_meta)?;
 
+    let workspace_store = crate::registry::store_workspace::WorkspaceStore::new_with_path(
+        store
+            .path()
+            .parent()
+            .unwrap_or_else(|| Path::new("."))
+            .join("modlists")
+            .join(id)
+            .join("workspace.json"),
+    );
+    let prior = if workspace_store.path().exists() {
+        match workspace_store.load() {
+            Ok(workspace) => workspace,
+            Err(err) => {
+                warn!(
+                    target = "orchestrator",
+                    "Cannot load completed WLB workspace for {id}: {err}"
+                );
+                return None;
+            }
+        }
+    } else {
+        crate::registry::workspace_model::ModlistWorkspaceState::default()
+    };
+    let mut workspace =
+        crate::ui::workspace::workspace_state_loader::extract_workspace_state_from_wizard(
+            wizard_state,
+            &prior,
+        );
+    workspace.last_share_code = Some(new_code.clone());
+    if let Err(err) = workspace_store.save(&workspace) {
+        warn!(
+            target = "orchestrator",
+            "Cannot persist completed WLB workspace for {id}: {err}"
+        );
+        return None;
+    }
+
     let Some(entry) = registry.find_mut(id) else {
         warn!(
             target = "orchestrator",
@@ -128,7 +165,25 @@ fn build_verified_code(
                         "flip_to_installed: share-code regeneration for {id} \
                          failed: {err} — keeping the held code (SPEC §13.13)"
                     );
-                    Some(held_code_with_bit_and_archives(id, src, archive_meta))
+                    let workspace = crate::ui::workspace::workspace_state_loader::extract_workspace_state_from_wizard(
+                        wizard_state,
+                        &crate::registry::workspace_model::ModlistWorkspaceState::default(),
+                    );
+                    let has_markers = workspace.order_bgee.iter()
+                        .chain(&workspace.order_bg2ee).chain(&workspace.order_iwdee)
+                        .any(|item| item.wlb_inputs.is_some());
+                    let overlaid = if has_markers {
+                        match share_export::overlay_workspace_wlb(src, &workspace) {
+                            Ok(code) => code,
+                            Err(overlay_error) => {
+                                warn!(target = "orchestrator", "Cannot update held WLB answers for {id}: {overlay_error}");
+                                return None;
+                            }
+                        }
+                    } else {
+                        src.to_string()
+                    };
+                    Some(held_code_with_bit_and_archives(id, &overlaid, archive_meta))
                 },
             )
         },
@@ -1193,5 +1248,72 @@ mod tests {
         decoded_json(code)["allow_auto_install"]
             .as_bool()
             .expect("bit present")
+    }
+
+    #[test]
+    fn manual_wlb_completed_held_fallback_overlays_and_preserves_opaque_metadata() {
+        let original = serde_json::json!({"format_version":1,"game_install":"BGEE","install_mode":"start_from_scratch","weidu_logs":{"bgee":"~MOD/MOD.TP2~ #2 #17 // Label // @wlb-inputs: stale"},"future_key":{"opaque":[42,"世界"]},"parser_choice_phrases":["Embedded"],"archive_meta":[{"name":"archive.zip","size":42,"hash":"abc"}],"allow_auto_install":false,"forked_from":[{"name":"Root","author":"@root"}]});
+        let code = crate::app::modlist_share::encode_share_payload_text(&original.to_string())
+            .expect("code");
+        let mut app =
+            crate::ui::orchestrator::orchestrator_app::OrchestratorApp::new_isolated_for_test(
+                "manual-wlb-held",
+            );
+
+        let root = app
+            .isolated_test_config_root
+            .as_ref()
+            .expect("isolated root")
+            .clone();
+        std::fs::create_dir_all(&root).expect("fixture directory");
+        let parser = root.join("missing-parser.json");
+        app.wizard_state.step1.game_install = "BGEE".to_string();
+        app.wizard_state.step1.install_mode =
+            crate::app::state::Step1State::INSTALL_MODE_EXACT_WEIDU_LOGS.to_string();
+        app.wizard_state.step1.bgee_log_folder =
+            root.join("missing-logs").to_string_lossy().into_owned();
+        app.wizard_state.step3.bgee_items = vec![crate::app::state::Step3ItemState {
+            tp_file: "MOD/MOD.TP2".to_string(),
+            component_id: "17".to_string(),
+            mod_name: "Mod".to_string(),
+            component_label: "Label".to_string(),
+            raw_line: "~MOD/MOD.TP2~ #2 #17 // Label // @wlb-inputs: bio-json-v1:[\"a,b\",\"\"]"
+                .to_string(),
+            prompt_summary: None,
+            prompt_events: vec![],
+            selected_order: 1,
+            block_id: "MOD".to_string(),
+            is_parent: false,
+            parent_placeholder: false,
+        }];
+
+        let entry = ModlistEntry::default();
+        let updated = crate::app::mod_installer_parser::with_parser_path_for_test(&parser, || {
+            build_verified_code("MANUALHELD01", &entry, &app.wizard_state, Some(&code), &[])
+        })
+        .expect("held fallback");
+        let payload = decoded_json(&updated);
+        for field in [
+            "future_key",
+            "archive_meta",
+            "forked_from",
+            "parser_choice_phrases",
+        ] {
+            assert_eq!(payload[field], original[field]);
+        }
+        assert_eq!(payload["allow_auto_install"], true);
+        assert!(
+            payload["weidu_logs"]["bgee"]
+                .as_str()
+                .expect("log")
+                .contains("bio-json-v1:")
+        );
+        let wrong = code.replace("BIO-MODLIST-V1:", "invalid:");
+        assert!(
+            crate::app::mod_installer_parser::with_parser_path_for_test(&parser, || {
+                build_verified_code("MANUALHELD01", &entry, &app.wizard_state, Some(&wrong), &[])
+            })
+            .is_none()
+        );
     }
 }

@@ -36,6 +36,373 @@ pub(crate) struct MenuOutcome {
     pub(crate) note_seed: Option<NoteSeed>,
 }
 
+pub(crate) fn render_catalog_selector(
+    ui: &mut egui::Ui,
+    palette: ThemePalette,
+    tp2: &str,
+    sources: &[mod_downloads::ModDownloadSource],
+    selected: &mod_downloads::ModDownloadSource,
+    tiers: &mod_downloads::SourceTiers,
+) -> Option<String> {
+    ui.scope(|ui| {
+        let visuals = ui.visuals_mut();
+        for widget in [
+            &mut visuals.widgets.inactive,
+            &mut visuals.widgets.hovered,
+            &mut visuals.widgets.active,
+            &mut visuals.widgets.open,
+        ] {
+            widget.bg_fill = redesign_shell_bg(palette);
+            widget.weak_bg_fill = redesign_shell_bg(palette);
+            widget.bg_stroke = egui::Stroke::new(1.0_f32, redesign_border_strong(palette));
+            widget.corner_radius = egui::CornerRadius::same(3);
+            widget.expansion = 0.0;
+        }
+        visuals.window_fill = redesign_shell_bg(palette);
+        visuals.window_stroke = egui::Stroke::new(1.0_f32, redesign_border_strong(palette));
+        visuals.menu_corner_radius = egui::CornerRadius::same(3);
+        let repository = selected
+            .github
+            .as_deref()
+            .map(str::trim)
+            .filter(|repo| !repo.is_empty())
+            .map_or_else(
+                || {
+                    let label = selected.source_label.trim();
+                    if label.is_empty() {
+                        selected.url.clone()
+                    } else {
+                        label.to_string()
+                    }
+                },
+                |repo| format!("GitHub · {repo}"),
+            );
+        let rule_words = crate::app::versions_view::rule_words(selected);
+        let rule = format!("Version: {rule_words}");
+        let font = egui::FontId::new(14.0, egui::FontFamily::Name("poppins_light".into()));
+        let spacing = ui.spacing();
+        let width = (spacing.button_padding.x.mul_add(-2.0, ui.available_width())
+            - spacing.icon_spacing
+            - spacing.icon_width)
+            .max(0.0);
+        let shown_repository = versions_icons::elide(ui.painter(), &repository, &font, width);
+        let shown_rule = versions_icons::elide(ui.painter(), &rule, &font, width);
+        let truncated = shown_repository != repository || shown_rule != rule;
+        let selected_text = ui.painter().layout_no_wrap(
+            format!("{shown_repository}\n{shown_rule}"),
+            font,
+            redesign_text_primary(palette),
+        );
+        let response = catalog_source_button(ui, palette, tp2, selected_text);
+        let picked = catalog_source_popup(ui, palette, tp2, sources, selected, tiers, &response);
+        let popup_id = response.id.with("popup");
+        if truncated && response.hovered() && !ui.memory(|memory| memory.is_popup_open(popup_id)) {
+            egui::Area::new(response.id.with("catalog_source_caption"))
+                .order(egui::Order::Tooltip)
+                .fixed_pos(response.rect.left_bottom() + egui::vec2(0.0, 4.0))
+                .interactable(false)
+                .show(ui.ctx(), |ui| {
+                    popup_frame(palette).show(ui, |ui| {
+                        ui.set_max_width(480.0);
+                        ui.label(
+                            egui::RichText::new(format!("{repository}\n{rule}"))
+                                .size(14.0)
+                                .color(redesign_text_primary(palette)),
+                        );
+                    });
+                });
+        }
+        picked
+    })
+    .inner
+}
+
+fn catalog_source_popup(
+    ui: &egui::Ui,
+    palette: ThemePalette,
+    tp2: &str,
+    sources: &[mod_downloads::ModDownloadSource],
+    selected: &mod_downloads::ModDownloadSource,
+    tiers: &mod_downloads::SourceTiers,
+    response: &egui::Response,
+) -> Option<String> {
+    let mut picked = None;
+    let popup_id = response.id.with("popup");
+    let context_id = egui::Id::new("catalog_source_popup_context");
+    let frame = ui.ctx().cumulative_pass_nr();
+    let previous = ui.ctx().data_mut(|data| {
+        let previous = data.get_temp::<(egui::Id, u64)>(context_id);
+        data.insert_temp(context_id, (popup_id, frame));
+        previous
+    });
+    if let Some((previous, previous_frame)) = previous
+        && (previous != popup_id || previous_frame.saturating_add(1) < frame)
+        && ui.memory(|memory| memory.is_popup_open(previous))
+    {
+        ui.memory_mut(egui::Memory::close_popup);
+    }
+    if response.clicked() {
+        ui.input_mut(|input| {
+            input.consume_key(egui::Modifiers::NONE, egui::Key::Space);
+            input.consume_key(egui::Modifiers::NONE, egui::Key::Enter);
+        });
+        ui.memory_mut(|memory| memory.toggle_popup(popup_id));
+        if ui.memory(|memory| memory.is_popup_open(popup_id)) {
+            ui.memory_mut(|memory| memory.request_focus(catalog_source_row_id(selected)));
+        }
+    } else if ui.memory(|memory| memory.is_popup_open(popup_id)) {
+        picked = catalog_source_keyboard(ui, sources, selected);
+        if picked.is_some() {
+            ui.memory_mut(egui::Memory::close_popup);
+            response.request_focus();
+        }
+    }
+    let (side, height, width) = catalog_source_popup_geometry(ui, popup_id, response, sources);
+    egui::popup::popup_above_or_below_widget(
+        ui,
+        popup_id,
+        response,
+        side,
+        egui::popup::PopupCloseBehavior::CloseOnClickOutside,
+        |ui| {
+            ui.set_width(width);
+            ui.spacing_mut().item_spacing.y = 0.0;
+            egui::ScrollArea::vertical()
+                .id_salt(("catalog_source_rows", tp2))
+                .max_height(height)
+                .min_scrolled_height(height)
+                .auto_shrink([false, true])
+                .show(ui, |ui| {
+                    for source in sources {
+                        if catalog_source_row(ui, palette, source, selected, tiers) {
+                            picked = Some(source.source_id.clone());
+                            ui.memory_mut(egui::Memory::close_popup);
+                            response.request_focus();
+                        }
+                    }
+                });
+        },
+    );
+    picked
+}
+
+fn catalog_source_popup_geometry(
+    ui: &egui::Ui,
+    popup_id: egui::Id,
+    response: &egui::Response,
+    sources: &[mod_downloads::ModDownloadSource],
+) -> (egui::AboveOrBelow, f32, f32) {
+    let screen = ui.ctx().screen_rect().shrink(4.0);
+    let row_height = ui
+        .painter()
+        .layout_no_wrap(
+            "Source\nLocation\nVersion".to_string(),
+            catalog_source_row_font(),
+            egui::Color32::WHITE,
+        )
+        .size()
+        .y
+        + 16.0;
+    let desired_height = sources
+        .iter()
+        .take(3)
+        .fold(0.0, |height, _| height + row_height);
+    let geometry = (response.rect, screen, desired_height);
+    let previous_geometry = ui.ctx().data_mut(|data| {
+        let previous = data.get_temp::<(egui::Rect, egui::Rect, f32)>(popup_id.with("geometry"));
+        data.insert_temp(popup_id.with("geometry"), geometry);
+        previous
+    });
+    if previous_geometry.is_some_and(|previous| previous != geometry)
+        && ui.memory(|memory| memory.is_popup_open(popup_id))
+    {
+        ui.ctx()
+            .request_discard("Catalog source popup anchor changed");
+    }
+    let frame_margin = egui::Frame::popup(ui.style()).total_margin().sum();
+    let below = (screen.bottom() - response.rect.bottom()).max(0.0);
+    let above = (response.rect.top() - screen.top()).max(0.0);
+    let side = if below >= desired_height + frame_margin.y || below >= above {
+        egui::AboveOrBelow::Below
+    } else {
+        egui::AboveOrBelow::Above
+    };
+    let height = (match side {
+        egui::AboveOrBelow::Below => below,
+        egui::AboveOrBelow::Above => above,
+    } - frame_margin.y)
+        .clamp(0.0, desired_height);
+    let width = (response.rect.width().min(screen.width()) - frame_margin.x).max(0.0);
+    (side, height, width)
+}
+
+fn catalog_source_button(
+    ui: &mut egui::Ui,
+    palette: ThemePalette,
+    tp2: &str,
+    caption: std::sync::Arc<egui::Galley>,
+) -> egui::Response {
+    let padding = ui.spacing().button_padding;
+    let size = egui::vec2(
+        ui.available_width().max(0.0),
+        padding
+            .y
+            .mul_add(2.0, caption.size().y)
+            .max(ui.spacing().interact_size.y),
+    );
+    let (_, rect) = ui.allocate_space(size);
+    let response = ui.interact(
+        rect,
+        egui::Id::new(("catalog_source", tp2)),
+        egui::Sense::click(),
+    );
+    let visuals = ui.style().interact(&response);
+    ui.painter().rect(
+        rect,
+        3.0,
+        redesign_shell_bg(palette),
+        visuals.bg_stroke,
+        egui::StrokeKind::Inside,
+    );
+    ui.painter().galley(
+        egui::pos2(
+            rect.left() + padding.x,
+            caption.size().y.mul_add(-0.5, rect.center().y),
+        ),
+        caption,
+        redesign_text_primary(palette),
+    );
+    let center = egui::pos2(
+        ui.spacing()
+            .icon_width
+            .mul_add(-0.5, rect.right() - padding.x),
+        rect.center().y,
+    );
+    ui.painter().add(egui::Shape::convex_polygon(
+        vec![
+            center + egui::vec2(-4.0, -2.0),
+            center + egui::vec2(4.0, -2.0),
+            center + egui::vec2(0.0, 3.0),
+        ],
+        redesign_text_faint(palette),
+        egui::Stroke::NONE,
+    ));
+    response
+}
+
+fn catalog_source_row_id(source: &mod_downloads::ModDownloadSource) -> egui::Id {
+    egui::Id::new(("catalog_source_choice", &source.tp2, &source.source_id))
+}
+
+fn catalog_source_keyboard(
+    ui: &egui::Ui,
+    sources: &[mod_downloads::ModDownloadSource],
+    selected: &mod_downloads::ModDownloadSource,
+) -> Option<String> {
+    if sources.is_empty() {
+        return None;
+    }
+    let focused = ui.memory(egui::Memory::focused);
+    let index = sources
+        .iter()
+        .position(|source| Some(catalog_source_row_id(source)) == focused)
+        .or_else(|| {
+            sources
+                .iter()
+                .position(|source| source.source_id == selected.source_id)
+        })
+        .unwrap_or(0);
+    let movement = ui.input_mut(|input| {
+        if input.consume_key(egui::Modifiers::NONE, egui::Key::ArrowDown) {
+            Some((index + 1).min(sources.len() - 1))
+        } else if input.consume_key(egui::Modifiers::NONE, egui::Key::ArrowUp) {
+            Some(index.saturating_sub(1))
+        } else if input.consume_key(egui::Modifiers::SHIFT, egui::Key::Tab) {
+            Some(index.checked_sub(1).unwrap_or(sources.len() - 1))
+        } else if input.consume_key(egui::Modifiers::NONE, egui::Key::Tab) {
+            Some((index + 1) % sources.len())
+        } else {
+            None
+        }
+    });
+    if let Some(index) = movement {
+        ui.memory_mut(|memory| memory.request_focus(catalog_source_row_id(&sources[index])));
+    } else if ui.input_mut(|input| input.consume_key(egui::Modifiers::NONE, egui::Key::Enter)) {
+        return Some(sources[index].source_id.clone());
+    }
+    None
+}
+
+fn catalog_source_row_font() -> egui::FontId {
+    egui::FontId::new(13.0, egui::FontFamily::Name("poppins_light".into()))
+}
+
+fn catalog_source_row(
+    ui: &mut egui::Ui,
+    palette: ThemePalette,
+    source: &mod_downloads::ModDownloadSource,
+    selected: &mod_downloads::ModDownloadSource,
+    tiers: &mod_downloads::SourceTiers,
+) -> bool {
+    let origin =
+        crate::app::versions_view::layer_name(tiers.tier_of(&source.tp2, &source.source_id));
+    let heading = format!(
+        "{origin} \u{b7} {}",
+        if source.source_label.trim().is_empty() {
+            &source.source_id
+        } else {
+            &source.source_label
+        }
+    );
+    let location = source.github.as_deref().map_or_else(
+        || source.url.clone(),
+        |repo| format!("GitHub \u{b7} {repo}"),
+    );
+    let rule = format!("Version: {}", crate::app::versions_view::rule_words(source));
+    let lines = [heading, location, rule];
+    let font = catalog_source_row_font();
+    let text_width = (ui.available_width() - 36.0).max(0.0);
+    let shown = lines
+        .iter()
+        .map(|line| versions_icons::elide(ui.painter(), line, &font, text_width))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let galley = ui
+        .painter()
+        .layout_no_wrap(shown, font, redesign_text_primary(palette));
+    let (_, rect) = ui.allocate_space(egui::vec2(ui.available_width(), galley.size().y + 16.0));
+    let response = ui.interact(rect, catalog_source_row_id(source), egui::Sense::click());
+    if response.gained_focus() {
+        response.scroll_to_me(Some(egui::Align::Center));
+    }
+    let current = source.source_id == selected.source_id;
+    let painter = ui.painter().with_clip_rect(rect.intersect(ui.clip_rect()));
+    if current {
+        painter.rect_filled(rect, 3.0, redesign_accent(palette).gamma_multiply(0.12));
+    }
+    if response.hovered() || response.has_focus() {
+        painter.rect_filled(rect, 3.0, redesign_hover_overlay(palette));
+    }
+    if current {
+        versions_icons::paint_check(
+            &painter,
+            egui::pos2(rect.left() + 14.0, rect.center().y),
+            redesign_accent(palette),
+        );
+    }
+    painter.galley(
+        egui::pos2(rect.left() + 28.0, rect.top() + 8.0),
+        galley,
+        redesign_text_primary(palette),
+    );
+    painter.hline(
+        rect.x_range(),
+        rect.bottom(),
+        egui::Stroke::new(1.0_f32, redesign_border_strong(palette).gamma_multiply(0.4)),
+    );
+    response.on_hover_text(lines.join("\n")).clicked()
+}
+
 fn popup_frame(palette: ThemePalette) -> egui::Frame {
     egui::Frame::default()
         .fill(redesign_shell_bg(palette))

@@ -54,7 +54,8 @@ pub(crate) fn load_component_requirements(
 fn load_component_requirements_uncached(
     tp2_path: &str,
 ) -> HashMap<String, Vec<ComponentRequirement>> {
-    let Ok(tp2_text) = fs::read_to_string(tp2_path) else {
+    let Ok(tp2_text) = crate::app::compat_text::read_compat_text(std::path::Path::new(tp2_path))
+    else {
         return HashMap::new();
     };
 

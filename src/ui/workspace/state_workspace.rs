@@ -14,6 +14,7 @@ pub struct WorkspaceStep2State {
     pub details_open: bool,
     pub last_selection: Option<Step2Selection>,
     pub rescan_snapshot: Option<RescanSnapshot>,
+    pub recovery_scan_generation: u64,
     pub was_scanning: bool,
     pub rescan_drop_warning: Option<String>,
     pub resume_pending: bool,
@@ -74,6 +75,7 @@ impl Default for WeiduLogImportForm {
 pub struct RescanSelection {
     pub tp2_upper: String,
     pub component_id: String,
+    pub language: u8,
     pub selected_order: Option<usize>,
     pub wlb_inputs: Option<String>,
 }

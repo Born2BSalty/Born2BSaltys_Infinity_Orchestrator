@@ -5,9 +5,9 @@ use eframe::egui;
 use std::collections::HashMap;
 
 use crate::app::compat_step3_rules::Step3CompatMarker;
-use crate::app::prompt_eval_context::build_prompt_eval_context;
 use crate::app::state::{Step2Selection, Step3ItemState, WizardState};
 use crate::ui::step3::blocks;
+use crate::ui::step3::installer_answers_step3::prompt_context_for_tab;
 use crate::ui::step3::list_rows_step3::{RowRenderContext, RowRenderOutcome, render_rows};
 use crate::ui::step3::state_step3;
 
@@ -69,7 +69,7 @@ fn render_scroll_contents(
 ) {
     ui.set_min_width(viewport_w);
     let tab_id = state.step3.active_game_tab.clone();
-    let prompt_eval = build_prompt_eval_context(state);
+    let prompt_eval = prompt_context_for_tab(state, &tab_id);
     let Some(row_outcome) = render_active_rows(
         ui,
         state,
@@ -224,11 +224,11 @@ fn apply_row_outcome(state: &mut WizardState, tab_id: &str, row_outcome: RowRend
         visible_rows: _,
         uncheck_requests,
         prompt_requests,
-        open_prompt_popup,
+        open_installer_answers,
         open_compat_popup,
     } = row_outcome;
-    if let Some((title, text)) = open_prompt_popup {
-        crate::ui::step2::prompt_popup_step2::open_text_prompt_popup(state, title, text);
+    if let Some(row_index) = open_installer_answers {
+        crate::ui::step3::installer_answers_step3::open_component(state, tab_id, row_index);
     }
     if let Some((tp_file, component_id, component_key, issue)) = open_compat_popup {
         state.step2.selected = Some(Step2Selection::Component {

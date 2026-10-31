@@ -48,7 +48,8 @@ pub(crate) fn render_list_pane(
                 });
             });
     });
-    if selection_before != selection_snapshot(state)
+    let selection_changed = selection_before != selection_snapshot(state);
+    if selection_changed
         && let Some(err) = crate::ui::step2::service_compat_rules_step2::apply_compat_rules(
             &state.step1,
             &mut state.step2.bgee_mods,

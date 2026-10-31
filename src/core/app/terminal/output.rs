@@ -127,7 +127,6 @@ mod buffers {
             self.output_buffer.clear();
             self.important_buffer.clear();
             self.installed_buffer.clear();
-            self.important_scan_tail.clear();
             self.current_batch.clear();
             self.pending_display_patches.clear();
             self.prompt_capture.active = false;
@@ -248,6 +247,10 @@ mod capture {
             for line in parts {
                 let expanded = expand_escaped_newlines(line);
                 for sub in expanded.lines() {
+                    if let Some(session) = self.capture_session.as_mut() {
+                        session.observe_line(sub);
+                    }
+                    super::super::scripted_inputs::update_current_component_from_output(self, sub);
                     if is_batch_line(sub) {
                         self.current_batch = parse_batch_line(sub).unwrap_or_default();
                     }

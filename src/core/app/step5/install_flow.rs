@@ -7,22 +7,142 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::log_files::{
     TargetPrepResult, begin_new_run, copy_weidu_logs_for_diagnostics,
-    prepare_target_dirs_before_install, validate_resume_paths, validate_runtime_prep_paths,
-    verify_targets_prepared,
+    prepare_target_dirs_before_install, prune_old_diagnostics, validate_resume_paths,
+    validate_runtime_prep_paths, verify_targets_prepared,
 };
 use crate::app::compat_step3_rules;
 use crate::app::game_authority::{self, GameSlot};
+use crate::app::mod_installer_parser::{PreparedParser, prepare_local_parser};
 use crate::app::state::{Step1State, WizardState};
+use crate::app::step5::basic_install_report;
 use crate::app::step5::command_config::build_install_command_config;
 use crate::app::terminal::EmbeddedTerminal;
 use crate::install::step5_command_install::build_install_invocation;
 use crate::install::step5_command_resume::{build_resume_invocation, capture_resume_targets};
+use std::path::{Path, PathBuf};
+
+use crate::platform_defaults::resolve_mod_installer_binary;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 pub struct PendingInstallStart {
     program: String,
     args: Vec<String>,
     resume_mode: bool,
     restart_mode: bool,
+    pub(crate) run_token: u64,
+    step1: Step1State,
+    phrases: Vec<String>,
+    diagnostics_run_id: Option<String>,
+    executable_identity: Option<(PathBuf, u64, Option<SystemTime>)>,
+}
+
+fn executable_identity(configured: &str) -> Option<(PathBuf, u64, Option<SystemTime>)> {
+    let mut paths = Vec::new();
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(executable) = std::env::current_exe()
+            && let Some(parent) = executable.parent()
+        {
+            paths.push(parent.to_path_buf());
+        }
+        if let Ok(current) = std::env::current_dir() {
+            paths.push(current);
+        }
+        if let Some(windows) = std::env::var_os("SystemRoot") {
+            let windows = PathBuf::from(windows);
+            paths.push(windows.join("System32"));
+            paths.push(windows.join("System"));
+            paths.push(windows);
+        }
+    }
+    if let Some(path) = std::env::var_os("PATH") {
+        paths.extend(std::env::split_paths(&path));
+    }
+    executable_identity_with_paths(configured, &paths)
+}
+
+fn executable_identity_with_paths(
+    configured: &str,
+    paths: &[PathBuf],
+) -> Option<(PathBuf, u64, Option<SystemTime>)> {
+    let program = resolve_mod_installer_binary(configured);
+    let program = Path::new(&program);
+    if program.is_absolute() || program.components().count() > 1 {
+        return executable_file_identity(program);
+    }
+    paths
+        .iter()
+        .find_map(|directory| executable_file_identity(&directory.join(program)))
+}
+
+fn executable_file_identity(path: &Path) -> Option<(PathBuf, u64, Option<SystemTime>)> {
+    #[cfg(target_os = "windows")]
+    let path = if path.extension().is_none() {
+        path.with_extension("exe")
+    } else {
+        path.to_path_buf()
+    };
+    let path = path.canonicalize().ok()?;
+    let metadata = std::fs::metadata(&path).ok()?;
+    if !metadata.is_file() {
+        return None;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if metadata.permissions().mode() & 0o111 == 0 {
+            return None;
+        }
+    }
+    Some((path, metadata.len(), metadata.modified().ok()))
+}
+
+impl PendingInstallStart {
+    fn new(
+        state: &WizardState,
+        program: String,
+        args: Vec<String>,
+        resume_mode: bool,
+        restart_mode: bool,
+    ) -> Self {
+        static NEXT_ATTEMPT: AtomicU64 = AtomicU64::new(1);
+        let executable_identity = executable_identity(&program);
+        let program = executable_identity.as_ref().map_or(program, |identity| {
+            identity.0.to_string_lossy().into_owned()
+        });
+        Self {
+            program,
+            args,
+            resume_mode,
+            restart_mode,
+            run_token: NEXT_ATTEMPT.fetch_add(1, Ordering::Relaxed),
+            step1: state.step1.clone(),
+            phrases: state.parser_choice_phrases.clone(),
+            diagnostics_run_id: state.step5.diagnostics_run_id.clone(),
+            executable_identity,
+        }
+    }
+    pub(crate) fn preparation_step1(&self) -> Step1State {
+        let mut step1 = self.step1.clone();
+        step1.mod_installer_binary.clone_from(&self.program);
+        step1
+    }
+
+    pub(crate) fn matches(&self, state: &WizardState) -> bool {
+        state.step5.prep_running
+            && !state.step5.cancel_requested
+            && self.executable_identity == executable_identity(&state.step1.mod_installer_binary)
+            && self.step1 == state.step1
+            && self.phrases == state.parser_choice_phrases
+            && self.diagnostics_run_id == state.step5.diagnostics_run_id
+    }
+}
+
+pub(crate) struct InstallPreparation {
+    pub(crate) run_token: u64,
+    pub(crate) parser: Option<PreparedParser>,
+    pub(crate) target: Option<TargetPrepResult>,
+    pub(crate) parser_warning: Option<String>,
 }
 
 #[must_use]
@@ -97,6 +217,7 @@ pub fn prepare_start_request(
     term: &mut EmbeddedTerminal,
 ) -> Option<(PendingInstallStart, bool)> {
     state.step5.start_install_requested = false;
+    state.step5.cancel_requested = false;
     state.step5.prep_running = false;
     state.step5.last_install_failed = false;
     state.step5.last_exit_code = None;
@@ -111,10 +232,16 @@ pub fn prepare_start_request(
     if let Some(reason) = step3_install_block_reason(state) {
         state.step5.last_status_text.clone_from(&reason);
         term.append_marker(&reason);
+        basic_install_report::update(state, "blocked", Some(term));
         return None;
     }
 
-    let scripted = super::scripted_inputs::load_from_step1(&state.step1);
+    term.invalidate_capture();
+    state.step5.capture_run = None;
+    let scripted = super::scripted_inputs::load_from_step1(&state.step1).unwrap_or_else(|error| {
+        term.append_marker(&format!("Scripted inputs disabled: {error}"));
+        super::answer_capture::ReplayPlan::default()
+    });
     let scripted_count = term.set_scripted_inputs(scripted);
     if scripted_count > 0 {
         term.append_marker(&format!("Loaded {scripted_count} @wlb-inputs token(s)"));
@@ -137,6 +264,7 @@ pub fn prepare_start_request(
         Err(err) => {
             state.step5.last_status_text = format!("Preflight check failed: {err}");
             term.append_marker(&format!("Preflight check failed: {err}"));
+            basic_install_report::update(state, "preflight_failed", Some(term));
             false
         }
     };
@@ -146,30 +274,74 @@ pub fn prepare_start_request(
     }
 
     Some((
-        PendingInstallStart {
-            program,
-            args,
-            resume_mode,
-            restart_mode,
-        },
+        PendingInstallStart::new(state, program, args, resume_mode, restart_mode),
         !resume_mode && state.step1.prepare_target_dirs_before_install,
     ))
 }
 
-#[must_use]
-pub fn spawn_target_prep_worker(step1: Step1State) -> Receiver<Result<TargetPrepResult, String>> {
+pub(crate) fn spawn_install_preparation(
+    step1: Step1State,
+    phrases: Vec<String>,
+    needs_target_prep: bool,
+    run_token: u64,
+) -> Receiver<Result<InstallPreparation, String>> {
+    spawn_install_preparation_with(
+        step1,
+        phrases,
+        needs_target_prep,
+        run_token,
+        prepare_local_parser,
+    )
+}
+
+fn spawn_install_preparation_with<F>(
+    step1: Step1State,
+    phrases: Vec<String>,
+    needs_target_prep: bool,
+    run_token: u64,
+    prepare: F,
+) -> Receiver<Result<InstallPreparation, String>>
+where
+    F: FnOnce(&Path, &[String]) -> Result<PreparedParser, String> + Send + 'static,
+{
     let (tx, rx) = channel();
-    thread::spawn(move || {
-        let result = prepare_target_dirs_before_install(&step1)
-            .map_err(|err| format!("Target prep failed: {err}"))
-            .and_then(|prep| {
-                verify_targets_prepared(&step1)
-                    .map_err(|err| format!("Target prep verify failed: {err}"))?;
-                Ok(prep)
-            });
-        let _ = tx.send(result);
-    });
+    let _ = thread::Builder::new()
+        .name("bio-install-preparation".to_string())
+        .spawn(move || {
+            let program = resolve_mod_installer_binary(&step1.mod_installer_binary);
+            let parser_result = prepare(Path::new(&program), &phrases);
+            let result =
+                complete_install_preparation(&step1, needs_target_prep, run_token, parser_result);
+            let _ = tx.send(result);
+        });
     rx
+}
+
+fn complete_install_preparation(
+    step1: &Step1State,
+    needs_target_prep: bool,
+    run_token: u64,
+    parser_result: Result<PreparedParser, String>,
+) -> Result<InstallPreparation, String> {
+    let (parser, parser_warning) = match parser_result {
+        Ok(parser) => (Some(parser), None),
+        Err(error) => (None, Some(error)),
+    };
+    let target = if needs_target_prep {
+        let prep = prepare_target_dirs_before_install(step1)
+            .map_err(|error| format!("Target prep failed: {error}"))?;
+        verify_targets_prepared(step1)
+            .map_err(|error| format!("Target prep verify failed: {error}"))?;
+        Some(prep)
+    } else {
+        None
+    };
+    Ok(InstallPreparation {
+        run_token,
+        parser,
+        target,
+        parser_warning,
+    })
 }
 
 pub fn apply_completed_prep(
@@ -178,11 +350,11 @@ pub fn apply_completed_prep(
     result: Result<TargetPrepResult, String>,
 ) -> bool {
     state.step5.prep_running = false;
-    state.step5.prep_ran = state.step1.prepare_target_dirs_before_install;
-    state.step5.prep_used_backup = state.step1.backup_targets_before_eet_copy;
 
     match result {
         Ok(prep) => {
+            state.step5.prep_ran = true;
+            state.step5.prep_used_backup = state.step1.backup_targets_before_eet_copy;
             state.step5.prep_backup_paths = prep
                 .backups
                 .iter()
@@ -210,10 +382,13 @@ pub fn apply_completed_prep(
             true
         }
         Err(err) => {
+            state.step5.prep_ran = false;
+            state.step5.prep_used_backup = false;
             state.step5.prep_backup_paths.clear();
             state.step5.prep_cleaned_paths.clear();
             state.step5.last_status_text.clone_from(&err);
             term.append_marker(&err);
+            basic_install_report::update(state, "preparation_failed", Some(term));
             false
         }
     }
@@ -229,18 +404,39 @@ pub fn start_install_process(
         args,
         resume_mode,
         restart_mode,
+        ..
     } = pending;
 
-    let run_id = begin_new_run(&mut state.step5);
+    let run_id = state
+        .step5
+        .diagnostics_run_id
+        .clone()
+        .unwrap_or_else(|| begin_new_run(&mut state.step5));
     term.configure_from_step1(&state.step1, Some(&run_id));
     copy_weidu_logs_for_diagnostics(&state.step1, &run_id);
+    basic_install_report::update(state, "starting", Some(term));
 
     match term.start_process(program.as_str(), &args) {
         Ok(()) => {
+            prune_old_diagnostics(Some(&run_id));
             apply_start_metadata(state, resume_mode, restart_mode, &args);
+            state.pending_install_choice = None;
+            state.pending_install_source = None;
+            state.pending_install_choice_modlist_id = None;
             state.step5.prep_running = false;
             state.step5.run_counter = state.step5.run_counter.saturating_add(1);
             state.step5.active_run_id = Some(state.step5.run_counter);
+            let capture_run = super::answer_capture::CaptureRunKey {
+                run_id: state.step5.run_counter,
+                workspace_id: None,
+                generation: next_capture_generation(),
+                game_install: state.step1.game_install.clone(),
+            };
+            term.set_capture_session(super::answer_capture::CaptureSession::new(
+                capture_run.clone(),
+                super::answer_capture::frozen_components(state),
+            ));
+            state.step5.capture_run = Some(capture_run);
             term.append_marker(&format!("Run #{} started", state.step5.run_counter));
             state.step5.hide_top_frames_after_install = true;
             state.step5.install_running = true;
@@ -276,11 +472,13 @@ pub fn start_install_process(
             state.step5.restart_args = args;
             let install_config = build_install_command_config(&state.step1);
             state.step5.resume_targets = capture_resume_targets(&install_config);
+            basic_install_report::update(state, "running", Some(term));
         }
         Err(err) => {
             state.step2.scan_status = format!("Install start failed: {err}");
-            state.step5.last_status_text = "Start failed".to_string();
+            state.step5.last_status_text = format!("Install start failed: {err}");
             state.step5.prep_running = false;
+            basic_install_report::update(state, "start_failed", Some(term));
         }
     }
 }
@@ -359,6 +557,11 @@ fn now_unix_secs() -> u64 {
         .map_or(0, |d| d.as_secs())
 }
 
+fn next_capture_generation() -> u64 {
+    static GENERATION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+    GENERATION.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -408,3 +611,104 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "install_flow_retention_tests.rs"]
+mod retention_tests;
+#[cfg(test)]
+pub(crate) fn parser_sharing_pending_for_test(state: &WizardState) -> PendingInstallStart {
+    PendingInstallStart::new(
+        state,
+        "never-executed.exe".to_string(),
+        Vec::new(),
+        false,
+        false,
+    )
+}
+
+#[cfg(test)]
+mod parser_sharing_tests {
+    use super::*;
+
+    #[test]
+    fn parser_preparation_failure_with_phrases_is_a_warning() {
+        let state = Step1State::default();
+        let result =
+            complete_install_preparation(&state, false, 71, Err("fixture timeout".to_string()))
+                .unwrap_or_else(|error| panic!("parser failure must not block: {error}"));
+        assert_eq!(result.run_token, 71);
+        assert!(result.target.is_none());
+        assert!(result.parser.is_none());
+        assert_eq!(result.parser_warning.as_deref(), Some("fixture timeout"));
+    }
+
+    #[test]
+    fn target_prep_still_runs_and_stays_fatal_after_a_parser_warning() {
+        let untouched = Step1State {
+            prepare_target_dirs_before_install: false,
+            new_pre_eet_dir_enabled: false,
+            new_eet_dir_enabled: false,
+            generate_directory_enabled: false,
+            ..Default::default()
+        };
+        let prepared =
+            complete_install_preparation(&untouched, true, 74, Err("fixture timeout".to_string()))
+                .unwrap_or_else(|error| panic!("parser failure must not block: {error}"));
+        assert!(prepared.target.is_some());
+        assert_eq!(prepared.parser_warning.as_deref(), Some("fixture timeout"));
+
+        let missing_target = Step1State {
+            game_install: "BG2EE".to_string(),
+            generate_directory_enabled: true,
+            generate_directory: String::new(),
+            ..untouched
+        };
+        let error = complete_install_preparation(
+            &missing_target,
+            true,
+            75,
+            Err("fixture timeout".to_string()),
+        )
+        .err()
+        .expect("target verify failure still blocks");
+        assert!(error.starts_with("Target prep verify failed:"));
+    }
+
+    #[test]
+    fn parser_sharing_worker_receives_snapshots_and_reports_parser_failure_as_warning() {
+        let step1 = Step1State {
+            mod_installer_binary: "fixture-not-real.exe".to_string(),
+            ..Default::default()
+        };
+        let receiver = spawn_install_preparation_with(
+            step1,
+            vec!["Imported".to_string()],
+            false,
+            73,
+            |executable, phrases| {
+                let expected = if cfg!(windows) {
+                    "fixture-not-real.exe"
+                } else {
+                    "fixture-not-real"
+                };
+                assert_eq!(executable, Path::new(expected));
+                assert_eq!(phrases, ["Imported"]);
+                Err("injected failure before cleanup".to_string())
+            },
+        );
+        let result = receiver
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .expect("worker result")
+            .unwrap_or_else(|error| panic!("parser failure must not block: {error}"));
+        assert_eq!(result.run_token, 73);
+        assert!(result.parser.is_none());
+        assert_eq!(
+            result.parser_warning.as_deref(),
+            Some("injected failure before cleanup")
+        );
+    }
+}
+
+#[cfg(test)]
+#[path = "install_flow_parser_tests.rs"]
+mod parser_sharing_resolution_tests;

@@ -9,6 +9,7 @@ pub mod step3;
 pub mod step4;
 pub mod step5;
 
+pub mod catalog;
 pub mod create;
 pub mod home;
 pub mod install;

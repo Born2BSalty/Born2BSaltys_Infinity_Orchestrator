@@ -7,7 +7,6 @@ use std::collections::HashMap;
 use crate::app::compat_issue::CompatIssue;
 use crate::app::compat_step3_rules::Step3CompatMarker;
 use crate::app::prompt_eval_summary_step3;
-use crate::app::prompt_popup_text::format_step3_prompt_popup;
 use crate::app::state::Step3ItemState;
 use crate::app::step3_history::{self, Step3HistoryEntry, Step3TouchedRows};
 use crate::app::step3_prompt_edit::PromptActionRequest;
@@ -23,7 +22,7 @@ pub(crate) struct RowRenderOutcome {
     pub visible_rows: Vec<(usize, egui::Rect)>,
     pub uncheck_requests: Vec<(String, String)>,
     pub prompt_requests: Vec<PromptActionRequest>,
-    pub open_prompt_popup: Option<(String, String)>,
+    pub open_installer_answers: Option<usize>,
     pub open_compat_popup: Option<(String, String, String, CompatIssue)>,
 }
 
@@ -62,7 +61,7 @@ struct RowRenderAccumulator {
     visible_rows: Vec<(usize, egui::Rect)>,
     uncheck_requests: Vec<(String, String)>,
     prompt_requests: Vec<PromptActionRequest>,
-    open_prompt_popup: Option<(String, String)>,
+    open_installer_answers: Option<usize>,
     open_compat_popup: Option<(String, String, String, CompatIssue)>,
 }
 
@@ -72,7 +71,7 @@ impl RowRenderAccumulator {
             visible_rows: Vec::with_capacity(row_capacity),
             uncheck_requests: Vec::new(),
             prompt_requests: Vec::new(),
-            open_prompt_popup: None,
+            open_installer_answers: None,
             open_compat_popup: None,
         }
     }
@@ -82,14 +81,14 @@ impl RowRenderAccumulator {
             visible_rows,
             uncheck_requests,
             prompt_requests,
-            open_prompt_popup,
+            open_installer_answers,
             open_compat_popup,
         } = self;
         RowRenderOutcome {
             visible_rows,
             uncheck_requests,
             prompt_requests,
-            open_prompt_popup,
+            open_installer_answers,
             open_compat_popup,
         }
     }
@@ -236,7 +235,7 @@ fn render_child_label(
             render_compat_marker_pill(ui, item, marker, out);
         }
         if !prompt_summary.trim().is_empty() {
-            render_prompt_pill(ui, item, &prompt_summary, out);
+            render_prompt_pill(ui, idx, out);
         }
         resp
     })
@@ -284,12 +283,7 @@ fn render_compat_marker_pill(
     }
 }
 
-fn render_prompt_pill(
-    ui: &mut egui::Ui,
-    item: &Step3ItemState,
-    prompt_summary: &str,
-    out: &mut RowRenderAccumulator,
-) {
+fn render_prompt_pill(ui: &mut egui::Ui, row_index: usize, out: &mut RowRenderAccumulator) {
     ui.add_space(6.0);
     let prompt_text = crate::ui::shared::typography_global::strong("PROMPT")
         .color(crate::ui::shared::theme_global::prompt_text())
@@ -307,7 +301,7 @@ fn render_prompt_pill(
         )
         .on_hover_text(crate::ui::shared::tooltip_global::SHOW_PARSED_PROMPTS);
     if prompt_response.clicked() {
-        out.open_prompt_popup = Some(format_step3_prompt_popup(item, prompt_summary));
+        out.open_installer_answers = Some(row_index);
     }
 }
 

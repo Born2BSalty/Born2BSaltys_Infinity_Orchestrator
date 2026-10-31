@@ -10,7 +10,6 @@ use super::source_logs::{copy_saved_weidu_logs, copy_source_weidu_logs};
 use crate::app::state::{Step1State, Step5State};
 
 pub fn begin_new_run(step5: &mut Step5State) -> String {
-    prune_old_diagnostics(None);
     let run_id = make_run_id();
     step5.diagnostics_run_id = Some(run_id.clone());
     run_id

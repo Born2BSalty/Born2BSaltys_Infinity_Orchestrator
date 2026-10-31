@@ -84,6 +84,17 @@ fn render_step3(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) {
         outcome
     };
     crate::ui::workspace::related_jump::apply_related_jump_outcome(orchestrator, outcome);
+    crate::ui::step3::installer_answers_step3::bind_workspace(
+        &mut orchestrator.wizard_state,
+        orchestrator.workspace_view.loaded_workspace_id.as_deref(),
+    );
+    if crate::ui::step3::installer_answers_panel_step3::render(
+        ui.ctx(),
+        &mut orchestrator.wizard_state,
+        palette,
+    ) {
+        orchestrator.mark_workspace_dirty();
+    }
 }
 
 fn clipped_pane(ui: &mut egui::Ui, rect: egui::Rect, add: impl FnOnce(&mut egui::Ui)) {

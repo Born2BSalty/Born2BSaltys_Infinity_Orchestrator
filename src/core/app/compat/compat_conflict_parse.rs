@@ -6,10 +6,19 @@ use std::fs;
 use std::sync::{Mutex, OnceLock};
 use std::time::SystemTime;
 
-use super::compat_tp2_blocks::collect_tp2_component_blocks;
+use super::compat_tp2_blocks::{
+    FamilyIdentity, ForbidFlag, collect_component_flags, collect_tp2_component_blocks,
+};
 
 use super::compat_rule_runtime::normalize_mod_key;
 use super::compat_setup_tra::load_tp2_setup_tra_map;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ConflictOrigin {
+    pub(crate) component_id: String,
+    pub(crate) line: usize,
+    pub(crate) inherited: bool,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ComponentConflict {
@@ -17,6 +26,22 @@ pub(crate) struct ComponentConflict {
     pub(crate) target_mod: String,
     pub(crate) target_component_id: String,
     pub(crate) message: Option<String>,
+    pub(crate) origin: Option<ConflictOrigin>,
+}
+
+impl ComponentConflict {
+    pub(super) fn evidence(&self) -> String {
+        self.origin
+            .as_ref()
+            .filter(|origin| origin.inherited)
+            .map_or_else(
+                || self.raw_line.clone(),
+                |origin| format!(
+                    "{}\nShared requirement inherited from first subcomponent #{}, TP2 line {}.",
+                    self.raw_line, origin.component_id, origin.line
+                ),
+            )
+    }
 }
 
 pub(crate) fn load_component_conflicts(tp2_path: &str) -> HashMap<String, Vec<ComponentConflict>> {
@@ -45,20 +70,78 @@ pub(crate) fn load_component_conflicts(tp2_path: &str) -> HashMap<String, Vec<Co
 }
 
 fn load_component_conflicts_uncached(tp2_path: &str) -> HashMap<String, Vec<ComponentConflict>> {
-    let Ok(tp2_text) = fs::read_to_string(tp2_path) else {
+    let Ok(tp2_text) = crate::app::compat_text::read_compat_text(std::path::Path::new(tp2_path))
+    else {
         return HashMap::new();
     };
     let tra_map = load_tp2_setup_tra_map(std::path::Path::new(tp2_path));
 
     let mut out = HashMap::<String, Vec<ComponentConflict>>::new();
     for (component_id, block) in collect_tp2_component_blocks(&tp2_text) {
-        let conflicts = collect_component_conflicts(&block, &tra_map);
+        let conflicts = collect_component_conflicts(&block, &tra_map, &component_id, &tp2_text);
         if !conflicts.is_empty() {
             out.insert(component_id, conflicts);
         }
     }
-
+    let mut first_forbids = HashMap::<FamilyIdentity, Vec<ComponentConflict>>::new();
+    for component in collect_component_flags(&tp2_text) {
+        let direct = component
+            .forbids
+            .iter()
+            .filter_map(|flag| header_conflict(&component.component_id, flag, &tra_map))
+            .collect::<Vec<_>>();
+        let mut merged = direct.clone();
+        merged.extend(out.remove(&component.component_id).unwrap_or_default());
+        if let Some(family) = component.family {
+            if let Some(inherited) = first_forbids.get(&family) {
+                merged.extend(inherited.iter().cloned().map(|mut conflict| {
+                    if let Some(origin) = &mut conflict.origin {
+                        origin.inherited = true;
+                    }
+                    conflict
+                }));
+            } else {
+                first_forbids.insert(family, direct);
+            }
+        }
+        let mut targets = std::collections::HashSet::new();
+        merged.retain(|conflict| {
+            targets.insert((
+                conflict.target_mod.clone(),
+                conflict.target_component_id.clone(),
+            ))
+        });
+        if !merged.is_empty() {
+            out.insert(component.component_id, merged);
+        }
+    }
     out
+}
+
+fn header_conflict(
+    component_id: &str,
+    flag: &ForbidFlag,
+    tra_map: &HashMap<String, String>,
+) -> Option<ComponentConflict> {
+    let target = flag.target_reference.trim_matches(['~', '"']);
+    if target.contains('%') {
+        return None;
+    }
+    let target_mod = normalize_mod_key(target);
+    if target_mod.is_empty() {
+        return None;
+    }
+    Some(ComponentConflict {
+        raw_line: flag.raw_line.clone(),
+        target_mod,
+        target_component_id: normalize_component_id(&flag.component_reference)?,
+        message: resolve_message_token(&flag.message_token, tra_map),
+        origin: Some(ConflictOrigin {
+            component_id: component_id.to_string(),
+            line: flag.line,
+            inherited: false,
+        }),
+    })
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -94,10 +177,29 @@ fn cache_stamp(tp2_path: &str) -> FileCacheStamp {
 fn collect_component_conflicts(
     block: &[&str],
     tra_map: &HashMap<String, String>,
+    component_id: &str,
+    tp2_text: &str,
 ) -> Vec<ComponentConflict> {
     let mut out = Vec::<ComponentConflict>::new();
     for line in block {
-        out.extend(parse_conflict_line(line, tra_map));
+        let offset = line.as_ptr().addr() - tp2_text.as_ptr().addr();
+        let line_number = tp2_text[..offset]
+            .bytes()
+            .filter(|&byte| byte == b'\n')
+            .count()
+            + 1;
+        out.extend(
+            parse_conflict_line(line, tra_map)
+                .into_iter()
+                .map(|mut conflict| {
+                    conflict.origin = Some(ConflictOrigin {
+                        component_id: component_id.to_string(),
+                        line: line_number,
+                        inherited: false,
+                    });
+                    conflict
+                }),
+        );
     }
     out
 }
@@ -137,6 +239,7 @@ fn parse_conflict_line(line: &str, tra_map: &HashMap<String, String>) -> Vec<Com
                 target_mod,
                 target_component_id,
                 message,
+                origin: None,
             });
         }
         search_from = next_start;
@@ -241,3 +344,7 @@ fn resolve_message_token(value: &str, tra_map: &HashMap<String, String>) -> Opti
     }
     Some(trimmed.to_string())
 }
+
+#[cfg(test)]
+#[path = "compat_conflict_parse_tests.rs"]
+mod tests;

@@ -778,6 +778,7 @@ mod tests {
     #[test]
     fn inside_model_is_built_once_and_dropped_with_the_preview() {
         let preview = ModlistSharePreview {
+            parser_choice_phrases: Vec::new(),
             bio_version: "0.1.0-test".to_string(),
             game_install: "EET".to_string(),
             game_version: None,

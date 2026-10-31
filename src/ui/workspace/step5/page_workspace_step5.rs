@@ -131,21 +131,29 @@ fn apply_share_dialog(
 
     match outcome {
         ShareOutcome::ExportFile => {
-            if let Some(code) = orchestrator.code_for_share(&entry.id) {
-                let unresolved = share_actions::unresolved_mods_for_code(&code);
-                share_actions::export_modlist_file(
-                    &entry.name,
-                    &code,
-                    &unresolved,
-                    &mut orchestrator.notification_manager,
-                );
+            match orchestrator.code_for_share(&entry.id) {
+                Ok(Some(code)) => {
+                    let unresolved = share_actions::unresolved_mods_for_code(&code);
+                    share_actions::export_modlist_file(
+                        &entry.name,
+                        &code,
+                        &unresolved,
+                        &mut orchestrator.notification_manager,
+                    );
+                }
+                Ok(None) => {}
+                Err(err) => orchestrator.notification_manager.error(err),
             }
             orchestrator.workspace_step5.share_dialog_open = false;
         }
         ShareOutcome::CopyCode => {
-            if let Some(code) = orchestrator.code_for_share(&entry.id) {
-                let unresolved = share_actions::unresolved_mods_for_code(&code);
-                share_actions::copy_share_code(ctx, &entry.name, &code, &unresolved);
+            match orchestrator.code_for_share(&entry.id) {
+                Ok(Some(code)) => {
+                    let unresolved = share_actions::unresolved_mods_for_code(&code);
+                    share_actions::copy_share_code(ctx, &entry.name, &code, &unresolved);
+                }
+                Ok(None) => {}
+                Err(err) => orchestrator.notification_manager.error(err),
             }
             orchestrator.workspace_step5.share_dialog_open = false;
         }
@@ -248,6 +256,13 @@ fn start_workspace_install(orchestrator: &mut OrchestratorApp, modlist_id: &str)
                 "install-start hook failed for {modlist_id}: {err} \
                  (install not started)"
             );
+            let message = format!("Install could not start: {err}");
+            orchestrator
+                .wizard_state
+                .step5
+                .last_status_text
+                .clone_from(&message);
+            orchestrator.notification_manager.error(message);
         }
     }
 

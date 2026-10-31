@@ -4,89 +4,75 @@
 use eframe::egui;
 
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
-use crate::ui::settings::state_settings::{PathStatus, PathStatusTone};
+use crate::ui::settings::tool_validation::{ToolKind, ToolPlatform, guidance, release_url};
 use crate::ui::settings::validate_debounce;
 use crate::ui::settings::validate_now;
-use crate::ui::settings::widgets::path_row::{self, PathRow, PathRowMode};
-use crate::ui::shared::redesign_tokens::ThemePalette;
+use crate::ui::settings::widgets::path_row::{self, PathRow, PathRowHelp, PathRowMode};
 
 pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) {
-    let palette = orchestrator.theme_palette;
-
     bin_row_for_field(
         ui,
-        palette,
         orchestrator,
+        ToolKind::WeiDu,
         "WeiDU binary",
         validate_now::FIELD_WEIDU_BINARY,
-        orchestrator
-            .tool_version_cache
-            .weidu_version
-            .clone()
-            .map(|v| format!("v{v}")),
     );
     bin_row_for_field(
         ui,
-        palette,
         orchestrator,
-        "Mod installer",
+        ToolKind::ModInstaller,
+        "Mod Installer",
         validate_now::FIELD_MOD_INSTALLER_BINARY,
-        orchestrator
-            .tool_version_cache
-            .mod_installer_version
-            .clone(),
     );
 }
 
 fn bin_row_for_field(
     ui: &mut egui::Ui,
-    palette: ThemePalette,
     orchestrator: &mut OrchestratorApp,
+    kind: ToolKind,
     label: &str,
     field: &'static str,
-    version_hint: Option<String>,
 ) {
-    let is_pending = orchestrator
-        .settings_screen_state
-        .path_edit_debounce
-        .contains_key(field);
-    let status = orchestrator
-        .settings_screen_state
-        .path_validation_results
-        .fields
-        .get(field);
-    let (hint, tone) = if is_pending {
-        (
-            Some("checking\u{2026}".to_string()),
-            PathStatusTone::Neutral,
-        )
-    } else {
-        let validated_hint = status.map(PathStatus::hint_text);
-        let hint = version_hint.or(validated_hint);
-        let tone = status.map_or(PathStatusTone::Neutral, PathStatus::tone);
-        (hint, tone)
+    let Some(value) = field_mut(&mut orchestrator.wizard_state.step1, field) else {
+        return;
     };
-
-    let mut changed_field: Option<&'static str> = None;
-    {
-        let value_ref = field_mut(&mut orchestrator.wizard_state.step1, field);
-        if let Some(v) = value_ref {
-            path_row::render(
-                ui,
-                palette,
-                PathRow {
-                    label,
-                    mono_value: v,
-                    hint: hint.as_deref(),
-                    tone,
-                    mode: PathRowMode::File,
-                },
-                || changed_field = Some(field),
-            );
-        }
+    let requested = value.clone();
+    let status =
+        orchestrator
+            .settings_screen_state
+            .tool_validation
+            .observe(kind, &requested, ui.ctx());
+    let hint = status.hint(kind);
+    let link_label = format!("Download {}", kind.label());
+    let mut changed = false;
+    if let Some(value) = field_mut(&mut orchestrator.wizard_state.step1, field) {
+        path_row::render_with_help(
+            ui,
+            orchestrator.theme_palette,
+            PathRow {
+                label,
+                mono_value: value,
+                hint: Some(&hint),
+                tone: status.tone(),
+                mode: PathRowMode::File,
+            },
+            PathRowHelp {
+                guidance: guidance(kind, ToolPlatform::current()),
+                link_label: &link_label,
+                url: release_url(kind),
+            },
+            || changed = true,
+        );
     }
-    if let Some(f) = changed_field {
-        validate_debounce::mark_dirty(orchestrator, f);
+    if changed {
+        if let Some(value) = field_mut(&mut orchestrator.wizard_state.step1, field) {
+            let value = value.clone();
+            orchestrator
+                .settings_screen_state
+                .tool_validation
+                .observe(kind, &value, ui.ctx());
+        }
+        validate_debounce::mark_dirty(orchestrator, field);
     }
 }
 
@@ -100,3 +86,7 @@ fn field_mut<'a>(
         _ => None,
     }
 }
+
+#[cfg(test)]
+#[path = "tab_tools_tests.rs"]
+mod tests;

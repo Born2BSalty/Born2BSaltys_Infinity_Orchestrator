@@ -15,8 +15,7 @@ use crate::app::app_step1_github_oauth::GitHubOAuthFlowResult;
 use crate::app::app_step2_update_download::DownloadPoll;
 use crate::app::state::{DownloadOrigin, WizardState};
 use crate::app::step2_worker::Step2ScanEvent;
-use crate::app::step5::install_flow::PendingInstallStart;
-use crate::app::step5::log_files::TargetPrepResult;
+use crate::app::step5::install_flow::{InstallPreparation, PendingInstallStart};
 use crate::app::terminal::EmbeddedTerminal;
 use crate::app::{
     app_step2_saved_log_flow, app_step2_scan, app_step2_update_check, app_step2_update_download,
@@ -62,12 +61,6 @@ use crate::ui::workspace::step5::state_workspace_step5::WorkspaceStep5State;
 
 const BIO_SETTINGS_DEBOUNCE_MS: u64 = 1000;
 
-#[derive(Debug, Clone, Default)]
-pub struct ToolVersionCache {
-    pub weidu_version: Option<String>,
-    pub mod_installer_version: Option<String>,
-}
-
 struct RegistryLoad {
     registry: ModlistRegistry,
     registry_error: Option<RegistryError>,
@@ -98,6 +91,8 @@ impl PostInstallResetGate {
         matches!(self, Self::Pending)
     }
 }
+
+pub(crate) struct Step5PreparationWorkspace(Option<String>);
 
 pub(crate) struct PendingFolderDelete {
     pub(crate) modlist_name: String,
@@ -231,6 +226,8 @@ pub struct OrchestratorApp {
     pub nav: NavDestination,
     pub(crate) last_rendered_nav: NavDestination,
     pub wizard_state: WizardState,
+    pub(crate) catalog_screen_state: crate::ui::catalog::state_catalog::CatalogScreenState,
+    pub(crate) catalog_runtime: crate::ui::catalog::catalog_runtime::CatalogRuntime,
     pub settings_store: SettingsStore,
     pub dev_mode: bool,
     pub dev_mode_cli_flag: bool,
@@ -255,7 +252,6 @@ pub struct OrchestratorApp {
     pub redesign_settings: RedesignSettings,
     pub settings_screen_state: SettingsScreenState,
     pub(crate) github_auth_rx: Option<Receiver<GitHubOAuthFlowResult>>,
-    pub tool_version_cache: ToolVersionCache,
     pub accounts_stub_hint: Option<String>,
     pub bio_settings_last_saved: AppSettings,
     pub bio_settings_last_dirty_at: Option<Instant>,
@@ -281,8 +277,9 @@ pub struct OrchestratorApp {
     pub step5_terminal: Option<EmbeddedTerminal>,
     pub step5_terminal_error: Option<String>,
     pub step5_console_view: Step5ConsoleViewState,
-    pub(crate) step5_prep_rx: Option<Receiver<Result<TargetPrepResult, String>>>,
+    pub(crate) step5_prep_rx: Option<Receiver<Result<InstallPreparation, String>>>,
     pub(crate) step5_pending_start: Option<PendingInstallStart>,
+    pub(crate) step5_preparation_workspace: Option<Step5PreparationWorkspace>,
 
     pub(crate) step2_scan_rx: Option<Receiver<Step2ScanEvent>>,
     pub(crate) step2_cancel: Option<Arc<AtomicBool>>,
@@ -393,6 +390,8 @@ impl OrchestratorApp {
             nav: NavDestination::default(),
             last_rendered_nav: NavDestination::default(),
             wizard_state,
+            catalog_screen_state: crate::ui::catalog::state_catalog::CatalogScreenState::default(),
+            catalog_runtime: crate::ui::catalog::catalog_runtime::CatalogRuntime::default(),
             settings_store: bootstrap.settings_store,
             dev_mode: effective_dev_mode,
             dev_mode_cli_flag: dev_mode,
@@ -416,7 +415,6 @@ impl OrchestratorApp {
             redesign_settings,
             settings_screen_state: SettingsScreenState::default(),
             github_auth_rx: None,
-            tool_version_cache: ToolVersionCache::default(),
             accounts_stub_hint: None,
             bio_settings_last_saved: bio_settings_snapshot,
             bio_settings_last_dirty_at: None,
@@ -436,6 +434,7 @@ impl OrchestratorApp {
             step5_console_view: Step5ConsoleViewState::default(),
             step5_prep_rx: None,
             step5_pending_start: None,
+            step5_preparation_workspace: None,
 
             step2_scan_rx: None,
             step2_cancel: None,
@@ -610,6 +609,16 @@ impl OrchestratorApp {
         if rx.is_some() {
             self.install_size_worker_rx = rx;
         }
+        if let Some(code) = self
+            .registry
+            .find(&id)
+            .and_then(|entry| entry.latest_share_code.clone())
+            && let Some(workspace) = self.workspace_state.get_mut(&id)
+        {
+            workspace.last_share_code = Some(code);
+            self.persistence_cycle
+                .mark_workspace_dirty(&id, Instant::now());
+        }
 
         if !from_workspace {
             self.active_install_modlist_id = None;
@@ -630,7 +639,8 @@ impl OrchestratorApp {
     }
 
     const fn slow_workers_active(&self) -> bool {
-        self.install_size_worker_rx.is_some()
+        self.catalog_runtime.pending()
+            || self.install_size_worker_rx.is_some()
             || !self.pending_folder_deletes.is_empty()
             || self.manual_download_rx.is_some()
     }
@@ -960,12 +970,49 @@ impl OrchestratorApp {
     }
 
     fn poll_step5_before_render(&mut self) -> bool {
+        if self
+            .step5_preparation_workspace
+            .as_ref()
+            .is_some_and(|workspace| workspace.0 != self.workspace_view.loaded_workspace_id)
+        {
+            self.step5_prep_rx = None;
+            self.step5_pending_start = None;
+            self.wizard_state.step5.prep_running = false;
+            self.step5_preparation_workspace = None;
+        }
+        let owner = self
+            .workspace_view
+            .loaded_workspace_id
+            .clone()
+            .or_else(|| self.active_install_modlist_id.clone());
+        if self
+            .wizard_state
+            .step5
+            .capture_run
+            .as_ref()
+            .is_some_and(|run| run.workspace_id != owner)
+        {
+            self.wizard_state.step5.capture_run = None;
+            if let Some(term) = self.step5_terminal.as_mut() {
+                term.invalidate_capture();
+            }
+        }
+        if self.wizard_state.step5.capture_run.is_none()
+            && let Some(term) = self.step5_terminal.as_mut()
+        {
+            term.invalidate_capture();
+        }
+        let revision = self.wizard_state.step5.capture_revision;
         let mut step5_requested_repaint = false;
         step5_requested_repaint |= app_step5_flow::poll_step5_terminal(
             &mut self.wizard_state,
             &mut self.step5_terminal,
             &mut self.step5_terminal_error,
         );
+        if self.wizard_state.step5.capture_revision != revision {
+            self.persist_captured_answers();
+        }
+        let prior_run = self.wizard_state.step5.active_run_id;
         step5_requested_repaint |= app_step5_flow::poll_step5_prep(
             &mut self.wizard_state,
             &mut self.step5_prep_rx,
@@ -973,17 +1020,73 @@ impl OrchestratorApp {
             &mut self.step5_terminal_error,
             &mut self.step5_pending_start,
         );
+        if self.wizard_state.step5.active_run_id != prior_run {
+            self.bind_capture_owner();
+        }
         step5_requested_repaint
     }
 
+    fn bind_capture_owner(&mut self) {
+        let owner = self
+            .workspace_view
+            .loaded_workspace_id
+            .clone()
+            .or_else(|| self.active_install_modlist_id.clone());
+        if let Some(run) = self.wizard_state.step5.capture_run.as_mut() {
+            run.workspace_id = owner;
+            let session = crate::app::step5::answer_capture::CaptureSession::new(
+                run.clone(),
+                crate::app::step5::answer_capture::frozen_components(&self.wizard_state),
+            );
+            if let Some(term) = self.step5_terminal.as_mut() {
+                term.set_capture_session(session);
+            }
+        }
+    }
+
+    fn persist_captured_answers(&mut self) {
+        let Some(id) = self
+            .wizard_state
+            .step5
+            .capture_run
+            .as_ref()
+            .and_then(|run| run.workspace_id.clone())
+        else {
+            return;
+        };
+        let prior = self.workspace_state.get(&id).cloned().unwrap_or_default();
+        let captured =
+            crate::ui::workspace::workspace_state_loader::extract_workspace_state_from_wizard(
+                &self.wizard_state,
+                &prior,
+            );
+        self.workspace_state.insert(id.clone(), captured);
+        self.workspace_stores
+            .entry(id.clone())
+            .or_insert_with(|| WorkspaceStore::new_for_id(&id));
+        self.persistence_cycle
+            .mark_workspace_dirty(&id, Instant::now());
+        self.flush_all_now();
+    }
+
     fn start_step5_after_render(&mut self) -> bool {
-        app_step5_flow::start_if_requested(
+        let prior_run = self.wizard_state.step5.active_run_id;
+        let started = app_step5_flow::start_if_requested(
             &mut self.wizard_state,
             &mut self.step5_terminal,
             &mut self.step5_terminal_error,
             &mut self.step5_prep_rx,
             &mut self.step5_pending_start,
-        )
+        );
+        if self.wizard_state.step5.active_run_id != prior_run {
+            self.bind_capture_owner();
+        }
+        if started {
+            self.step5_preparation_workspace = Some(Step5PreparationWorkspace(
+                self.workspace_view.loaded_workspace_id.clone(),
+            ));
+        }
+        started
     }
 
     fn step5_needs_repaint(&self) -> bool {
@@ -994,6 +1097,11 @@ impl OrchestratorApp {
             || self.workspace_destination_prep_rx.is_some()
             || self.wizard_state.step5.prep_running
             || self.wizard_state.step5.install_running
+            || self
+                .wizard_state
+                .step5
+                .basic_install_tool_versions
+                .is_some()
             || self.wizard_state.modlist_auto_build_active
     }
 
@@ -1266,6 +1374,7 @@ impl eframe::App for OrchestratorApp {
 
         oauth_glue::poll_github_oauth_flow(self);
 
+        self.catalog_runtime.poll(&mut self.catalog_screen_state);
         self.poll_step2_channels();
         self.reconcile_scan_and_advance_log_imports();
         if self.step2_needs_repaint() {
@@ -1309,6 +1418,9 @@ impl eframe::App for OrchestratorApp {
                 elapsed: r.started_at.elapsed(),
             }
         });
+
+        self.notification_manager
+            .guard_language_recovery_escape(ctx);
 
         let history_has_items = self.notification_manager.has_history();
         let history_open = self.notification_manager.history_open;
@@ -1368,6 +1480,7 @@ impl eframe::App for OrchestratorApp {
     }
 
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        self.catalog_runtime.cancel();
         self.join_all_destination_prep_workers();
         self.flush_all_now();
     }
@@ -1416,6 +1529,7 @@ impl OrchestratorApp {
 
 impl Drop for OrchestratorApp {
     fn drop(&mut self) {
+        self.catalog_runtime.cancel();
         self.join_all_destination_prep_workers();
         self.flush_all_now();
         #[cfg(test)]
@@ -1452,7 +1566,15 @@ impl OrchestratorApp {
         if history_clicked {
             self.notification_manager.history_open = !self.notification_manager.history_open;
         }
+        self.notification_manager.set_language_recovery_enabled(
+            self.workspace_view.modlist_id.trim(),
+            self.workspace_view.step2.recovery_scan_generation,
+            self.wizard_state.step2.is_scanning,
+        );
         self.notification_manager.show(ctx, palette);
+        if let Some(action) = self.notification_manager.take_language_recovery_action() {
+            crate::ui::workspace::step2::step2_language_recovery::apply_recovery(self, action);
+        }
         self.notification_manager
             .render_history_popup(ctx, palette, !history_clicked);
     }
@@ -2384,3 +2506,7 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "orchestrator_language_recovery_tests.rs"]
+mod language_recovery_tests;

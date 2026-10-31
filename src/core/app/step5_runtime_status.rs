@@ -3,7 +3,8 @@
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::app::state::{ResumeTargets, Step5State};
+use crate::app::state::{ResumeTargets, Step5State, WizardState};
+use crate::app::step5::basic_install_report;
 use crate::app::terminal::EmbeddedTerminal;
 
 pub(crate) fn process_graceful_cancel(step5: &mut Step5State, term: &mut EmbeddedTerminal) {
@@ -54,7 +55,8 @@ pub(crate) fn process_graceful_cancel(step5: &mut Step5State, term: &mut Embedde
     }
 }
 
-pub(crate) fn process_exit_event(step5: &mut Step5State, term: &mut EmbeddedTerminal) {
+pub(crate) fn process_exit_event(state: &mut WizardState, term: &mut EmbeddedTerminal) {
+    let step5 = &mut state.step5;
     if !term.take_exit_event() {
         return;
     }
@@ -102,4 +104,6 @@ pub(crate) fn process_exit_event(step5: &mut Step5State, term: &mut EmbeddedTerm
             None => "Install finished".to_string(),
         }
     };
+    let report_state = basic_install_report::completion_state(step5);
+    basic_install_report::update(state, report_state, Some(term));
 }

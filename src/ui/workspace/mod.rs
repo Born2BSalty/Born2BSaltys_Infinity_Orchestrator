@@ -18,3 +18,6 @@ pub mod workspace_progress_bar;
 pub mod workspace_state_loader;
 pub mod workspace_step_router;
 pub mod workspace_view;
+
+#[cfg(test)]
+mod workspace_wlb_capture_tests;

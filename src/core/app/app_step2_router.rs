@@ -437,6 +437,55 @@ fn save_source_form(
     }
 }
 
+pub(crate) fn save_global_source_form(
+    state: &mut WizardState,
+    form: &super::source_form::SourceForm,
+) -> Result<(), String> {
+    if form.save_to != ModSourceEditDestination::GlobalDefault {
+        return Err("Catalog sources must be saved to My default".to_string());
+    }
+    if let Some(error) = super::source_form::config_files_error(form) {
+        return Err(error);
+    }
+    let source =
+        mod_source_history::normalize_source(&form.tp2, &super::source_form::to_source(form));
+    if !mod_downloads::source_is_valid(&source) {
+        return Err("Complete the download source first".to_string());
+    }
+    if form.identity.may_change_id
+        && mod_downloads::load_two_tier_sources()
+            .find_sources(&form.tp2)
+            .iter()
+            .any(|existing| {
+                mod_downloads::normalize_source_id(&existing.source_id)
+                    == mod_downloads::normalize_source_id(&form.source_id)
+            })
+    {
+        return Err(
+            "This source ID is already configured. Choose its existing entry from the source dropdown to edit it.".to_string(),
+        );
+    }
+    let text = super::source_form::source_form_save_text(form);
+    let request = SourceSaveRequest {
+        tp2: &form.tp2,
+        name: &form.name,
+        source_id: &form.source_id,
+        allow_id_change: form.identity.may_change_id,
+        text: &text,
+        target_path: None,
+        new_source: Some(&source),
+    };
+    save_source_block_recording_history(
+        state,
+        &request,
+        ModSourceEditDestination::GlobalDefault,
+        "My default",
+        None,
+    )?;
+    save_form_note(state, form, &source);
+    Ok(())
+}
+
 pub(crate) const NEW_MOD_CARD_KEY: &str = "new-mod";
 
 pub(crate) fn is_new_mod_form(form: &super::source_form::SourceForm) -> bool {
@@ -608,7 +657,13 @@ fn save_source_block_recording_history(
     let old_source = replaced
         .cloned()
         .or_else(|| read_replaced_user_source(request.tp2, request.source_id, destination));
-    mod_downloads::save_user_mod_download_source_block(
+    let save = match destination {
+        ModSourceEditDestination::GlobalDefault => {
+            mod_downloads::save_global_mod_download_source_block
+        }
+        ModSourceEditDestination::ThisModlist => mod_downloads::save_user_mod_download_source_block,
+    };
+    save(
         request.tp2,
         request.name,
         request.source_id,

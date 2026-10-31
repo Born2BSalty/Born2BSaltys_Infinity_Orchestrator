@@ -54,6 +54,7 @@ pub(crate) enum ExportLogSource {
 
 #[derive(Debug, Clone, Default)]
 pub(crate) struct ShareExportSources {
+    pub(crate) parser_choice_phrases: Vec<String>,
     pub(crate) mod_downloads_user: Option<String>,
     pub(crate) mod_installed_refs: Option<String>,
     pub(crate) unresolved_mods: Vec<String>,
@@ -75,6 +76,11 @@ fn build_and_export_share_code(
     state: &WizardState,
     log_source: ExportLogSource,
 ) -> Result<String, String> {
+    let parser_choice_phrases = crate::app::mod_installer_parser::capture_local_choice_phrases()
+        .unwrap_or_else(|err| {
+            warn!("Share code exported without local parser phrases: {err}");
+            Vec::new()
+        });
     crate::app::mod_downloads::ensure_mod_downloads_files().map_err(|err| err.to_string())?;
 
     let include = checked_mod_tp2s(state);
@@ -96,6 +102,7 @@ fn build_and_export_share_code(
     export_modlist_share_code_with(
         state,
         &ShareExportSources {
+            parser_choice_phrases,
             mod_downloads_user: resolved.toml,
             mod_installed_refs,
             unresolved_mods: resolved.unresolved,
@@ -128,6 +135,8 @@ pub(crate) fn export_modlist_share_code_with(
     state: &WizardState,
     sources: &ShareExportSources,
 ) -> Result<String, String> {
+    let phrases =
+        union_valid_phrases(&[&state.parser_choice_phrases, &sources.parser_choice_phrases]);
     let weidu_logs = export_weidu_logs(state, sources.log_source)?;
     let first_slot_export_text = weidu_logs.bgee.as_deref().or(weidu_logs.iwdee.as_deref());
     if relevant_weidu_text_is_empty(state, first_slot_export_text, weidu_logs.bg2ee.as_deref()) {
@@ -162,12 +171,36 @@ pub(crate) fn export_modlist_share_code_with(
             "files": mod_configs,
         },
     });
+    if !phrases.is_empty() {
+        payload["parser_choice_phrases"] = json!(phrases);
+    }
     move_first_slot_log_to_iwdee_key(&mut payload, weidu_logs.iwdee.as_deref());
     insert_unresolved_mods(&mut payload, &sources.unresolved_mods);
     insert_export_provenance(&mut payload, state);
     insert_game_version(&mut payload, state);
     let payload_text = serde_json::to_string(&payload).map_err(|err| err.to_string())?;
-    encode_share_payload_text(&payload_text)
+    let code = encode_share_payload_text(&payload_text)?;
+    let workspace =
+        crate::ui::workspace::workspace_state_loader::extract_workspace_state_from_wizard(
+            state,
+            &crate::registry::workspace_model::ModlistWorkspaceState::default(),
+        );
+    crate::registry::share_export::overlay_workspace_wlb(&code, &workspace)
+}
+
+pub(crate) fn union_valid_phrases(groups: &[&[String]]) -> Vec<String> {
+    let mut result: Vec<String> = Vec::new();
+    for phrase in groups.iter().flat_map(|group| group.iter()) {
+        if result.contains(phrase) {
+            continue;
+        }
+        result.push(phrase.clone());
+        if let Err(err) = crate::app::mod_installer_parser::validate_phrases(&result) {
+            result.pop();
+            warn!("Share code dropped a parser phrase: {err}");
+        }
+    }
+    result
 }
 
 fn move_first_slot_log_to_iwdee_key(payload: &mut serde_json::Value, iwdee_text: Option<&str>) {
@@ -254,6 +287,7 @@ fn insert_export_provenance(payload: &mut serde_json::Value, state: &WizardState
 
 #[derive(Debug, Clone)]
 pub(crate) struct ModlistSharePreview {
+    pub(crate) parser_choice_phrases: Vec<String>,
     pub(crate) bio_version: String,
     pub(crate) game_install: String,
     pub(crate) game_version: Option<String>,
@@ -327,6 +361,9 @@ pub(crate) fn import_modlist_share_code(
     }
     state.step1 = step1;
     state.reset_workflow_keep_step1();
+    state
+        .parser_choice_phrases
+        .clone_from(&payload.parser_choice_phrases);
     state.step2.selected_source_ids =
         crate::app::app_step2_update_source_refs::load_installed_source_ids();
     state.step5.last_status_text = "Imported modlist share code".to_string();
@@ -364,6 +401,8 @@ fn warn_on_unresolved_mods(preview: &ModlistSharePreview) {
 
 #[derive(Deserialize)]
 pub(crate) struct ModlistSharePayload {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) parser_choice_phrases: Vec<String>,
     pub(crate) format_version: u64,
     #[serde(default)]
     pub(crate) bio_version: String,
@@ -451,6 +490,7 @@ pub(crate) fn decode_share_payload(code: &str) -> Result<ModlistSharePayload, St
     let bytes = zlib_decompress(&bytes)?;
     let payload: ModlistSharePayload =
         serde_json::from_slice(&bytes).map_err(|err| err.to_string())?;
+    crate::app::mod_installer_parser::validate_phrases(&payload.parser_choice_phrases)?;
     if payload.format_version != 1 {
         return Err(format!(
             "Unsupported modlist share format version: {}",
@@ -487,6 +527,7 @@ fn share_preview(payload: &ModlistSharePayload) -> Result<ModlistSharePreview, S
         .collect::<Vec<_>>()
         .join("\n");
     Ok(ModlistSharePreview {
+        parser_choice_phrases: payload.parser_choice_phrases.clone(),
         bio_version: payload.bio_version.clone(),
         game_install: payload.game_install.clone(),
         game_version: payload
@@ -577,19 +618,17 @@ fn rewrite_imported_eet_bg2ee_wlb_paths(
     let Some(text) = text else {
         return Ok(None);
     };
-    let marker = "@wlb-inputs:";
     let mut changed = false;
     let mut out = Vec::<String>::new();
     let local_bg1_path = local_eet_bg1_source_path(step1);
     for line in text.lines() {
-        let Some(marker_pos) = line.to_ascii_lowercase().find(marker) else {
+        let Some(spec) = crate::app::wlb_inputs::marker_spec(line) else {
             out.push(line.to_string());
             continue;
         };
-        let spec_start = marker_pos + marker.len();
-        let (head, spec) = line.split_at(spec_start);
-        let mut tokens = Vec::<String>::new();
-        for token in spec.trim().split(',') {
+        let mut tokens = crate::app::wlb_inputs::decode_answers(spec)?;
+        let mut line_changed = false;
+        for token in &mut tokens {
             if wlb_token_is_path_like(token) {
                 if local_bg1_path.is_empty() {
                     return Err(
@@ -597,13 +636,20 @@ fn rewrite_imported_eet_bg2ee_wlb_paths(
                             .to_string(),
                     );
                 }
-                changed = true;
-                tokens.push(requote_like(token, local_bg1_path));
-            } else {
-                tokens.push(token.trim().to_string());
+                *token = requote_like(token, local_bg1_path);
+                line_changed = true;
             }
         }
-        out.push(format!("{head} {}", tokens.join(",")));
+        if line_changed {
+            if let Some(encoded) = crate::app::wlb_inputs::encode_answers(&tokens)? {
+                out.push(crate::app::wlb_inputs::replace_marker(line, &encoded)?);
+            } else {
+                out.push(line.to_string());
+            }
+            changed = true;
+        } else {
+            out.push(line.to_string());
+        }
     }
     if changed {
         Ok(Some(out.join("\n")))
@@ -875,41 +921,33 @@ fn reappend_wlb_inputs(log_text: &str, items: &[crate::app::state::Step3ItemStat
 
 fn collect_wlb_markers(
     items: &[crate::app::state::Step3ItemState],
-) -> Vec<(String, String, String)> {
-    let marker = "@wlb-inputs:";
+) -> Vec<(crate::app::wlb_inputs::WlbIdentity, String)> {
     items
         .iter()
+        .filter(|item| !item.is_parent && !item.parent_placeholder)
         .filter_map(|item| {
-            let lower = item.raw_line.to_ascii_lowercase();
-            let start = lower.find(marker)?;
-            let value = item.raw_line[start + marker.len()..].trim();
-            if value.is_empty() {
-                return None;
-            }
-            Some((
-                crate::app::mod_downloads::normalize_mod_download_tp2(&item.tp_file),
-                item.component_id.trim().to_string(),
-                value.to_string(),
-            ))
+            let identity = crate::app::wlb_inputs::parse_identity(&item.raw_line)?;
+            let value = crate::app::wlb_inputs::marker_spec(&item.raw_line)?;
+            (!value.is_empty()).then(|| (identity, value.to_string()))
         })
         .collect()
 }
 
-fn reappend_wlb_marker_on_line(line: &str, markers: &[(String, String, String)]) -> String {
-    if line.to_ascii_lowercase().contains("@wlb-inputs:") {
+fn reappend_wlb_marker_on_line(
+    line: &str,
+    markers: &[(crate::app::wlb_inputs::WlbIdentity, String)],
+) -> String {
+    let Some(identity) = crate::app::wlb_inputs::parse_identity(line) else {
+        return line.to_string();
+    };
+    let mut matching = markers.iter().filter(|(key, _)| *key == identity);
+    let Some((_, value)) = matching.next() else {
+        return line.to_string();
+    };
+    if matching.next().is_some() {
         return line.to_string();
     }
-    let Ok(component) = crate::mods::component::Component::parse_weidu_line(line) else {
-        return line.to_string();
-    };
-    let tp2 = crate::app::mod_downloads::normalize_mod_download_tp2(&component.tp_file);
-    let component_id = component.component.trim().to_string();
-    let Some((_, _, value)) = markers.iter().find(|(marker_tp2, marker_component, _)| {
-        *marker_tp2 == tp2 && *marker_component == component_id
-    }) else {
-        return line.to_string();
-    };
-    format!("{line} // @wlb-inputs: {value}")
+    crate::app::wlb_inputs::replace_marker(line, value).unwrap_or_else(|_| line.to_string())
 }
 
 fn read_exact_source_weidu_log(
@@ -1542,6 +1580,49 @@ mod tests {
                 name: "Root build".to_string(),
                 author: "@root".to_string(),
             }]
+        );
+    }
+
+    #[test]
+    fn export_ignores_unreadable_local_parser_config() {
+        let _lock = crate::app::mod_downloads::AMBIENT_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let guard = ConfigDirGuard::new("unreadable_parser");
+        let parser = guard.0.join("parser.toml");
+        std::fs::write(&parser, "choice_phrase = 42").expect("malformed parser fixture");
+        let mut state = state_with_one_bgee_component();
+        state.parser_choice_phrases = vec!["Wizard".to_string()];
+
+        let code = crate::app::mod_installer_parser::with_parser_path_for_test(&parser, || {
+            export_modlist_share_code(&state)
+        })
+        .expect("a broken local parser config does not block export");
+
+        assert_eq!(
+            decode_share_payload(&code)
+                .expect("decode")
+                .parser_choice_phrases,
+            ["Wizard"]
+        );
+    }
+
+    #[test]
+    fn export_drops_invalid_parser_phrases_instead_of_failing() {
+        let mut state = state_with_one_bgee_component();
+        state.parser_choice_phrases = vec!["Wizard".to_string(), "   ".to_string()];
+        let sources = ShareExportSources {
+            parser_choice_phrases: vec!["x".repeat(8193), "Local".to_string()],
+            ..ShareExportSources::default()
+        };
+
+        let code = export_modlist_share_code_with(&state, &sources).expect("export");
+
+        assert_eq!(
+            decode_share_payload(&code)
+                .expect("decode")
+                .parser_choice_phrases,
+            ["Wizard", "Local"]
         );
     }
 
@@ -3004,4 +3085,37 @@ mod tests {
             Err("Imported WeiDU logs have no entries.".to_string())
         );
     }
+
+    #[test]
+    fn manual_wlb_eet_path_localization_preserves_tagged_commas_blank_and_unicode() {
+        use crate::app::wlb_inputs::{decode_answers, encode_answers, marker_spec};
+        let step1 = crate::app::state::Step1State {
+            eet_bgee_game_folder: r"D:\Games,BGEE".to_string(),
+            ..Default::default()
+        };
+        let values = vec![
+            String::new(),
+            "a,b".to_string(),
+            r"C:\Old\BGEE".to_string(),
+            "世界".to_string(),
+        ];
+        let encoded = encode_answers(&values).expect("codec").expect("marker");
+        let raw = format!("~MOD/MOD.TP2~ #2 #17 // Label // @wlb-inputs: {encoded}");
+        let localized = rewrite_imported_eet_bg2ee_wlb_paths(&step1, Some(&raw))
+            .expect("localized")
+            .expect("log");
+        let answers = decode_answers(marker_spec(&localized).expect("marker")).expect("codec");
+        assert_eq!(answers, ["", "a,b", r"D:\Games,BGEE", "世界"]);
+        assert!(
+            rewrite_imported_eet_bg2ee_wlb_paths(
+                &step1,
+                Some("~MOD/MOD.TP2~ #2 #17 // Label // @wlb-inputs: bio-json-v9:[]")
+            )
+            .is_err()
+        );
+    }
 }
+
+#[cfg(test)]
+#[path = "modlist_share_parser_tests.rs"]
+mod parser_sharing_tests;

@@ -112,6 +112,7 @@ const fn is_active(current: &NavDestination, dest: &NavDestination) -> bool {
                 NavDestination::Create | NavDestination::Workspace { .. },
                 NavDestination::Create
             )
+            | (NavDestination::Catalog, NavDestination::Catalog)
             | (NavDestination::Settings, NavDestination::Settings)
     )
 }
@@ -260,8 +261,25 @@ fn paint_nav_icon(
         NavDestination::Home => paint_home_icon(painter, center, color),
         NavDestination::Install => paint_install_icon(painter, center, color),
         NavDestination::Create => paint_create_icon(painter, center, color),
+        NavDestination::Catalog => paint_catalog_icon(painter, center, color),
         NavDestination::Settings => paint_settings_icon(painter, center, color),
         NavDestination::Workspace { .. } => {}
+    }
+}
+
+fn paint_catalog_icon(painter: &egui::Painter, center: egui::Pos2, color: egui::Color32) {
+    let stroke = icon_stroke(color);
+    for sign in [-1.0, 1.0] {
+        let points = vec![
+            center + egui::vec2(0.0, -7.0),
+            center + egui::vec2(sign * 4.0, -9.0),
+            center + egui::vec2(sign * 10.0, -8.0),
+            center + egui::vec2(sign * 10.0, 8.0),
+            center + egui::vec2(sign * 4.0, 7.0),
+            center + egui::vec2(0.0, 9.0),
+            center + egui::vec2(0.0, -7.0),
+        ];
+        painter.add(egui::Shape::line(points, stroke));
     }
 }
 

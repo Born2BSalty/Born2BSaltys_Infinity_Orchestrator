@@ -2,6 +2,22 @@
 // Copyright (c) 2026 Born2BSalty
 
 use super::EmbeddedTerminal;
+use std::io::Write;
+
+pub(super) fn write_line_to(writer: &mut dyn Write, line: &str) -> Result<(), String> {
+    if line.contains(['\r', '\n', '\0']) {
+        return Err("Input must be one line".to_string());
+    }
+    writer
+        .write_all(line.as_bytes())
+        .map_err(|error| format!("stdin write failed: {error}"))?;
+    writer
+        .write_all(b"\r\n")
+        .map_err(|error| format!("stdin write failed: {error}"))?;
+    writer
+        .flush()
+        .map_err(|error| format!("stdin flush failed: {error}"))
+}
 
 fn send_bytes(term_state: &mut EmbeddedTerminal, data: &[u8]) {
     term_state.write_bytes(data);

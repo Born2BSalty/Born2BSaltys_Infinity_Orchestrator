@@ -200,7 +200,8 @@ fn render_export_choice(
     ui.label(
         egui::RichText::new(
             "Saves a .biolist file with everything needed to reinstall this list. \
-             Send it, upload it, or submit it to the gallery.",
+             Send it, upload it, or submit it to the gallery. \
+             Plain WeiDU logs do not carry BIO parser phrase metadata.",
         )
         .size(12.0)
         .family(egui::FontFamily::Name("poppins_light".into()))

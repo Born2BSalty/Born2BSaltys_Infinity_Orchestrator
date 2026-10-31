@@ -1,12 +1,25 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
+use std::sync::{Arc, Mutex};
+
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct ResumeTargets {
     pub bg1_game_dir: Option<String>,
     pub bg2_game_dir: Option<String>,
     pub game_dir: Option<String>,
 }
+
+#[derive(Debug, Clone)]
+pub struct BasicInstallToolVersionLookup(pub(crate) Arc<Mutex<Option<(String, String)>>>);
+
+impl PartialEq for BasicInstallToolVersionLookup {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+impl Eq for BasicInstallToolVersionLookup {}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Step5State<Flag = bool> {
@@ -31,11 +44,19 @@ pub struct Step5State<Flag = bool> {
     pub cancel_signal_sent_unix_secs: Option<u64>,
     pub cancel_attempt_count: u32,
     pub last_start_mode: String,
+    pub install_choice: String,
+    pub install_source: String,
     pub last_cancel_mode: String,
     pub restart_program: String,
     pub restart_args: Vec<String>,
     pub resume_targets: ResumeTargets,
     pub diagnostics_run_id: Option<String>,
+    pub basic_install_report_path: Option<std::path::PathBuf>,
+    pub basic_install_mod_installer_version: String,
+    pub basic_install_weidu_version: String,
+    pub basic_install_workspace_case_sensitive: String,
+    pub basic_install_report_state: String,
+    pub basic_install_tool_versions: Option<BasicInstallToolVersionLookup>,
     pub resolved_bg1_game_dir: String,
     pub resolved_bg2_game_dir: String,
     pub resolved_game_dir: String,
@@ -45,6 +66,8 @@ pub struct Step5State<Flag = bool> {
     pub prep_cleaned_paths: Vec<String>,
     pub run_counter: usize,
     pub active_run_id: Option<usize>,
+    pub(crate) capture_run: Option<crate::app::step5::answer_capture::CaptureRunKey>,
+    pub(crate) capture_revision: u64,
     pub resume_available: Flag,
     pub cancel_was_graceful: Flag,
     pub start_install_requested: Flag,
@@ -86,11 +109,19 @@ impl Default for Step5State {
             cancel_signal_sent_unix_secs: None,
             cancel_attempt_count: 0,
             last_start_mode: "none".to_string(),
+            install_choice: "not recorded".to_string(),
+            install_source: "not recorded".to_string(),
             last_cancel_mode: "none".to_string(),
             restart_program: String::new(),
             restart_args: Vec::new(),
             resume_targets: ResumeTargets::default(),
             diagnostics_run_id: None,
+            basic_install_report_path: None,
+            basic_install_mod_installer_version: "unknown".to_string(),
+            basic_install_weidu_version: "unknown".to_string(),
+            basic_install_workspace_case_sensitive: "unknown".to_string(),
+            basic_install_report_state: "starting".to_string(),
+            basic_install_tool_versions: None,
             resolved_bg1_game_dir: String::new(),
             resolved_bg2_game_dir: String::new(),
             resolved_game_dir: String::new(),
@@ -100,6 +131,8 @@ impl Default for Step5State {
             prep_cleaned_paths: Vec::new(),
             run_counter: 0,
             active_run_id: None,
+            capture_run: None,
+            capture_revision: 0,
             resume_available: false,
             cancel_was_graceful: false,
             start_install_requested: false,

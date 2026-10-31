@@ -16,27 +16,41 @@ fn classify_guard_hit(guard: &RequirementGuard, context: &MismatchContext) -> Pr
     if !classification.kind.eq_ignore_ascii_case("mismatch")
         && let Some(target) = first_selected_negated_target(&guard.eval_text, context)
     {
-        return PredicateGuardHit {
-            kind: "conflict",
-            related_mod: Some(target.target_mod.clone()),
-            related_component: Some(target.target_component_id.clone()),
-            message: format!(
-                "Blocked by selected component {} #{}.",
-                target.target_mod, target.target_component_id
-            ),
-            raw_evidence: guard.display_line.clone(),
-        };
+        return with_guard_origin(
+            PredicateGuardHit {
+                kind: "conflict",
+                related_mod: Some(target.target_mod.clone()),
+                related_component: Some(target.target_component_id.clone()),
+                message: format!(
+                    "Blocked by selected component {} #{}.",
+                    target.target_mod, target.target_component_id
+                ),
+                raw_evidence: guard.display_line.clone(),
+            },
+            guard,
+        );
     }
 
-    PredicateGuardHit {
-        kind: classification.kind,
-        related_mod: None,
-        related_component: None,
-        message: classification.message.to_string(),
-        raw_evidence: guard.display_line.clone(),
-    }
+    with_guard_origin(
+        PredicateGuardHit {
+            kind: classification.kind,
+            related_mod: None,
+            related_component: None,
+            message: classification.message.to_string(),
+            raw_evidence: guard.display_line.clone(),
+        },
+        guard,
+    )
 }
 
+fn with_guard_origin(mut hit: PredicateGuardHit, guard: &RequirementGuard) -> PredicateGuardHit {
+    if let Some(provenance) = guard.inherited_provenance() {
+        hit.message = format!("{} {provenance}", hit.message);
+        hit.raw_evidence.push('\n');
+        hit.raw_evidence.push_str(&provenance);
+    }
+    hit
+}
 fn first_selected_negated_target(
     eval_text: &str,
     context: &MismatchContext,

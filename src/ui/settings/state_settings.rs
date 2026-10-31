@@ -92,6 +92,7 @@ pub struct ValidationReport {
 
 #[derive(Debug, Clone, Default)]
 pub struct SettingsScreenState {
+    pub(crate) tool_validation: crate::ui::settings::tool_validation::ToolValidationState,
     pub active_tab: SettingsTab,
     pub name_row_editing: bool,
     pub name_row_buffer: String,

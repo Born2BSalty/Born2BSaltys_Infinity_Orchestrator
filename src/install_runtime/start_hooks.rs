@@ -235,8 +235,55 @@ pub fn reinstall_flip_at_install_click(
 
 #[cfg(test)]
 mod tests {
+
+    struct AmbientGuard(Option<std::path::PathBuf>);
+
+    impl AmbientGuard {
+        fn acquire() -> Self {
+            Self(crate::app::mod_downloads::active_modlist_dir())
+        }
+    }
+
+    impl Drop for AmbientGuard {
+        fn drop(&mut self) {
+            crate::app::mod_downloads::set_active_modlist_dir(self.0.take());
+        }
+    }
     use super::*;
     use crate::app::state::WizardState;
+
+    #[test]
+    fn ambient_guard_restores_previous_path_after_early_error_and_unwind() {
+        let _ambient_lock = crate::app::mod_downloads::AMBIENT_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _ambient_guard = AmbientGuard::acquire();
+        let previous = std::env::temp_dir().join("bio_start_hooks_guard_previous");
+        crate::app::mod_downloads::set_active_modlist_dir(Some(previous.clone()));
+
+        let fail = || -> Result<(), ()> {
+            let _guard = AmbientGuard::acquire();
+            crate::app::mod_downloads::set_active_modlist_dir(None);
+            Err(())?;
+            Ok(())
+        };
+        assert_eq!(fail(), Err(()));
+        assert_eq!(
+            crate::app::mod_downloads::active_modlist_dir(),
+            Some(previous.clone())
+        );
+
+        let unwind = std::panic::catch_unwind(|| {
+            let _guard = AmbientGuard::acquire();
+            crate::app::mod_downloads::set_active_modlist_dir(None);
+            panic!("exercise ambient restoration during unwind");
+        });
+        assert!(unwind.is_err());
+        assert_eq!(
+            crate::app::mod_downloads::active_modlist_dir(),
+            Some(previous)
+        );
+    }
 
     #[test]
     fn variant_from_step5_mirrors_bio_label_logic() {
@@ -414,6 +461,10 @@ mod tests {
 
     #[test]
     fn write_install_start_artifacts_errs_cleanly_when_share_code_ungeneratable() {
+        let _ambient_lock = crate::app::mod_downloads::AMBIENT_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _ambient_guard = AmbientGuard::acquire();
         let (store, store_path) = temp_registry_store("artifacts_pack_err");
         let mut registry = ModlistRegistry::default();
         registry.entries.push(installed_entry("MODLIST-ART-1"));
@@ -446,6 +497,10 @@ mod tests {
 
     #[test]
     fn write_install_start_artifacts_errs_when_modlist_not_in_registry() {
+        let _ambient_lock = crate::app::mod_downloads::AMBIENT_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _ambient_guard = AmbientGuard::acquire();
         let (store, store_path) = temp_registry_store("artifacts_no_entry");
         let mut registry = ModlistRegistry::default();
         let s = WizardState::default();
