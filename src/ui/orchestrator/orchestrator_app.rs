@@ -226,6 +226,8 @@ pub struct OrchestratorApp {
     pub nav: NavDestination,
     pub(crate) last_rendered_nav: NavDestination,
     pub wizard_state: WizardState,
+    pub(crate) catalog_screen_state: crate::ui::catalog::state_catalog::CatalogScreenState,
+    pub(crate) catalog_runtime: crate::ui::catalog::catalog_runtime::CatalogRuntime,
     pub settings_store: SettingsStore,
     pub dev_mode: bool,
     pub dev_mode_cli_flag: bool,
@@ -388,6 +390,8 @@ impl OrchestratorApp {
             nav: NavDestination::default(),
             last_rendered_nav: NavDestination::default(),
             wizard_state,
+            catalog_screen_state: crate::ui::catalog::state_catalog::CatalogScreenState::default(),
+            catalog_runtime: crate::ui::catalog::catalog_runtime::CatalogRuntime::default(),
             settings_store: bootstrap.settings_store,
             dev_mode: effective_dev_mode,
             dev_mode_cli_flag: dev_mode,
@@ -635,7 +639,8 @@ impl OrchestratorApp {
     }
 
     const fn slow_workers_active(&self) -> bool {
-        self.install_size_worker_rx.is_some()
+        self.catalog_runtime.pending()
+            || self.install_size_worker_rx.is_some()
             || !self.pending_folder_deletes.is_empty()
             || self.manual_download_rx.is_some()
     }
@@ -1369,6 +1374,7 @@ impl eframe::App for OrchestratorApp {
 
         oauth_glue::poll_github_oauth_flow(self);
 
+        self.catalog_runtime.poll(&mut self.catalog_screen_state);
         self.poll_step2_channels();
         self.reconcile_scan_and_advance_log_imports();
         if self.step2_needs_repaint() {
@@ -1412,6 +1418,9 @@ impl eframe::App for OrchestratorApp {
                 elapsed: r.started_at.elapsed(),
             }
         });
+
+        self.notification_manager
+            .guard_language_recovery_escape(ctx);
 
         let history_has_items = self.notification_manager.has_history();
         let history_open = self.notification_manager.history_open;
@@ -1471,6 +1480,7 @@ impl eframe::App for OrchestratorApp {
     }
 
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        self.catalog_runtime.cancel();
         self.join_all_destination_prep_workers();
         self.flush_all_now();
     }
@@ -1519,6 +1529,7 @@ impl OrchestratorApp {
 
 impl Drop for OrchestratorApp {
     fn drop(&mut self) {
+        self.catalog_runtime.cancel();
         self.join_all_destination_prep_workers();
         self.flush_all_now();
         #[cfg(test)]
@@ -1555,7 +1566,15 @@ impl OrchestratorApp {
         if history_clicked {
             self.notification_manager.history_open = !self.notification_manager.history_open;
         }
+        self.notification_manager.set_language_recovery_enabled(
+            self.workspace_view.modlist_id.trim(),
+            self.workspace_view.step2.recovery_scan_generation,
+            self.wizard_state.step2.is_scanning,
+        );
         self.notification_manager.show(ctx, palette);
+        if let Some(action) = self.notification_manager.take_language_recovery_action() {
+            crate::ui::workspace::step2::step2_language_recovery::apply_recovery(self, action);
+        }
         self.notification_manager
             .render_history_popup(ctx, palette, !history_clicked);
     }
@@ -2487,3 +2506,7 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "orchestrator_language_recovery_tests.rs"]
+mod language_recovery_tests;

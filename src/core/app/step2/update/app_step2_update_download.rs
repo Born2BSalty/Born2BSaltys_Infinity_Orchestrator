@@ -5,14 +5,109 @@ use std::collections::{BTreeMap, HashSet};
 use std::fs;
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
-use std::sync::{Mutex, PoisonError};
+use std::sync::{Arc, Mutex, PoisonError};
 use std::thread;
 use std::time::{Duration, Instant};
 
 use crate::app::mod_downloads;
 use crate::app::state::{DownloadOrigin, Step2UpdateAsset, WizardState};
+
+static CATALOG_DESTINATIONS: Mutex<std::collections::BTreeSet<String>> =
+    Mutex::new(std::collections::BTreeSet::new());
+
+pub(crate) fn destination_key(path: &Path) -> String {
+    let absolute = std::path::absolute(path).unwrap_or_else(|_| path.to_path_buf());
+    let mut normalized = PathBuf::new();
+    for component in absolute.components() {
+        match component {
+            std::path::Component::CurDir => {}
+            std::path::Component::ParentDir => {
+                normalized.pop();
+            }
+            component => normalized.push(component.as_os_str()),
+        }
+    }
+    let mut prefix = normalized.as_path();
+    let mut missing = Vec::new();
+    let mut resolved = loop {
+        if let Ok(existing) = prefix.canonicalize() {
+            break existing;
+        }
+        if let (Some(name), Some(parent)) = (prefix.file_name(), prefix.parent()) {
+            missing.push(name.to_os_string());
+            prefix = parent;
+        } else {
+            break prefix.to_path_buf();
+        }
+    };
+    for name in missing.into_iter().rev() {
+        resolved.push(name);
+    }
+    let key = resolved
+        .to_string_lossy()
+        .replace('\\', "/")
+        .trim_end_matches('/')
+        .to_ascii_lowercase();
+    key.strip_prefix("//?/").unwrap_or(&key).to_string()
+}
+
+fn destinations_overlap(left: &str, right: &str) -> bool {
+    left == right
+        || left
+            .strip_prefix(right)
+            .is_some_and(|rest| rest.starts_with('/'))
+        || right
+            .strip_prefix(left)
+            .is_some_and(|rest| rest.starts_with('/'))
+}
+
+pub(crate) struct CatalogDestinationLease(Vec<String>);
+
+impl Drop for CatalogDestinationLease {
+    fn drop(&mut self) {
+        let mut destinations = CATALOG_DESTINATIONS
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        for key in &self.0 {
+            destinations.remove(key);
+        }
+    }
+}
+
+pub(crate) fn reserve_catalog_destination(
+    mods: &Path,
+    archives: &Path,
+    backups: &Path,
+) -> Result<CatalogDestinationLease, String> {
+    let keys = [mods, archives, backups]
+        .into_iter()
+        .map(destination_key)
+        .collect::<Vec<_>>();
+    let mut destinations = CATALOG_DESTINATIONS
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
+    if keys.iter().any(|key| {
+        destinations
+            .iter()
+            .any(|active| destinations_overlap(key, active))
+    }) {
+        return Err("A Catalog transfer using these folders is already running".to_string());
+    }
+    destinations.extend(keys.iter().cloned());
+    drop(destinations);
+    Ok(CatalogDestinationLease(keys))
+}
+
+pub(crate) fn catalog_destination_busy(path: &str) -> bool {
+    let key = destination_key(Path::new(path.trim()));
+    CATALOG_DESTINATIONS
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .iter()
+        .any(|active| destinations_overlap(&key, active))
+}
 
 pub const DOWNLOAD_POOL_SIZE: usize = 10;
 
@@ -107,6 +202,14 @@ pub(crate) fn start_step2_update_download_scoped(
     skipped: &HashSet<usize>,
     origin: DownloadOrigin,
 ) -> Result<(), DownloadRefusal> {
+    if catalog_destination_busy(&state.step1.mods_folder)
+        || catalog_destination_busy(&state.step1.mods_archive_folder)
+        || catalog_destination_busy(&state.step1.mods_backup_folder)
+    {
+        state.step2.scan_status =
+            "Wait for the Catalog transfer using these folders to finish".to_string();
+        return Err(DownloadRefusal::AlreadyRunning);
+    }
     if state.step2.update_selected_download_running {
         return Err(DownloadRefusal::AlreadyRunning);
     }
@@ -144,6 +247,20 @@ pub(crate) fn start_step2_update_download_scoped(
         let _ = tx.send(Step2UpdateDownloadEvent::Finished(result));
     });
     Ok(())
+}
+
+pub(crate) fn spawn_global_download(
+    archive_dir: PathBuf,
+    assets: Vec<Step2UpdateAsset>,
+    cancel: Arc<AtomicBool>,
+) -> Receiver<Step2UpdateDownloadEvent> {
+    let (tx, rx) = mpsc::channel();
+    thread::spawn(move || {
+        let result =
+            run_download_cancellable(&archive_dir, &assets, &HashSet::new(), &tx, Some(&cancel));
+        let _ = tx.send(Step2UpdateDownloadEvent::Finished(result));
+    });
+    rx
 }
 
 fn refuse_start(state: &mut WizardState, status: &str) {
@@ -380,6 +497,15 @@ fn run_download(
     skipped: &HashSet<usize>,
     tx: &Sender<Step2UpdateDownloadEvent>,
 ) -> Step2UpdateDownloadResult {
+    run_download_cancellable(archive_dir, assets, skipped, tx, None)
+}
+fn run_download_cancellable(
+    archive_dir: &Path,
+    assets: &[Step2UpdateAsset],
+    skipped: &HashSet<usize>,
+    tx: &Sender<Step2UpdateDownloadEvent>,
+    cancel: Option<&AtomicBool>,
+) -> Step2UpdateDownloadResult {
     let mut result = Step2UpdateDownloadResult::default();
     if let Err(err) = fs::create_dir_all(archive_dir) {
         let error = format!("Mods Archive: {err}");
@@ -410,7 +536,7 @@ fn run_download(
         for _ in 0..DOWNLOAD_POOL_SIZE.min(groups.len()) {
             scope.spawn(|| {
                 while let Some(group) = groups.get(next.fetch_add(1, Ordering::SeqCst)) {
-                    let group_outcomes = download_group(&agent, group, tx);
+                    let group_outcomes = download_group(&agent, group, tx, cancel);
                     outcomes
                         .lock()
                         .unwrap_or_else(PoisonError::into_inner)
@@ -501,10 +627,11 @@ fn download_group(
     agent: &ureq::Agent,
     group: &DownloadGroup,
     tx: &Sender<Step2UpdateDownloadEvent>,
+    cancel: Option<&AtomicBool>,
 ) -> Vec<AssetOutcome> {
     let mut outcomes = Vec::new();
     for (url, members) in &group.streams {
-        let outcome = stream_to_destination(agent, url, &group.destination, members, tx);
+        let outcome = stream_to_destination(agent, url, &group.destination, members, tx, cancel);
         for &index in members {
             let (final_bytes, total, error) = match &outcome {
                 Ok((bytes, total)) => (*bytes, *total, None),
@@ -532,13 +659,15 @@ fn stream_to_destination(
     destination: &Path,
     members: &[usize],
     tx: &Sender<Step2UpdateDownloadEvent>,
+    cancel: Option<&AtomicBool>,
 ) -> Result<AssetBytes, StreamFailure> {
     let part = part_path(destination);
-    let outcome = stream_into_part(agent, url, &part, members, tx).and_then(|(bytes, total)| {
-        fs::rename(&part, destination)
-            .map(|()| (bytes, total))
-            .map_err(|err| StreamFailure::new(bytes, total, err.to_string()))
-    });
+    let outcome =
+        stream_into_part(agent, url, &part, members, tx, cancel).and_then(|(bytes, total)| {
+            fs::rename(&part, destination)
+                .map(|()| (bytes, total))
+                .map_err(|err| StreamFailure::new(bytes, total, err.to_string()))
+        });
     if outcome.is_err() {
         let _ = fs::remove_file(&part);
     }
@@ -551,7 +680,11 @@ fn stream_into_part(
     part: &Path,
     members: &[usize],
     tx: &Sender<Step2UpdateDownloadEvent>,
+    cancel: Option<&AtomicBool>,
 ) -> Result<AssetBytes, StreamFailure> {
+    if cancel.is_some_and(|token| token.load(Ordering::Relaxed)) {
+        return Err(StreamFailure::new(0, None, "Canceled".to_string()));
+    }
     let response = agent
         .get(url)
         .set("User-Agent", "BIO-update-download")
@@ -571,6 +704,9 @@ fn stream_into_part(
     let mut buffer = vec![0_u8; READ_CHUNK];
     let (mut done, mut sent_done, mut sent_at) = (0_u64, 0_u64, Instant::now());
     loop {
+        if cancel.is_some_and(|token| token.load(Ordering::Relaxed)) {
+            return Err(StreamFailure::new(done, total, "Canceled".to_string()));
+        }
         let read = match reader.read(&mut buffer) {
             Ok(0) => break,
             Ok(read) => read,

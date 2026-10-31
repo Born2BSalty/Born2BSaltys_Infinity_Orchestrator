@@ -112,3 +112,68 @@ fn active_item(tp_file: &str, component_id: &str, order: usize) -> CompatActiveI
         order: Some(order),
     }
 }
+
+#[test]
+fn adrian_multiline_optional_components_accept_every_main_alternative() {
+    let block = [
+        "REQUIRE_PREDICATE ((MOD_IS_INSTALLED ~adrian.tp2~ ~0~)",
+        " OR (MOD_IS_INSTALLED ~adrian.tp2~ ~1~)",
+        " OR (MOD_IS_INSTALLED ~adrian.tp2~ ~2~)) @130",
+    ];
+    let parsed = crate::parser::compat_dependency_expr::collect_component_requirements(&block);
+    assert_eq!(parsed.len(), 1);
+    let rules = parsed
+        .into_iter()
+        .map(|parsed| ComponentRequirement {
+            raw_line: parsed.raw_line,
+            targets: parsed
+                .targets
+                .into_iter()
+                .map(|target| ComponentRequirementTarget {
+                    target_mod: target.target_mod,
+                    target_component_id: target.target_component_id,
+                })
+                .collect(),
+            message: parsed.message,
+        })
+        .collect::<Vec<_>>();
+    for optional in ["10", "20", "30"] {
+        let mut cache = HashMap::from([(
+            "adrian.tp2".to_string(),
+            HashMap::from([(optional.to_string(), rules.clone())]),
+        )]);
+        for main in ["0", "1", "2"] {
+            for mode in [
+                DependencyEvalMode::MissingOnly,
+                DependencyEvalMode::MissingThenOrder,
+            ] {
+                assert!(
+                    scan_dependency_hit(
+                        "adrian.tp2",
+                        optional,
+                        Some(1),
+                        &[active_item("adrian.tp2", main, 0)],
+                        &mut cache,
+                        mode
+                    )
+                    .is_none(),
+                    "main {main}, optional {optional}"
+                );
+            }
+        }
+        let missing = scan_dependency_hit(
+            "adrian.tp2",
+            optional,
+            Some(1),
+            &[],
+            &mut cache,
+            DependencyEvalMode::MissingOnly,
+        )
+        .expect("main component is required");
+        assert_eq!(missing.kind, "missing_dep");
+        assert_eq!(
+            missing.message,
+            "Requires one of: adrian #0 OR adrian #1 OR adrian #2"
+        );
+    }
+}

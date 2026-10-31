@@ -13,17 +13,45 @@ fn output(stdout: &str, stderr: &str, success: bool) -> ProbeOutput {
     }
 }
 
-fn fixture_file(name: &str) -> PathBuf {
+struct FixtureFile(PathBuf);
+
+impl std::ops::Deref for FixtureFile {
+    type Target = Path;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl AsRef<Path> for FixtureFile {
+    fn as_ref(&self) -> &Path {
+        &self.0
+    }
+}
+
+impl Drop for FixtureFile {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.0);
+        if let Some(parent) = self.0.parent() {
+            let _ = std::fs::remove_dir(parent);
+        }
+    }
+}
+
+fn fixture_file(name: &str) -> FixtureFile {
     let unique = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_nanos();
-    let root = Path::new("E:/agentic-harness/codex/projects/inactive/bio/control/verification/tools-guidance-20261030/fixtures")
-        .join(format!("{}_{}", std::process::id(), unique));
-    std::fs::create_dir_all(&root).unwrap();
+    let root = std::env::temp_dir().join(format!(
+        "bio_tool_validation_{}_{}",
+        std::process::id(),
+        unique
+    ));
+    std::fs::create_dir(&root).unwrap();
     let path = root.join(name);
     std::fs::write(&path, b"controlled test fixture").unwrap();
-    path
+    FixtureFile(path)
 }
 
 fn fake_ticket() -> ProbeTicket {

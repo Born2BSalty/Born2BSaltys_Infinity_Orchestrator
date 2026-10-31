@@ -14,10 +14,11 @@ use crate::ui::workspace::step2_log_glue;
 use crate::ui::workspace::workspace_state_loader::{extract_wlb_inputs, reattach_wlb_inputs};
 
 pub fn snapshot_current_selection(orchestrator: &mut OrchestratorApp) {
-    let snapshot = RescanSnapshot {
+    let mut snapshot = RescanSnapshot {
         bgee: capture_tab(&orchestrator.wizard_state.step2.bgee_mods),
         bg2ee: capture_tab(&orchestrator.wizard_state.step2.bg2ee_mods),
     };
+    super::step2_language_recovery::include_unresolved(orchestrator, &mut snapshot);
     let step2 = &mut orchestrator.workspace_view.step2;
     step2.rescan_snapshot = Some(snapshot);
     step2.rescan_drop_warning = None;
@@ -25,10 +26,11 @@ pub fn snapshot_current_selection(orchestrator: &mut OrchestratorApp) {
 }
 
 pub fn arm_post_download_snapshot(orchestrator: &mut OrchestratorApp) {
-    let snapshot = RescanSnapshot {
+    let mut snapshot = RescanSnapshot {
         bgee: capture_tab(&orchestrator.wizard_state.step2.bgee_mods),
         bg2ee: capture_tab(&orchestrator.wizard_state.step2.bg2ee_mods),
     };
+    super::step2_language_recovery::include_unresolved(orchestrator, &mut snapshot);
     orchestrator
         .workspace_view
         .step2
@@ -86,10 +88,15 @@ fn reconcile_completed_scan(orchestrator: &mut OrchestratorApp) {
         workspace.last_rescanned_mods_source = current_source;
     }
 
-    let snapshot = orchestrator.workspace_view.step2.rescan_snapshot.take();
+    orchestrator.workspace_view.step2.recovery_scan_generation =
+        super::step2_language_recovery::next_scan_generation();
     if orchestrator.wizard_state.step2.last_scan_report.is_none() {
+        if let Some(snapshot) = orchestrator.workspace_view.step2.rescan_snapshot.clone() {
+            super::step2_language_recovery::persist_completed_snapshot(orchestrator, &snapshot);
+        }
         return;
     }
+    let snapshot = orchestrator.workspace_view.step2.rescan_snapshot.take();
     let Some(snapshot) = snapshot else {
         tick_settled_log_ticks(orchestrator);
         return;
@@ -112,20 +119,26 @@ fn reconcile_completed_scan(orchestrator: &mut OrchestratorApp) {
         orchestrator.wizard_state.step2.scan_status = format!("Compat rules load failed: {err}");
     }
 
-    let mut unrestored =
-        collect_unrestored(&snapshot.bgee, &orchestrator.wizard_state.step2.bgee_mods);
-    unrestored.extend(collect_unrestored(
-        &snapshot.bg2ee,
-        &orchestrator.wizard_state.step2.bg2ee_mods,
-    ));
-
+    super::step2_language_recovery::persist_completed_snapshot(orchestrator, &snapshot);
     recompute_mod_checked(&mut orchestrator.wizard_state.step2.bgee_mods);
     recompute_mod_checked(&mut orchestrator.wizard_state.step2.bg2ee_mods);
 
     let max_order = max_selected_order(&orchestrator.wizard_state.step2.bgee_mods).max(
         max_selected_order(&orchestrator.wizard_state.step2.bg2ee_mods),
     );
-    orchestrator.wizard_state.step2.next_selection_order = max_order + 1;
+    let unresolved_max = orchestrator
+        .workspace_state
+        .get(&modlist_id)
+        .map_or(0, |workspace| {
+            workspace
+                .selection_recovery
+                .values()
+                .flat_map(|recovery| &recovery.unresolved)
+                .map(|entry| entry.position + 1)
+                .max()
+                .unwrap_or(0)
+        });
+    orchestrator.wizard_state.step2.next_selection_order = max_order.max(unresolved_max) + 1;
 
     if std::mem::take(&mut orchestrator.workspace_view.step2.resume_pending) {
         orchestrator.wizard_state.step3.bgee_items =
@@ -136,15 +149,24 @@ fn reconcile_completed_scan(orchestrator: &mut OrchestratorApp) {
 
     tick_settled_log_ticks(orchestrator);
 
-    if unrestored.is_empty() {
-        orchestrator.workspace_view.step2.rescan_drop_warning = None;
-        return;
-    }
+    let mut unrestored =
+        collect_unrestored(&snapshot.bgee, &orchestrator.wizard_state.step2.bgee_mods);
+    unrestored.extend(collect_unrestored(
+        &snapshot.bg2ee,
+        &orchestrator.wizard_state.step2.bg2ee_mods,
+    ));
     orchestrator.workspace_view.step2.rescan_drop_warning =
-        Some(format_unrestored_status(&unrestored));
-    orchestrator
-        .notification_manager
-        .warn_persistent(format_unrestored_notification(&unrestored));
+        (!unrestored.is_empty()).then(|| format_unrestored_status(&unrestored));
+    if !unrestored.is_empty()
+        && !orchestrator
+            .workspace_state
+            .contains_key(modlist_id.as_str())
+    {
+        orchestrator
+            .notification_manager
+            .warn_persistent(format_unrestored_notification(&unrestored));
+    }
+    super::step2_language_recovery::notify_unresolved(orchestrator);
 }
 
 fn take_settled_log_ticks(step2: &mut Step2State) -> BTreeSet<String> {

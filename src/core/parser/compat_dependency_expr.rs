@@ -17,16 +17,83 @@ pub(crate) struct ParsedDependencyTarget {
 }
 
 pub(crate) fn collect_component_requirements(block: &[&str]) -> Vec<ParsedComponentRequirement> {
-    let mut out = Vec::<ParsedComponentRequirement>::new();
-    for line in block {
-        let Some(requirement) =
-            parse_requirement_line(line).or_else(|| parse_predicate_requirement_line(line))
-        else {
-            continue;
-        };
-        out.push(requirement);
+    let cleaned = strip_inline_comments(&block.join("\n"));
+    let lines = cleaned.lines().collect::<Vec<_>>();
+    let mut out = Vec::new();
+    let mut index = 0;
+    while let Some(line) = lines.get(index) {
+        let mut statement = line.trim().to_string();
+        index += 1;
+        if statement
+            .to_ascii_uppercase()
+            .starts_with("REQUIRE_PREDICATE")
+        {
+            while let Some(next) = lines.get(index) {
+                let continues = quote_after(&statement, None).map_or_else(
+                    || is_predicate_continuation(next),
+                    |quote| quote_closes_later(quote, &lines[index..]),
+                );
+                if !continues {
+                    break;
+                }
+                statement.push(' ');
+                statement.push_str(next.trim());
+                index += 1;
+            }
+        }
+        if let Some(requirement) = parse_requirement_line(&statement)
+            .or_else(|| parse_predicate_requirement_line(&statement))
+        {
+            out.push(requirement);
+        }
     }
     out
+}
+
+fn has_open_quote(input: &str) -> bool {
+    quote_after(input, None).is_some()
+}
+
+fn quote_after(input: &str, mut quote: Option<char>) -> Option<char> {
+    for ch in input.chars() {
+        if quote == Some(ch) {
+            quote = None;
+        } else if quote.is_none() && matches!(ch, '~' | '"') {
+            quote = Some(ch);
+        }
+    }
+    quote
+}
+
+fn quote_closes_later(initial: char, lines: &[&str]) -> bool {
+    let mut quote = Some(initial);
+    for line in lines {
+        quote = quote_after(line, quote);
+        if quote.is_none() {
+            return true;
+        }
+    }
+    false
+}
+
+fn is_predicate_continuation(line: &str) -> bool {
+    let trimmed = line.trim();
+    if trimmed.is_empty() || trimmed.starts_with('@') {
+        return true;
+    }
+    let tokens = tokenize(trimmed);
+    matches!(
+        tokens.first(),
+        Some(
+            Token::LParen
+                | Token::RParen
+                | Token::And
+                | Token::Or
+                | Token::Not
+                | Token::Bang
+                | Token::Atom(_)
+        )
+    ) || matches!(tokens.first(), Some(Token::Ident(name)) if matches!(name.to_ascii_uppercase().as_str(), "MOD_IS_INSTALLED" | "GAME_IS" | "IS_AN_INT"))
 }
 
 pub(crate) fn parse_requirement_line(line: &str) -> Option<ParsedComponentRequirement> {
@@ -94,7 +161,21 @@ pub(crate) fn parse_predicate_requirement_line(line: &str) -> Option<ParsedCompo
 pub(crate) fn parse_mod_is_installed_dependency_targets(
     input: &str,
 ) -> Option<Vec<ParsedDependencyTarget>> {
+    if has_open_quote(input) {
+        return None;
+    }
     let tokens = tokenize(input);
+    let mut depth = 0usize;
+    for token in &tokens {
+        match token {
+            Token::LParen => depth += 1,
+            Token::RParen => depth = depth.checked_sub(1)?,
+            _ => {}
+        }
+    }
+    if depth != 0 {
+        return None;
+    }
     parse_mod_is_installed_or_chain(&tokens)
         .or_else(|| parse_mod_is_installed_with_int_marker(&tokens))
 }
@@ -102,9 +183,11 @@ pub(crate) fn parse_mod_is_installed_dependency_targets(
 fn parse_mod_is_installed_or_chain(tokens: &[Token]) -> Option<Vec<ParsedDependencyTarget>> {
     let mut index = 0usize;
     let mut out = Vec::<ParsedDependencyTarget>::new();
+    let mut depth = 0usize;
 
     loop {
         while matches!(tokens.get(index), Some(Token::LParen)) {
+            depth += 1;
             index += 1;
         }
 
@@ -122,6 +205,7 @@ fn parse_mod_is_installed_or_chain(tokens: &[Token]) -> Option<Vec<ParsedDepende
         index += 1;
 
         while matches!(tokens.get(index), Some(Token::RParen)) {
+            depth = depth.checked_sub(1)?;
             index += 1;
         }
 
@@ -139,7 +223,7 @@ fn parse_mod_is_installed_or_chain(tokens: &[Token]) -> Option<Vec<ParsedDepende
         index += 1;
     }
 
-    if out.is_empty() {
+    if out.is_empty() || depth != 0 {
         return None;
     }
 
@@ -363,41 +447,45 @@ fn token_value(token: &Token) -> Option<String> {
     }
 }
 
-fn strip_inline_comments(line: &str) -> String {
-    let chars: Vec<char> = line.chars().collect();
+fn strip_inline_comments(input: &str) -> String {
+    let mut chars = input.chars().peekable();
     let mut out = String::new();
-    let mut index = 0usize;
-    let mut quote = None::<char>;
-
-    while index < chars.len() {
-        let ch = chars[index];
+    let mut quote = None;
+    let mut block_comment = false;
+    let mut line_comment = false;
+    while let Some(ch) = chars.next() {
         if let Some(active) = quote {
             out.push(ch);
             if ch == active {
                 quote = None;
             }
-            index += 1;
-            continue;
-        }
-
-        if ch == '~' || ch == '"' {
+        } else if line_comment {
+            if ch == '\n' {
+                line_comment = false;
+                out.push(ch);
+            }
+        } else if block_comment {
+            if ch == '*' && chars.peek() == Some(&'/') {
+                chars.next();
+                block_comment = false;
+                out.push(' ');
+            } else if ch == '\n' {
+                out.push(ch);
+            }
+        } else if matches!(ch, '~' | '"') {
             quote = Some(ch);
             out.push(ch);
-            index += 1;
-            continue;
+        } else if ch == '/' && chars.peek() == Some(&'/') {
+            chars.next();
+            line_comment = true;
+        } else if ch == '/' && chars.peek() == Some(&'*') {
+            chars.next();
+            block_comment = true;
+            out.push(' ');
+        } else {
+            out.push(ch);
         }
-
-        if ch == '/' && chars.get(index + 1) == Some(&'/') {
-            break;
-        }
-        if ch == '/' && chars.get(index + 1) == Some(&'*') {
-            break;
-        }
-
-        out.push(ch);
-        index += 1;
     }
-
     out
 }
 

@@ -40,7 +40,40 @@ pub struct PromptOverride {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
+pub struct UnresolvedSelection {
+    pub original: ComponentRef,
+    pub position: usize,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct RetainedLanguageAnswers {
+    pub original: ComponentRef,
+    pub target: ComponentRef,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SelectionRecovery {
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub unresolved: Vec<UnresolvedSelection>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub retained_answers: Vec<RetainedLanguageAnswers>,
+}
+
+impl SelectionRecovery {
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        self.unresolved.is_empty() && self.retained_answers.is_empty()
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct ModlistWorkspaceState {
+    #[serde(skip_serializing_if = "HashMap::is_empty")]
+    pub selection_recovery: HashMap<String, SelectionRecovery>,
+
     pub order_bgee: Vec<ComponentRef>,
 
     pub order_bg2ee: Vec<ComponentRef>,
@@ -76,7 +109,10 @@ pub struct ModlistWorkspaceState {
 impl ModlistWorkspaceState {
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.order_bgee.is_empty()
+        self.selection_recovery
+            .values()
+            .all(SelectionRecovery::is_empty)
+            && self.order_bgee.is_empty()
             && self.order_bg2ee.is_empty()
             && self.order_iwdee.is_empty()
             && self.expand_state.is_empty()

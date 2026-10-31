@@ -254,12 +254,58 @@ pub(crate) fn save_user_mod_download_source_block(
     source_block: &str,
     target_path: Option<&Path>,
 ) -> Result<(), String> {
-    ensure_mod_downloads_files().map_err(|err| err.to_string())?;
+    save_source_block_with_context(
+        tp2,
+        label,
+        source_id,
+        allow_source_id_change,
+        source_block,
+        target_path,
+        false,
+    )
+}
+pub(crate) fn save_global_mod_download_source_block(
+    tp2: &str,
+    label: &str,
+    source_id: &str,
+    allow_source_id_change: bool,
+    source_block: &str,
+    target_path: Option<&Path>,
+) -> Result<(), String> {
+    save_source_block_with_context(
+        tp2,
+        label,
+        source_id,
+        allow_source_id_change,
+        source_block,
+        target_path,
+        true,
+    )
+}
+fn save_source_block_with_context(
+    tp2: &str,
+    label: &str,
+    source_id: &str,
+    allow_source_id_change: bool,
+    source_block: &str,
+    target_path: Option<&Path>,
+    global: bool,
+) -> Result<(), String> {
+    if !global {
+        ensure_mod_downloads_files().map_err(|err| err.to_string())?;
+    }
     let path = target_path.map_or_else(mod_downloads_user_path, Path::to_path_buf);
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|err| err.to_string())?;
     }
-    let content = fs::read_to_string(&path).unwrap_or_default();
+    let content = match fs::read_to_string(&path) {
+        Ok(text) => text,
+        Err(err) if err.kind() == io::ErrorKind::NotFound => String::new(),
+        Err(err) => return Err(err.to_string()),
+    };
+    if global && !content.trim().is_empty() {
+        toml::from_str::<ModDownloadsFile>(&content).map_err(|err| err.to_string())?;
+    }
     if source_block.trim().is_empty() {
         let updated = remove_source_block(&content, tp2, source_id);
         toml::from_str::<ModDownloadsFile>(&updated).map_err(|err| err.to_string())?;
@@ -278,9 +324,13 @@ pub(crate) fn save_user_mod_download_source_block(
     }
     let source_input = normalize_source_save_input(tp2, label, source_block);
     let target_mod_exists = find_mod_block(&content, &source_input.tp2).is_some()
-        || !load_mod_download_sources()
-            .find_sources(&source_input.tp2)
-            .is_empty();
+        || !(if global {
+            load_two_tier_sources()
+        } else {
+            load_mod_download_sources()
+        })
+        .find_sources(&source_input.tp2)
+        .is_empty();
     if !target_mod_exists {
         if !source_input.has_mod_parent {
             return Err(new_source_parent_error());

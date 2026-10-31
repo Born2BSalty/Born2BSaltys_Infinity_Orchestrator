@@ -223,9 +223,15 @@ pub fn extract_workspace_state_from_wizard(
     wizard_state: &WizardState,
     prior: &ModlistWorkspaceState,
 ) -> ModlistWorkspaceState {
+    let first_tab = game_authority::first_slot_tab(&wizard_state.step1.game_install);
+    let prior_first = if first_tab == "IWDEE" {
+        &prior.order_iwdee
+    } else {
+        &prior.order_bgee
+    };
     let first_order = order_for_tab(
         order_from_items(&wizard_state.step3.bgee_items),
-        &prior.order_bgee,
+        prior_first,
         wizard_state.step2.bgee_mods.is_empty(),
     );
     let second_order = order_for_tab(
@@ -234,6 +240,10 @@ pub fn extract_workspace_state_from_wizard(
         wizard_state.step2.bg2ee_mods.is_empty(),
     );
 
+    let mut selection_recovery = prior.selection_recovery.clone();
+    let first_order = merge_unresolved_order(first_order, selection_recovery.get_mut(first_tab));
+    let second_order = merge_unresolved_order(second_order, selection_recovery.get_mut("BG2EE"));
+    selection_recovery.retain(|_, recovery| !recovery.is_empty());
     let order_iwdee = if wizard_state.step1.game_install == "IWDEE" {
         first_order.clone()
     } else {
@@ -257,7 +267,12 @@ pub fn extract_workspace_state_from_wizard(
     );
 
     ModlistWorkspaceState {
-        order_bgee: first_order,
+        selection_recovery,
+        order_bgee: if first_tab == "IWDEE" {
+            prior.order_bgee.clone()
+        } else {
+            first_order
+        },
         order_bg2ee: second_order,
         order_iwdee,
         expand_state: prior.expand_state.clone(),
@@ -271,6 +286,44 @@ pub fn extract_workspace_state_from_wizard(
         mods_source: prior.mods_source,
         last_rescanned_mods_source: prior.last_rescanned_mods_source,
     }
+}
+
+pub(crate) fn same_component(a: &ComponentRef, b: &ComponentRef) -> bool {
+    a.tp2.eq_ignore_ascii_case(&b.tp2) && a.id == b.id && a.language == b.language
+}
+
+pub(crate) fn merge_unresolved_order(
+    mut order: Vec<ComponentRef>,
+    recovery: Option<&mut crate::registry::workspace_model::SelectionRecovery>,
+) -> Vec<ComponentRef> {
+    let Some(recovery) = recovery else {
+        return order;
+    };
+    recovery.unresolved.sort_by_key(|entry| entry.position);
+    let mut previous_position = None;
+    for entry in &recovery.unresolved {
+        if order
+            .iter()
+            .any(|active| same_component(active, &entry.original))
+        {
+            continue;
+        }
+        let position = entry
+            .position
+            .max(previous_position.map_or(0, |value| value + 1))
+            .min(order.len());
+        order.insert(position, entry.original.clone());
+        previous_position = Some(position);
+    }
+    for entry in &mut recovery.unresolved {
+        if let Some(position) = order
+            .iter()
+            .position(|active| same_component(active, &entry.original))
+        {
+            entry.position = position;
+        }
+    }
+    order
 }
 
 fn order_from_items(items: &[Step3ItemState]) -> Vec<ComponentRef> {

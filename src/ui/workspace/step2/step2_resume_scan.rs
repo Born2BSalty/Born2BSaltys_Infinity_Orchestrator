@@ -35,9 +35,7 @@ pub fn maybe_trigger_resume_scan(
 
     orchestrator.wizard_state.step1.mods_folder = folder;
 
-    let first_order = if orchestrator.wizard_state.step1.game_install == "IWDEE"
-        && !workspace.order_iwdee.is_empty()
-    {
+    let first_order = if orchestrator.wizard_state.step1.game_install == "IWDEE" {
         &workspace.order_iwdee
     } else {
         &workspace.order_bgee
@@ -477,7 +475,7 @@ mod tests {
     }
 
     #[test]
-    fn manual_wlb_resume_iwdee_prefers_canonical_and_falls_back_without_duplicates() {
+    fn manual_wlb_resume_iwdee_uses_only_canonical_order_without_duplicates() {
         for canonical in [false, true] {
             let mut app = OrchestratorApp::new_isolated_for_test(if canonical {
                 "manual-wlb-iwdee-canonical"
@@ -523,15 +521,152 @@ mod tests {
                 .rescan_snapshot
                 .as_ref()
                 .expect("armed snapshot");
-            assert_eq!(snapshot.bgee.len(), 1);
-            let expected = if canonical { current } else { legacy };
-            assert_eq!(snapshot.bgee[0].tp2_upper, expected.tp2);
-            assert_eq!(snapshot.bgee[0].language, expected.language);
-            assert_eq!(snapshot.bgee[0].wlb_inputs, expected.wlb_inputs);
+            assert_eq!(snapshot.bgee.len(), usize::from(canonical));
+            if canonical {
+                assert_eq!(snapshot.bgee[0].tp2_upper, current.tp2);
+                assert_eq!(snapshot.bgee[0].language, current.language);
+                assert_eq!(snapshot.bgee[0].wlb_inputs, current.wlb_inputs);
+            }
             assert_eq!(
                 snapshot.bg2ee,
                 [] as [crate::ui::workspace::state_workspace::RescanSelection; 0]
             );
         }
+    }
+
+    fn language_cycle_mods(selected: bool) -> Vec<Step2ModState> {
+        let components = [11, 0, 5]
+            .into_iter()
+            .enumerate()
+            .map(|(index, id)| {
+                let mut component = comp(&id.to_string());
+                component.raw_line =
+                    format!("~ARESTORATIONP/ARESTORATIONP.TP2~ #1 #{id} // Component {id}");
+                component.checked = selected && index < 2;
+                component.selected_order = component.checked.then_some(index + 1);
+                if selected && index == 0 {
+                    component.raw_line.push_str(" // @wlb-inputs: yes");
+                }
+                component
+            })
+            .collect();
+        vec![mod_state(
+            "arestorationp",
+            "ARESTORATIONP/ARESTORATIONP.TP2",
+            components,
+        )]
+    }
+
+    fn language_cycle_app(tag: &str) -> OrchestratorApp {
+        let mut app = OrchestratorApp::new_isolated_for_test(tag);
+        app.workspace_view.modlist_id = "LANGUAGECYCLE".to_string();
+        app.workspace_view.loaded_workspace_id = Some("LANGUAGECYCLE".to_string());
+        app.wizard_state.step1.game_install = "BGEE".to_string();
+        app
+    }
+
+    fn language_cycle_reopen(
+        store: &crate::registry::store_workspace::WorkspaceStore,
+        tag: &str,
+    ) -> OrchestratorApp {
+        let mut app = language_cycle_app(tag);
+        let saved = store.load().expect("load persisted workspace");
+        let entry = ModlistEntry {
+            id: "LANGUAGECYCLE".to_string(),
+            game: Game::BGEE,
+            ..Default::default()
+        };
+        workspace_state_loader::populate_wizard_state_from_workspace(
+            &saved,
+            &entry,
+            &app.settings_store,
+            &mut app.wizard_state,
+        );
+        assert_eq!(
+            app.wizard_state.step2.bgee_mods,
+            Vec::<Step2ModState>::new()
+        );
+        assert_eq!(
+            app.wizard_state.step3.bgee_items,
+            Vec::<Step3ItemState>::new()
+        );
+        app.workspace_view.step2.rescan_snapshot = Some(RescanSnapshot {
+            bgee: snapshot_from_order(&saved.order_bgee),
+            bg2ee: snapshot_from_order(&saved.order_bg2ee),
+        });
+        app.workspace_view.step2.resume_pending = true;
+        app.workspace_view.step2.was_scanning = true;
+        app.workspace_state.insert(entry.id.clone(), saved);
+        app.workspace_stores.insert(entry.id, store.clone());
+        app.wizard_state.step2.bgee_mods = language_cycle_mods(false);
+        app.wizard_state.step2.last_scan_report =
+            Some(crate::app::state::Step2ScanReport::default());
+        assert!(step2_rescan_reconcile::reconcile_on_scan_complete(&mut app));
+        assert!(!app.workspace_view.step2.resume_pending);
+        assert!(app.workspace_view.step2.rescan_snapshot.is_none());
+        app
+    }
+
+    fn language_cycle_saved_store(tag: &str) -> crate::registry::store_workspace::WorkspaceStore {
+        let mut app = language_cycle_app(tag);
+        app.wizard_state.step2.bgee_mods = language_cycle_mods(true);
+        crate::ui::workspace::workspace_header::save_draft(&mut app);
+        let store = app.workspace_stores["LANGUAGECYCLE"].clone();
+        let saved = store.load().expect("save draft wrote workspace");
+        assert_eq!(saved.order_bgee.len(), 2);
+        assert_eq!(saved.order_bgee[0].language, 1);
+        assert_eq!(saved.order_bgee[1].language, 1);
+        assert_eq!(saved.order_bgee[0].wlb_inputs.as_deref(), Some("yes"));
+        let durable = crate::registry::store_workspace::WorkspaceStore::new_with_path(
+            std::env::temp_dir().join(format!("{tag}-{}-workspace.json", std::process::id())),
+        );
+        app.workspace_stores
+            .insert("LANGUAGECYCLE".to_string(), durable.clone());
+        app.persistence_cycle.last_saved_workspaces.clear();
+        eframe::App::on_exit(&mut app, None);
+        assert_eq!(durable.load().expect("normal exit flushed"), saved);
+        durable
+    }
+
+    #[test]
+    fn language_cycle_current_one_survives_save_exit_and_cold_reconcile() {
+        let store = language_cycle_saved_store("language-cycle-current");
+        let mut app = language_cycle_reopen(&store, "language-cycle-current-reopen");
+        let components = &app.wizard_state.step2.bgee_mods[0].components;
+        assert!(components[0].checked);
+        assert!(components[1].checked);
+        assert!(!components[2].checked);
+        assert_eq!(components[0].selected_order, Some(1));
+        assert_eq!(components[1].selected_order, Some(2));
+        assert!(components[0].raw_line.contains("@wlb-inputs: yes"));
+        assert!(app.workspace_view.step2.rescan_drop_warning.is_none());
+        let before = store.load().expect("before second save");
+        crate::ui::workspace::workspace_header::save_draft(&mut app);
+        eframe::App::on_exit(&mut app, None);
+        assert_eq!(store.load().expect("second save"), before);
+    }
+
+    #[test]
+    fn language_cycle_legacy_zero_mismatch_survives_partial_restore_save() {
+        let store = language_cycle_saved_store("language-cycle-legacy");
+        let mut legacy = store.load().expect("current workspace");
+        legacy.order_bgee[0].language = 0;
+        store.save(&legacy).expect("legacy zero writer fixture");
+        let mut app = language_cycle_reopen(&store, "language-cycle-legacy-reopen");
+        let components = &app.wizard_state.step2.bgee_mods[0].components;
+        assert!(!components[0].checked);
+        assert!(components[1].checked);
+        assert!(!components[2].checked);
+        assert_eq!(components[1].selected_order, Some(2));
+        assert!(app.workspace_view.step2.rescan_drop_warning.is_some());
+        assert_eq!(store.load().expect("before later save"), legacy);
+        crate::ui::workspace::workspace_header::save_draft(&mut app);
+        eframe::App::on_exit(&mut app, None);
+        let after = store.load().expect("after later save");
+        assert_eq!(after.order_bgee, legacy.order_bgee);
+        let reopened = language_cycle_reopen(&store, "language-cycle-legacy-reopen-again");
+        assert!(reopened.workspace_view.step2.rescan_drop_warning.is_some());
+        assert!(!reopened.wizard_state.step2.bgee_mods[0].components[0].checked);
+        assert!(reopened.wizard_state.step2.bgee_mods[0].components[1].checked);
     }
 }

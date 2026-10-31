@@ -51,6 +51,7 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp, ctx: &egui:
         NavDestination::Home => page_home::render(ui, orchestrator, ctx),
         NavDestination::Install => page_install::render(ui, orchestrator, ctx),
         NavDestination::Create => crate::ui::create::page_create::render(ui, orchestrator, ctx),
+        NavDestination::Catalog => crate::ui::catalog::page_catalog::render(ui, orchestrator, ctx),
         NavDestination::Settings => page_settings::render(ui, orchestrator, ctx),
         NavDestination::Workspace { modlist_id } => match modlist_id {
             Some(id) => render_workspace(ui, orchestrator, &id, ctx),

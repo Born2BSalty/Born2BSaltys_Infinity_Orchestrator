@@ -207,3 +207,110 @@ fn ignores_broad_negated_group_for_negated_target_parser() {
         .is_none()
     );
 }
+
+#[test]
+fn loads_all_adrian_multiline_alternatives_for_each_optional_component() {
+    let root = test_root();
+    let tp2_path = root.0.join("adrian.tp2");
+    let text = [10, 20, 30].map(|component| format!(
+        "BEGIN @111\nDESIGNATED {component}\nREQUIRE_PREDICATE ((MOD_IS_INSTALLED ~adrian.tp2~ ~0~)\n OR (MOD_IS_INSTALLED ~adrian.tp2~ ~1~)\n OR (MOD_IS_INSTALLED ~adrian.tp2~ ~2~)) @130\nINCLUDE ~adrian/lib/content.tpa~\n"
+    )).join("\n");
+    std::fs::write(&tp2_path, text).expect("write Adrian fixture");
+    let requirements = load_component_requirements(&tp2_path.to_string_lossy());
+    assert_eq!(requirements.len(), 3);
+    for component in ["10", "20", "30"] {
+        let rules = requirements
+            .get(component)
+            .expect("optional component rule");
+        assert_eq!(rules.len(), 1);
+        assert_eq!(
+            rules[0]
+                .targets
+                .iter()
+                .map(|target| (
+                    target.target_mod.as_str(),
+                    target.target_component_id.as_str()
+                ))
+                .collect::<Vec<_>>(),
+            [("adrian", "0"), ("adrian", "1"), ("adrian", "2")]
+        );
+    }
+}
+
+#[test]
+fn multiline_predicates_preserve_comments_messages_and_neighboring_requirements() {
+    let block = [
+        "REQUIRE_PREDICATE ((MOD_IS_INSTALLED ~adrian.tp2~ ~0~) /* ignored ) OR",
+        "MOD_IS_INSTALLED ~wrong.tp2~ ~99~ */",
+        " OR (MOD_IS_INSTALLED ~adrian.tp2~ ~1~)) // ignored (",
+        " ~Message with (parentheses) and // literal",
+        " continued text~",
+        "REQUIRE_COMPONENT ~other.tp2~ 4 @10",
+        "COPY ~input~ ~override~",
+        "REQUIRE_PREDICATE (MOD_IS_INSTALLED ~third.tp2~ ~5~) @20",
+    ];
+    let parsed = crate::parser::compat_dependency_expr::collect_component_requirements(&block);
+    assert_eq!(parsed.len(), 3);
+    assert_eq!(parsed[0].targets.len(), 2);
+    assert_eq!(parsed[0].targets[1].target_component_id, "1");
+    assert_eq!(parsed[1].targets[0].target_mod, "other");
+    assert_eq!(parsed[2].targets[0].target_mod, "third");
+}
+
+#[test]
+fn malformed_or_mixed_multiline_predicates_never_become_partial_dependencies() {
+    for predicate in [
+        "REQUIRE_PREDICATE ((MOD_IS_INSTALLED ~adrian.tp2~ ~0~)",
+        "REQUIRE_PREDICATE (MOD_IS_INSTALLED ~adrian.tp2~ ~0~)) @130",
+        "REQUIRE_PREDICATE (MOD_IS_INSTALLED ~adrian.tp2~ ~0~)\n AND GAME_IS ~BG2EE~ @130",
+        "REQUIRE_PREDICATE (MOD_IS_INSTALLED ~adrian.tp2~ ~0~)\n OR NOT (MOD_IS_INSTALLED ~adrian.tp2~ ~1~) @130",
+        "REQUIRE_PREDICATE (MOD_IS_INSTALLED ~adrian.tp2~ ~0~)\n OR (GAME_IS ~BG2EE~) @130",
+        "REQUIRE_PREDICATE (MOD_IS_INSTALLED ~adrian.tp2~ ~0~) OR",
+        "REQUIRE_PREDICATE (MOD_IS_INSTALLED ~adrian.tp2~ ~0~) ~unfinished",
+    ] {
+        let mut block = predicate.lines().collect::<Vec<_>>();
+        block.extend([
+            "COPY ~input~ ~override~",
+            "REQUIRE_COMPONENT ~other.tp2~ 4 @10",
+        ]);
+        let parsed = crate::parser::compat_dependency_expr::collect_component_requirements(&block);
+        assert_eq!(parsed.len(), 1, "{predicate}");
+        assert_eq!(parsed[0].targets[0].target_mod, "other", "{predicate}");
+    }
+}
+
+#[test]
+fn supports_separate_operator_and_nested_or_continuations() {
+    let block = [
+        "REQUIRE_PREDICATE",
+        " ((MOD_IS_INSTALLED ~adrian.tp2~ ~0~)",
+        " OR",
+        " (MOD_IS_INSTALLED ~adrian.tp2~ ~1~))",
+        " OR (MOD_IS_INSTALLED ~adrian.tp2~ ~2~)",
+        " @130",
+    ];
+    let parsed = crate::parser::compat_dependency_expr::collect_component_requirements(&block);
+    assert_eq!(parsed.len(), 1);
+    assert_eq!(parsed[0].targets.len(), 3);
+}
+
+#[test]
+fn multiline_messages_treat_statement_keywords_as_quoted_text() {
+    for keyword in [
+        "COPY",
+        "INCLUDE",
+        "BEGIN",
+        "REQUIRE_COMPONENT",
+        "REQUIRE_PREDICATE",
+    ] {
+        let text = format!(
+            "REQUIRE_PREDICATE (MOD_IS_INSTALLED ~adrian.tp2~ ~1~) ~Required files:\n{keyword} the main component first.\nThen continue.~\nREQUIRE_COMPONENT ~other.tp2~ 4 @10"
+        );
+        let block = text.lines().collect::<Vec<_>>();
+        let parsed = crate::parser::compat_dependency_expr::collect_component_requirements(&block);
+        assert_eq!(parsed.len(), 2, "{keyword}");
+        assert_eq!(parsed[0].targets[0].target_mod, "adrian", "{keyword}");
+        assert_eq!(parsed[0].targets[0].target_component_id, "1");
+        assert_eq!(parsed[1].targets[0].target_mod, "other", "{keyword}");
+    }
+}

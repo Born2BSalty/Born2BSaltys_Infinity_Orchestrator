@@ -14,6 +14,7 @@ pub struct WorkspaceStep2State {
     pub details_open: bool,
     pub last_selection: Option<Step2Selection>,
     pub rescan_snapshot: Option<RescanSnapshot>,
+    pub recovery_scan_generation: u64,
     pub was_scanning: bool,
     pub rescan_drop_warning: Option<String>,
     pub resume_pending: bool,

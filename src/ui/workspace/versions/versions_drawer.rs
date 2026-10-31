@@ -1489,6 +1489,9 @@ fn render_open_sheet(
                 let release_list =
                     std::mem::take(&mut orchestrator.wizard_state.step2.versions_ui.release_list);
                 let env = versions_sheets::EditSourceEnv {
+                    has_modlist_destination:
+                        crate::app::mod_downloads::active_modlist_downloads_path().is_some(),
+                    id_salt: "versions_sheet_edit",
                     busy,
                     logged_in: !orchestrator
                         .wizard_state

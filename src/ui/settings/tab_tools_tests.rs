@@ -11,17 +11,26 @@ use std::time::{Duration, Instant};
 struct Scene {
     app: OrchestratorApp,
     urls: Vec<String>,
+    _fixture_root: FixtureRoot,
 }
 
-fn fixture_root() -> PathBuf {
+struct FixtureRoot(PathBuf);
+
+impl Drop for FixtureRoot {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+fn fixture_root() -> FixtureRoot {
     let unique = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_nanos();
-    let root = Path::new("E:/agentic-harness/codex/projects/inactive/bio/control/verification/tools-link-style-20261030/fixtures")
-        .join(format!("page_{}_{}", std::process::id(), unique));
-    std::fs::create_dir_all(&root).unwrap();
-    root
+    let root =
+        std::env::temp_dir().join(format!("bio_tools_page_{}_{}", std::process::id(), unique));
+    std::fs::create_dir(&root).unwrap();
+    FixtureRoot(root)
 }
 
 fn preload(app: &mut OrchestratorApp, kind: ToolKind, value: &str, status: ToolStatus) {
@@ -39,14 +48,14 @@ fn preload(app: &mut OrchestratorApp, kind: ToolKind, value: &str, status: ToolS
 
 fn scene(size: egui::Vec2, wrong_tool: bool, empty: bool) -> Harness<'static, Scene> {
     let root = fixture_root();
-    crate::platform_defaults::set_config_dir_override(Some(root.join("bootstrap")));
+    crate::platform_defaults::set_config_dir_override(Some(root.0.join("bootstrap")));
     let mut app = OrchestratorApp::new_isolated_for_test("tools_guidance");
     app.settings_screen_state.active_tab = SettingsTab::Tools;
     app.wizard_state.step1.weidu_binary.clear();
     app.wizard_state.step1.mod_installer_binary.clear();
     if !empty {
-        let weidu = root.join("renamed-weidu.bin");
-        let installer = root.join("renamed-installer.bin");
+        let weidu = root.0.join("renamed-weidu.bin");
+        let installer = root.0.join("renamed-installer.bin");
         std::fs::write(&weidu, b"fake weidu bytes; never executed").unwrap();
         std::fs::write(&installer, b"fake installer bytes; never executed").unwrap();
         let weidu = weidu.to_string_lossy().into_owned();
@@ -102,6 +111,7 @@ fn scene(size: egui::Vec2, wrong_tool: bool, empty: bool) -> Harness<'static, Sc
             Scene {
                 app,
                 urls: Vec::new(),
+                _fixture_root: root,
             },
         )
 }

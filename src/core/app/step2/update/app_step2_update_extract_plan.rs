@@ -115,6 +115,31 @@ pub(crate) fn build_extract_jobs(
     plan
 }
 
+pub(crate) fn build_global_extract_job(
+    asset: &Step2UpdateAsset,
+    source: &mod_downloads::ModDownloadSource,
+    archive_dir: &Path,
+    mods_root: &Path,
+    backup_root: &Path,
+    remote_file: Option<RemoteFileFacts>,
+) -> Step2UpdateExtractJob {
+    Step2UpdateExtractJob {
+        label: asset.label.clone(),
+        tp_file: asset.tp_file.clone(),
+        aliases: source.declared_tp2_names(),
+        tp2_rename: source.tp2_rename.clone(),
+        subdir_require: source.subdir_require.clone(),
+        archive_path: archive_dir.join(app_step2_update_download::archive_file_name(asset)),
+        mods_root: mods_root.to_path_buf(),
+        backup_root: backup_root.to_path_buf(),
+        target_root: None,
+        backup_version_tag: asset.tag.clone(),
+        installed_source_ref: extract_source_ref(asset, Some(source)),
+        installed_source_id: Some(source.source_id.clone()),
+        remote_file,
+    }
+}
+
 fn resolve_selected_source(
     state: &WizardState,
     sources: &mod_downloads::ModDownloadsLoad,
