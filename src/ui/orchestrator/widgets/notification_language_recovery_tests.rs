@@ -77,6 +77,9 @@ fn popup(
                         data.get_temp::<(String, u64, bool)>(egui::Id::new("recovery-test-status"))
                     })
                     .unwrap_or_else(|| ("RECOVERY".to_string(), 4, false));
+                if ctx.data(|data| data.get_temp::<bool>(egui::Id::new("recovery-test-guard"))).unwrap_or(false) {
+                    state.guard_language_recovery_escape(ctx);
+                }
                 state.set_language_recovery_enabled(&owner, generation, scanning);
                 state.show(ctx, palette);
                 state.render_history_popup(ctx, palette, false);
@@ -715,4 +718,298 @@ fn language_recovery_drawer_toast_entry_keeps_typed_notice() {
         Some(expected)
     );
     assert_drawer_bounds(&harness, egui::vec2(1000.0, 800.0));
+}
+
+fn live_recovery() -> Harness<'static, NotificationManager> {
+    let mut harness = popup(egui::vec2(1000.0, 800.0), ThemePalette::Dark, None);
+    let manager = harness.state_mut();
+    manager.view_all = None;
+    manager.pending.clear();
+    manager.history.clear();
+    manager.warn_language_recovery(fixture_notice(1, 2));
+    harness.run();
+    assert_eq!(recovery_toast_count(&harness), 1);
+    assert!(
+        harness
+            .output()
+            .shapes
+            .iter()
+            .any(|shape| shape_label(&shape.shape, "View all").is_some())
+    );
+    click(&mut harness, "View all");
+    harness.run_steps(2);
+    assert!(harness.state().view_all.is_some());
+    harness
+}
+
+fn recovery_toast_count(harness: &Harness<'_, NotificationManager>) -> usize {
+    harness
+        .ctx
+        .data(|data| data.get_temp::<Vec<Toast>>(toasts_id()))
+        .unwrap_or_default()
+        .iter()
+        .filter(|toast| toast.kind == ToastKind::Custom(KIND_LANGUAGE_RECOVERY))
+        .count()
+}
+
+#[test]
+fn language_recovery_visible_toast_dismissal_retains_history() {
+    let mut harness = live_recovery();
+    click(&mut harness, "Keep unresolved for now");
+    harness.run_steps(32);
+    assert!(harness.state().view_all.is_none());
+    assert_eq!(
+        harness.state().history.back().unwrap().recovery,
+        Some(fixture_notice(1, 2))
+    );
+    assert_eq!(
+        recovery_toast_count(&harness),
+        0,
+        "Closing recovery drawer must dismiss its already visible toast"
+    );
+    harness.state_mut().history_open = true;
+    harness.run();
+    click(&mut harness, "View all");
+    harness.run_steps(2);
+    assert_eq!(
+        harness.state().view_all.as_ref().unwrap().recovery,
+        Some(fixture_notice(1, 2))
+    );
+    assert_eq!(recovery_toast_count(&harness), 0);
+}
+
+fn recovery_escape(harness: &mut Harness<'_, NotificationManager>) {
+    harness.input_mut().events.push(egui::Event::Key {
+        key: egui::Key::Escape,
+        physical_key: None,
+        pressed: true,
+        repeat: false,
+        modifiers: egui::Modifiers::NONE,
+    });
+    harness.run();
+}
+
+fn recovery_pointer(harness: &mut Harness<'_, NotificationManager>, pos: egui::Pos2) {
+    harness
+        .input_mut()
+        .events
+        .push(egui::Event::PointerMoved(pos));
+    harness.run();
+    for pressed in [true, false] {
+        harness.input_mut().events.push(egui::Event::PointerButton {
+            pos,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        });
+        harness.run();
+    }
+}
+
+#[test]
+fn language_recovery_visible_toast_all_close_paths_preserve_ordinary_warning() {
+    for action in [
+        "Restore selections",
+        "Keep unresolved for now",
+        "close",
+        "escape",
+        "guard",
+        "scrim",
+    ] {
+        let mut harness = live_recovery();
+        harness
+            .state_mut()
+            .warn_persistent("Ordinary persistent warning");
+        harness.run();
+        match action {
+            "Restore selections" | "Keep unresolved for now" => click(&mut harness, action),
+            "escape" => recovery_escape(&mut harness),
+            "guard" => {
+                harness
+                    .ctx
+                    .data_mut(|data| data.insert_temp(egui::Id::new("recovery-test-guard"), true));
+                recovery_escape(&mut harness);
+            }
+            "close" => {
+                let bounds = drawer_rect(&harness);
+                recovery_pointer(
+                    &mut harness,
+                    egui::pos2(bounds.max.x - 31.0, bounds.min.y + 27.0),
+                );
+            }
+            _ => recovery_pointer(&mut harness, egui::pos2(100.0, 400.0)),
+        }
+        harness.run_steps(32);
+        assert!(harness.state().view_all.is_none(), "{action}");
+        assert_eq!(recovery_toast_count(&harness), 0, "{action}");
+        assert_eq!(
+            harness.state_mut().take_language_recovery_action(),
+            (action == "Restore selections").then(|| fixture_notice(1, 2)),
+            "{action}"
+        );
+        assert!(
+            harness
+                .state_mut()
+                .take_language_recovery_action()
+                .is_none()
+        );
+        assert_eq!(harness.state().recovery, Some(fixture_notice(1, 2)));
+        assert!(
+            harness
+                .state()
+                .history
+                .iter()
+                .any(|record| record.recovery == Some(fixture_notice(1, 2)))
+        );
+        assert!(
+            harness
+                .ctx
+                .data(|data| data.get_temp::<Vec<Toast>>(toasts_id()))
+                .unwrap()
+                .iter()
+                .any(|toast| toast.kind == ToastKind::Warning
+                    && toast.text.text() == "Ordinary persistent warning")
+        );
+        painted(&harness, "Ordinary persistent warning");
+        if action == "Keep unresolved for now" {
+            capture(&mut harness, "dismissed-ordinary-remains");
+        }
+    }
+}
+
+#[test]
+fn language_recovery_visible_toast_copy_and_popup_escape_remain_open() {
+    let mut harness = live_recovery();
+    click(&mut harness, "Copy");
+    assert!(harness.state().view_all.is_some());
+    assert_eq!(recovery_toast_count(&harness), 1);
+    for guarded in [false, true] {
+        harness
+            .ctx
+            .data_mut(|data| data.insert_temp(egui::Id::new("recovery-test-guard"), guarded));
+        harness
+            .ctx
+            .memory_mut(|memory| memory.open_popup(egui::Id::new("recovery-test-popup")));
+        recovery_escape(&mut harness);
+        assert!(harness.state().view_all.is_some());
+        assert_eq!(recovery_toast_count(&harness), 1);
+        assert!(
+            harness
+                .state_mut()
+                .take_language_recovery_action()
+                .is_none()
+        );
+    }
+}
+
+#[test]
+fn language_recovery_partial_restore_updates_history_without_reannouncing() {
+    let mut harness = live_recovery();
+    click(&mut harness, "Restore selections");
+    assert_eq!(
+        harness.state_mut().take_language_recovery_action(),
+        Some(fixture_notice(1, 2))
+    );
+    let mut remaining = fixture_notice(1, 2);
+    remaining.rows.remove(0);
+    harness
+        .state_mut()
+        .warn_language_recovery(remaining.clone());
+    harness.run_steps(32);
+    assert_eq!(recovery_toast_count(&harness), 0);
+    assert_eq!(harness.state().recovery, Some(remaining.clone()));
+    assert_eq!(
+        harness.state().history.back().unwrap().recovery,
+        Some(remaining.clone())
+    );
+    assert_eq!(
+        harness.state().history.back().unwrap().text,
+        remaining.text()
+    );
+    assert!(
+        harness
+            .state_mut()
+            .take_language_recovery_action()
+            .is_none()
+    );
+    harness.state_mut().history_open = true;
+    harness.run();
+    harness.run_steps(2);
+    harness.get_all_by_label("View all").next().unwrap().click();
+    harness.run();
+    harness.run_steps(2);
+    assert_eq!(
+        harness.state().view_all.as_ref().unwrap().recovery,
+        Some(remaining)
+    );
+    assert_eq!(recovery_toast_count(&harness), 0);
+    capture(&mut harness, "partial-restore-history-reopened");
+}
+
+#[test]
+fn language_recovery_different_owner_or_generation_announces_again() {
+    for change_owner in [false, true] {
+        let mut harness = live_recovery();
+        click(&mut harness, "Keep unresolved for now");
+        harness.run_steps(32);
+        assert_eq!(recovery_toast_count(&harness), 0);
+        let mut notice = fixture_notice(1, 2);
+        if change_owner {
+            notice.owner = "OTHER".to_string();
+        } else {
+            notice.generation += 1;
+        }
+        harness.state_mut().warn_language_recovery(notice.clone());
+        harness.run_steps(4);
+        assert_eq!(recovery_toast_count(&harness), 1);
+        assert_eq!(
+            harness.state().history.back().unwrap().recovery,
+            Some(notice)
+        );
+    }
+}
+
+#[test]
+fn language_recovery_pending_toast_dismissal_prevents_first_display() {
+    let notice = fixture_notice(1, 2);
+    let mut harness = popup(
+        egui::vec2(1000.0, 800.0),
+        ThemePalette::Dark,
+        Some(notice.clone()),
+    );
+    harness.state_mut().warn_language_recovery(notice.clone());
+    let ctx = harness.ctx.clone();
+    let _ = ctx.run(
+        egui::RawInput {
+            events: vec![egui::Event::Key {
+                key: egui::Key::Escape,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: egui::Modifiers::NONE,
+            }],
+            ..Default::default()
+        },
+        |ctx| harness.state_mut().guard_language_recovery_escape(ctx),
+    );
+    assert!(harness.state().view_all.is_none());
+    harness.run_steps(32);
+    assert_eq!(recovery_toast_count(&harness), 0);
+    assert_eq!(
+        harness.state().history.back().unwrap().recovery,
+        Some(notice)
+    );
+}
+
+#[test]
+fn language_recovery_ordinary_view_all_close_preserves_visible_warning() {
+    let mut harness = popup(egui::vec2(1000.0, 800.0), ThemePalette::Dark, None);
+    harness
+        .state_mut()
+        .warn_persistent("Ordinary persistent warning");
+    harness.run();
+    click(&mut harness, "Close");
+    harness.run_steps(32);
+    assert!(harness.state().view_all.is_none());
+    painted(&harness, "Ordinary persistent warning");
 }

@@ -314,3 +314,166 @@ fn multiline_messages_treat_statement_keywords_as_quoted_text() {
         assert_eq!(parsed[1].targets[0].target_mod, "other", "{keyword}");
     }
 }
+
+#[test]
+fn compat_three_fixes_legacy_bytes_retain_native_dependencies() {
+    let root = test_root();
+    let path = root.0.join("legacy.tp2");
+    std::fs::write(
+        &path,
+        b"BEGIN ~Caf\xe9~\nREQUIRE_COMPONENT ~base.tp2~ 7 ~Required~\n",
+    )
+    .expect("legacy fixture");
+    let requirements = load_component_requirements(path.to_str().expect("path"));
+    assert_eq!(
+        requirements.get("0").expect("legacy dependency")[0].targets[0].target_mod,
+        "base"
+    );
+}
+
+#[test]
+fn compat_three_fixes_label_preserves_header_and_designated_ids() {
+    let flags = crate::app::compat_tp2_blocks::collect_component_flags(
+        "BEGIN ~First~\nLABEL Ascension-RewrittenFinalChapterOfToB\nDESIGNATED 60\nSUBCOMPONENT @100\nREQUIRE_PREDICATE GAME_IS ~bg2ee eet~ @1\nCOPY ~a~ ~b~\nBEGIN ~Second~\nSUBCOMPONENT @100\n",
+    );
+    assert_eq!(
+        flags
+            .iter()
+            .map(|flag| flag.component_id.as_str())
+            .collect::<Vec<_>>(),
+        ["60", "61"]
+    );
+    assert_eq!(flags[0].predicates.len(), 1);
+    assert!(flags[0].family.is_some());
+}
+
+#[test]
+fn compat_three_fixes_shared_forbid_reaches_selected_order_runtime() {
+    use crate::app::compat_conflict_parse::load_component_conflicts;
+    use crate::app::compat_conflict_runtime::{
+        build_conflict_scan_context, scan_conflict_hit_with_context,
+    };
+    use crate::app::compat_rule_runtime::CompatActiveItem;
+    let root = test_root();
+    let path = root.0.join("ascension.tp2");
+    std::fs::write(&path, "BEGIN ~First~ DESIGNATED 60 SUBCOMPONENT @100\nFORBID_COMPONENT ~stratagems/setup-stratagems.tp2~ 5900 ~Install BEFORE SCS~\nCOPY ~a~ ~b~\nBEGIN ~Second~ DESIGNATED 61 SUBCOMPONENT @100\nCOPY ~a~ ~b~\n").expect("family fixture");
+    let path = path.to_str().expect("path");
+    let make_item = |tp_file: &str, component_id: &str, order| CompatActiveItem {
+        tp_file: tp_file.to_string(),
+        mod_name: tp_file.to_string(),
+        tp2_path: if tp_file == "ascension" {
+            path.to_string()
+        } else {
+            String::new()
+        },
+        component_id: component_id.to_string(),
+        order: Some(order),
+    };
+    let context = build_conflict_scan_context(
+        &[
+            make_item("stratagems", "5900", 0),
+            make_item("ascension", "61", 1),
+        ],
+        &mut std::collections::HashMap::new(),
+    );
+    let hit = scan_conflict_hit_with_context("ascension", "61", Some(1), &context)
+        .expect("second family member must warn when selected after SCS");
+    assert_eq!(hit.kind, "order_block");
+    assert_eq!(hit.target_component_id, "5900");
+    assert!(hit.message.contains("BEFORE"));
+    let conflicts = load_component_conflicts(path);
+    assert_eq!(conflicts.get("60").expect("direct control").len(), 1);
+    assert_eq!(conflicts.get("61").expect("inherited rule").len(), 1);
+    let context = build_conflict_scan_context(
+        &[
+            make_item("ascension", "61", 0),
+            make_item("stratagems", "5900", 1),
+        ],
+        &mut std::collections::HashMap::new(),
+    );
+    assert!(scan_conflict_hit_with_context("ascension", "61", Some(0), &context).is_none());
+}
+
+#[test]
+fn compat_three_fixes_label_matrix_preserves_predicates_and_expression_minus() {
+    use crate::app::compat_tp2_blocks::collect_component_flags;
+    for label in [
+        "LABEL Ascension-ExpandedEpilogues",
+        "LABEL AscalonsQuestpack-JobWellPaid",
+        "LABEL Repeated--Hyphens",
+        "LABEL ~Quoted-with-space label~",
+        "LABEL \"Quoted-label\"",
+    ] {
+        for separator in [" ", "\n", " /* boundary */ "] {
+            let text = format!(
+                "BEGIN ~One~\n{label}{separator}DESIGNATED 40\nREQUIRE_PREDICATE (1 - 2) < -1 ~Message~\nCOPY ~a~ ~b~\nREQUIRE_PREDICATE FALSE ~Action~\nBEGIN ~Two~\n"
+            );
+            let flags = collect_component_flags(&text);
+            assert_eq!(
+                flags
+                    .iter()
+                    .map(|flag| flag.component_id.as_str())
+                    .collect::<Vec<_>>(),
+                ["40", "41"],
+                "{text}"
+            );
+            assert_eq!(flags[0].predicates.len(), 1, "{text}");
+            assert!(flags[0].predicates[0].expression.contains('-'));
+        }
+    }
+}
+
+#[test]
+fn compat_three_fixes_malformed_labels_do_not_consume_following_flags_or_actions() {
+    use crate::app::compat_tp2_blocks::collect_component_flags;
+    for label in [
+        "LABEL",
+        "LABEL -bad",
+        "LABEL bad-",
+        "LABEL bad - atom",
+        "LABEL bad/*gap*/-atom",
+        "LABEL bad/atom",
+    ] {
+        let flags = collect_component_flags(&format!(
+            "BEGIN ~One~\n{label}\nDESIGNATED 40\nREQUIRE_PREDICATE FALSE ~No leak~\n"
+        ));
+        assert_eq!(flags[0].component_id, "0", "{label}");
+        assert!(flags[0].predicates.is_empty(), "{label}");
+    }
+    let flags = collect_component_flags(
+        "BEGIN ~One~\nLABEL Good-Atom\nDESIGNATED 90\nCOPY ~a~ ~b~\nLABEL Action-Label\nREQUIRE_PREDICATE FALSE ~Action~\nBEGIN ~Two~ DESIGNATED 3\nLABEL Next-Atom REQUIRE_PREDICATE TRUE ~Good~\nBEGIN ~Third~\n",
+    );
+    assert_eq!(
+        flags
+            .iter()
+            .map(|flag| flag.component_id.as_str())
+            .collect::<Vec<_>>(),
+        ["90", "3", "4"]
+    );
+    assert!(flags[0].predicates.is_empty());
+    assert_eq!(flags[1].predicates.len(), 1);
+}
+
+#[test]
+fn compat_three_fixes_binary_literal_does_not_hide_header_or_fabricate_flags() {
+    use crate::app::compat_tp2_blocks::collect_component_flags;
+    let root = test_root();
+    let path = root.0.join("binary-literal.tp2");
+    let bytes=b"BEGIN ~Real~\nREQUIRE_PREDICATE GAME_IS ~bgee bg2ee eet iwdee~ ~Supported~\nREQUIRE_COMPONENT ~base.tp2~ 7 ~Required~\nCOPY ~game.exe~ ~game.exe~\nOUTER_SPRINT binary ~f9\x83\x10G\0\0t% BEGIN REQUIRE_PREDICATE FORBID_COMPONENT~\n/* BEGIN ~Comment~ REQUIRE_PREDICATE FALSE ~No~ */\n<<<<<<<< payload\nBEGIN ~Inline~\nREQUIRE_PREDICATE FALSE ~No~\nFORBID_COMPONENT ~fake.tp2~ 0 ~No~\n>>>>>>>>\n";
+    std::fs::write(&path, bytes).expect("binary literal fixture");
+    let text = crate::app::compat_text::read_compat_text(&path).expect("literal bytes decode");
+    let flags = collect_component_flags(&text);
+    assert_eq!(flags.len(), 1);
+    assert_eq!(flags[0].predicates.len(), 1);
+    assert!(flags[0].forbids.is_empty());
+    let rules = load_component_requirements(path.to_str().expect("path"));
+    assert_eq!(rules["0"].len(), 1);
+    assert_eq!(rules["0"][0].targets[0].target_mod, "base");
+    let blob = root.0.join("blob.tp2");
+    std::fs::write(&blob, [0x83, 0, 0x10, 0xff, 0x7f]).expect("blob");
+    assert!(load_component_requirements(blob.to_str().expect("path")).is_empty());
+    assert!(
+        crate::app::compat_conflict_parse::load_component_conflicts(blob.to_str().expect("path"))
+            .is_empty()
+    );
+}

@@ -209,6 +209,7 @@ pub struct NotificationManager {
     recovery_replaced: bool,
     recovery_enabled: bool,
     recovery_action: Option<LanguageRecoveryNotice>,
+    dismissed_recovery: Option<(String, u64)>,
 }
 
 impl NotificationManager {
@@ -237,11 +238,18 @@ impl NotificationManager {
         self.pending
             .retain(|(kind, _, _)| *kind != ToastKind::Custom(KIND_LANGUAGE_RECOVERY));
         self.recovery_replaced = true;
-        self.push(
-            ToastKind::Custom(KIND_LANGUAGE_RECOVERY),
-            notice.text(),
-            true,
-        );
+        let kind = ToastKind::Custom(KIND_LANGUAGE_RECOVERY);
+        let text = notice.text();
+        let dismissed = self
+            .dismissed_recovery
+            .as_ref()
+            .is_some_and(|(owner, generation)| {
+                owner == &notice.owner && *generation == notice.generation
+            });
+        if !dismissed {
+            self.pending.push((kind, text.clone(), true));
+        }
+        self.record_history(kind, text);
         if let Some(record) = self.history.back_mut() {
             record.recovery = Some(notice.clone());
         }
@@ -283,6 +291,10 @@ impl NotificationManager {
 
     fn push(&mut self, kind: ToastKind, text: String, persistent: bool) {
         self.pending.push((kind, text.clone(), persistent));
+        self.record_history(kind, text);
+    }
+
+    fn record_history(&mut self, kind: ToastKind, text: String) {
         if self.history.len() == HISTORY_CAP {
             self.history.pop_front();
         }
@@ -438,6 +450,23 @@ impl NotificationManager {
         }
     }
 
+    fn close_language_recovery_drawer(&mut self, ctx: &egui::Context) {
+        self.dismissed_recovery = self
+            .view_all
+            .take()
+            .and_then(|request| request.recovery)
+            .map(|notice| (notice.owner, notice.generation));
+        self.pending
+            .retain(|(kind, _, _)| *kind != ToastKind::Custom(KIND_LANGUAGE_RECOVERY));
+        ctx.data_mut(|d| {
+            for toast in d.get_temp_mut_or_default::<Vec<Toast>>(toasts_id()) {
+                if toast.kind == ToastKind::Custom(KIND_LANGUAGE_RECOVERY) {
+                    toast.close();
+                }
+            }
+        });
+    }
+
     pub(crate) fn guard_language_recovery_escape(&mut self, ctx: &egui::Context) {
         if self
             .view_all
@@ -446,7 +475,7 @@ impl NotificationManager {
             && !ctx.memory(egui::Memory::any_popup_open)
             && ctx.input_mut(|input| input.consume_key(egui::Modifiers::NONE, egui::Key::Escape))
         {
-            self.view_all = None;
+            self.close_language_recovery_drawer(ctx);
         }
     }
 
@@ -463,7 +492,7 @@ impl NotificationManager {
                 self.recovery_action = Some(notice.clone());
             }
             if restore || close {
-                self.view_all = None;
+                self.close_language_recovery_drawer(ctx);
             }
             return;
         }
