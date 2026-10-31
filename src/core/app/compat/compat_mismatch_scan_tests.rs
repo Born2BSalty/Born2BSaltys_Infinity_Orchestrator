@@ -622,6 +622,34 @@ fn require_predicate_followed_by_unlisted_action_keeps_guard() {
 }
 
 #[test]
+fn require_predicate_continues_onto_a_line_led_by_a_value_word() {
+    let context = mismatch_context("BGEE", "BGEE", &[]);
+    for value_word in [
+        "STRING_EQUAL_CASE",
+        "STRING_COMPARE",
+        "BAND",
+        "VARIABLE_IS_SET",
+    ] {
+        let guards = collect_requirement_guards(&[
+            "BEGIN ~Continued~ DESIGNATED 1",
+            "REQUIRE_PREDICATE GAME_IS ~bg2ee~ AND ~%x%~",
+            &format!("{value_word} ~y~ OR GAME_IS ~bgee~"),
+            "COPY ~a~ ~b~",
+        ]);
+        assert_eq!(guards.len(), 1, "{value_word}");
+        assert!(
+            guards[0].eval_text.contains("GAME_IS ~bgee~"),
+            "{value_word}: {}",
+            guards[0].eval_text
+        );
+        assert!(
+            preferred_guard_hit(&guards, &context).is_none(),
+            "{value_word}"
+        );
+    }
+}
+
+#[test]
 fn require_predicate_dangling_operator_before_unknown_line_is_dropped() {
     let context = mismatch_context("BG2EE", "BG2EE", &[]);
     for ending in ["OR", "AND", "NOT", "(", "||", "&&", "!"] {
@@ -629,7 +657,7 @@ fn require_predicate_dangling_operator_before_unknown_line_is_dropped() {
         let guards = collect_requirement_guards(&[
             "BEGIN ~Dangling~ DESIGNATED 1",
             predicate.as_str(),
-            "VARIABLE_IS_SET x",
+            "ACTION_DEFINE_ARRAY names BEGIN ~a~ END",
         ]);
         assert!(guards.is_empty(), "{ending}");
         assert!(preferred_guard_hit(&guards, &context).is_none(), "{ending}");
