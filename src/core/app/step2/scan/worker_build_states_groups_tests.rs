@@ -148,6 +148,66 @@ BEGIN @150 DESIGNATED 150 GROUP @1 LABEL Morpheus562sKitpackBattlerager3
     }
 }
 
+#[test]
+fn versioned_subcomponent_parent_groups_with_its_children() {
+    let tp2_text = r"
+BEGIN @151 DESIGNATED 151 SUBCOMPONENT @150 GROUP @1 LABEL Morpheus562sKitpackBattlerager1
+
+BEGIN @152 DESIGNATED 152 SUBCOMPONENT @150 GROUP @1 LABEL Morpheus562sKitpackBattlerager2
+
+BEGIN @150 DESIGNATED 150 GROUP @1 LABEL Morpheus562sKitpackBattlerager3
+";
+    let components = vec![
+        component(
+            "151",
+            "Install Battlerager Kit -> Assign kit to Korgan: v2.0",
+        ),
+        component(
+            "152",
+            "Install Battlerager Kit -> Do NOT assign kit to Korgan: v2.0",
+        ),
+        component("150", "Install Battlerager Kit: v2.0"),
+    ];
+
+    let groups =
+        detect_derived_collapsible_groups("morpheus562-s-kitpack.tp2", tp2_text, &components);
+
+    let root = groups
+        .get("150")
+        .expect("missing root derived collapsible group");
+    assert_eq!(root.header, "Install Battlerager Kit");
+    assert!(root.is_umbrella);
+
+    for component_id in ["151", "152"] {
+        let group = groups
+            .get(component_id)
+            .expect("missing child derived collapsible group");
+        assert_eq!(group.header, "Install Battlerager Kit");
+        assert!(!group.is_umbrella);
+    }
+}
+
+#[test]
+fn versioned_questpack_translation_references_still_do_not_group() {
+    let (tp2_text, components) = questpack_translation_collision_fixture();
+    let components = components
+        .into_iter()
+        .map(|scanned| {
+            let display = format!("{}: v1.0", scanned.display);
+            component(&scanned.component_id, &display)
+        })
+        .collect::<Vec<_>>();
+    let groups = detect_derived_collapsible_groups("setup-d0questpack.tp2", tp2_text, &components);
+
+    for component in &components {
+        assert!(
+            !groups.contains_key(&component.component_id),
+            "component #{} must not acquire a parent family from a translation ID collision",
+            component.component_id,
+        );
+    }
+}
+
 fn questpack_translation_collision_fixture() -> (&'static str, Vec<ScannedComponent>) {
     let tp2_text = r"
 BEGIN @39

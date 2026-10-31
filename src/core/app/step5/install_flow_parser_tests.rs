@@ -11,7 +11,7 @@ fn assert_worker_uses_effective_program(configured: &str) {
     let receiver = spawn_install_preparation_with(
         step1,
         vec!["Imported".to_string()],
-        true,
+        false,
         901,
         move |executable, phrases| {
             observed_tx
@@ -23,15 +23,14 @@ fn assert_worker_uses_effective_program(configured: &str) {
     let (observed, phrases) = observed_rx
         .recv_timeout(std::time::Duration::from_secs(2))
         .expect("injected preparer called");
-    let error = receiver
+    let prepared = receiver
         .recv_timeout(std::time::Duration::from_secs(2))
         .expect("worker result")
-        .err()
-        .expect("phrase-bearing preparation blocks");
+        .unwrap_or_else(|error| panic!("phrase-bearing preparation must not block: {error}"));
     assert_eq!(phrases, ["Imported"]);
     assert_eq!(
-        error,
-        "Installer parser preparation failed: fixture failure before target preparation"
+        prepared.parser_warning.as_deref(),
+        Some("fixture failure before target preparation")
     );
     assert_eq!(observed, Path::new(&expected));
 }

@@ -3,6 +3,8 @@
 
 use std::time::Instant;
 
+use tracing::warn;
+
 use crate::app::mod_installer_parser;
 use crate::registry::share_author::{user_name_is_valid, workspace_marks_own_list};
 use crate::registry::share_export::{self, ShareMeta};
@@ -26,7 +28,13 @@ impl OrchestratorApp {
     }
 
     pub(crate) fn code_for_share(&mut self, id: &str) -> Result<Option<String>, String> {
-        let local = mod_installer_parser::capture_local_choice_phrases()?;
+        let local = mod_installer_parser::capture_local_choice_phrases().unwrap_or_else(|err| {
+            warn!(
+                target = "orchestrator",
+                "Share for {id} uses no local parser phrases: {err}"
+            );
+            Vec::new()
+        });
         self.code_for_share_with_phrases(id, &local)
     }
 
@@ -46,21 +54,14 @@ impl OrchestratorApp {
             return Ok(None);
         };
         let (workspace, is_active) = self.workspace_for_share(id);
-        let workspace_phrases = workspace
-            .as_ref()
-            .and_then(|state| state.parser_choice_phrases.as_deref())
-            .unwrap_or(&[]);
-        let embedded = crate::app::modlist_share::preview_modlist_share_code(&original_code)?
-            .parser_choice_phrases;
-        let phrases = mod_installer_parser::union_phrases(&[&embedded, workspace_phrases, local])?;
-        let mut code = if phrases == embedded {
-            original_code.clone()
-        } else {
-            share_export::enrich_share_code_with_phrases(&original_code, &phrases)?
-        };
-        if let Some(workspace) = &workspace {
-            code = share_export::overlay_workspace_wlb(&code, workspace)?;
-        }
+        let mut code = merge_workspace_into_code(&original_code, workspace.as_ref(), local)
+            .unwrap_or_else(|err| {
+                warn!(
+                    target = "orchestrator",
+                    "Share for {id} uses the stored code unchanged: {err}"
+                );
+                original_code.clone()
+            });
         let typed = self.share_name_buffer.trim().to_string();
         let save_name =
             user_name_is_valid(&typed) && self.redesign_settings.user_name.trim().is_empty();
@@ -156,6 +157,28 @@ impl OrchestratorApp {
         }
         Ok(())
     }
+}
+
+fn merge_workspace_into_code(
+    original_code: &str,
+    workspace: Option<&crate::registry::workspace_model::ModlistWorkspaceState>,
+    local: &[String],
+) -> Result<String, String> {
+    let workspace_phrases = workspace
+        .and_then(|state| state.parser_choice_phrases.as_deref())
+        .unwrap_or(&[]);
+    let embedded =
+        crate::app::modlist_share::preview_modlist_share_code(original_code)?.parser_choice_phrases;
+    let phrases = mod_installer_parser::union_phrases(&[&embedded, workspace_phrases, local])?;
+    let code = if phrases == embedded {
+        original_code.to_string()
+    } else {
+        share_export::enrich_share_code_with_phrases(original_code, &phrases)?
+    };
+    let Some(workspace) = workspace else {
+        return Ok(code);
+    };
+    share_export::overlay_workspace_wlb(&code, workspace)
 }
 
 #[cfg(test)]
@@ -460,7 +483,7 @@ mod tests {
     }
 
     #[test]
-    fn parser_sharing_capture_failure_preserves_code_file_author_and_settings() {
+    fn parser_sharing_capture_failure_shares_without_local_phrases() {
         let mut app = app_with_entry(
             "parser-sharing-capture-failure",
             "PHRASEERR001",
@@ -484,25 +507,14 @@ mod tests {
             .find_mut("PHRASEERR001")
             .expect("entry")
             .destination_folder = destination.to_string_lossy().into_owned();
-        app.redesign_settings.user_name.clear();
-        app.share_name_buffer = "@candidate".to_string();
-        let original = app
-            .registry
-            .find("PHRASEERR001")
-            .expect("entry")
-            .latest_share_code
-            .clone();
-        let error =
-            fixture_capture(&mut app, "PHRASEERR001", &parser).expect_err("malformed capture");
-        assert!(error.contains("array"));
-        let entry = app.registry.find("PHRASEERR001").expect("entry");
-        assert_eq!(entry.latest_share_code, original);
-        assert_eq!(entry.author.as_deref(), Some("@original"));
-        assert_eq!(app.redesign_settings.user_name, "");
-        assert_eq!(app.share_name_buffer, "@candidate");
+        app.redesign_settings.user_name = "@sharer".to_string();
+        let code = fixture_capture(&mut app, "PHRASEERR001", &parser)
+            .expect("a malformed parser config does not block sharing")
+            .expect("shared code");
+        assert!(code.starts_with("BIO-MODLIST-V1:"));
         assert_eq!(
-            std::fs::read_to_string(file).expect("preserved file"),
-            "unchanged code file"
+            std::fs::read_to_string(&file).expect("import code file"),
+            code
         );
     }
 }

@@ -7,6 +7,7 @@ use flate2::Compression;
 use flate2::read::ZlibDecoder;
 use flate2::write::ZlibEncoder;
 use serde_json::Value;
+use tracing::debug;
 
 use crate::app::modlist_share::ForkAncestor;
 use crate::app::state::WizardState;
@@ -145,21 +146,19 @@ pub(crate) fn overlay_workspace_wlb(
     code: &str,
     workspace: &crate::registry::workspace_model::ModlistWorkspaceState,
 ) -> Result<String, String> {
-    let mut result = Ok(());
     let mut changed = false;
     let output = rewrite_payload(code, |obj| {
         let original = obj.clone();
-        result = overlay_workspace_logs(obj, workspace);
+        overlay_workspace_logs(obj, workspace);
         changed = *obj != original;
     })?;
-    result?;
     Ok(if changed { output } else { code.to_string() })
 }
 
 fn overlay_workspace_logs(
     obj: &mut serde_json::Map<String, Value>,
     workspace: &crate::registry::workspace_model::ModlistWorkspaceState,
-) -> Result<(), String> {
+) {
     let iwdee = obj.get("game_install").and_then(Value::as_str) == Some("IWDEE");
     let first = if iwdee {
         ("iwdee", &workspace.order_iwdee)
@@ -167,67 +166,78 @@ fn overlay_workspace_logs(
         ("bgee", &workspace.order_bgee)
     };
     for (slot, order) in [first, ("bg2ee", &workspace.order_bg2ee)] {
-        let mut identities = Vec::new();
-        for item in order {
-            let identity = crate::app::wlb_inputs::WlbIdentity {
-                normalized_tp2: crate::app::mod_downloads::normalize_mod_download_tp2(&item.tp2),
-                component_id: item.id,
-                language: item.language,
-            };
-            if identities.contains(&identity) {
-                return Err(format!(
-                    "Duplicate workspace WLB component in {slot}: {} #{}",
-                    item.tp2, item.id
-                ));
-            }
-            identities.push(identity);
-        }
         if !order.iter().any(|item| item.wlb_inputs.is_some()) {
             continue;
         }
-        let logs = obj
-            .get_mut("weidu_logs")
-            .and_then(Value::as_object_mut)
-            .ok_or_else(|| "Share code has no WeiDU logs for WLB answers.".to_string())?;
-        let text = logs
-            .get(slot)
-            .and_then(Value::as_str)
-            .ok_or_else(|| format!("Share code has no {slot} log for WLB answers."))?;
+        let Some(logs) = obj.get_mut("weidu_logs").and_then(Value::as_object_mut) else {
+            debug!("Share code has no WeiDU logs; skipped {slot} WLB answers.");
+            continue;
+        };
+        let Some(text) = logs.get(slot).and_then(Value::as_str) else {
+            debug!("Share code has no {slot} log; skipped its WLB answers.");
+            continue;
+        };
         let mut lines: Vec<String> = text.split_inclusive('\n').map(str::to_string).collect();
-        for (item, identity) in order.iter().zip(identities) {
-            let Some(spec) = item.wlb_inputs.as_deref() else {
-                continue;
-            };
-            let matches: Vec<usize> = lines
-                .iter()
-                .enumerate()
-                .filter_map(|(index, line)| {
-                    (crate::app::wlb_inputs::parse_identity(line).as_ref() == Some(&identity))
-                        .then_some(index)
-                })
-                .collect();
-            let [index] = matches.as_slice() else {
-                return Err(format!(
-                    "WLB answers require exactly one {slot} row for {} #{} language {}.",
-                    item.tp2, item.id, item.language
-                ));
-            };
-            let line = &lines[*index];
-            let (body, ending) = line.strip_suffix("\r\n").map_or_else(
-                || {
-                    line.strip_suffix('\n')
-                        .map_or((line.as_str(), ""), |body| (body, "\n"))
-                },
-                |body| (body, "\r\n"),
-            );
-            lines[*index] = format!(
-                "{}{ending}",
-                crate::app::wlb_inputs::replace_marker(body, spec)?
-            );
-        }
+        overlay_slot_lines(slot, order, &mut lines);
         logs.insert(slot.to_string(), Value::String(lines.concat()));
     }
-    Ok(())
+}
+
+fn overlay_slot_lines(
+    slot: &str,
+    order: &[crate::registry::workspace_model::ComponentRef],
+    lines: &mut [String],
+) {
+    let mut seen = std::collections::HashSet::new();
+    for item in order {
+        let Some(spec) = item.wlb_inputs.as_deref() else {
+            continue;
+        };
+        let normalized_tp2 = crate::app::mod_downloads::normalize_mod_download_tp2(&item.tp2);
+        if !seen.insert((normalized_tp2.clone(), item.id)) {
+            debug!(
+                "Skipped duplicate {slot} WLB item {} #{}; the first answered one wins.",
+                item.tp2, item.id
+            );
+            continue;
+        }
+        let matches: Vec<usize> = lines
+            .iter()
+            .enumerate()
+            .filter_map(|(index, line)| {
+                crate::app::wlb_inputs::parse_identity(line)
+                    .is_some_and(|identity| {
+                        identity.normalized_tp2 == normalized_tp2
+                            && identity.component_id == item.id
+                    })
+                    .then_some(index)
+            })
+            .collect();
+        let [index] = matches.as_slice() else {
+            debug!(
+                "Skipped {slot} WLB answers for {} #{}: {} matching rows.",
+                item.tp2,
+                item.id,
+                matches.len()
+            );
+            continue;
+        };
+        let line = &lines[*index];
+        let (body, ending) = line.strip_suffix("\r\n").map_or_else(
+            || {
+                line.strip_suffix('\n')
+                    .map_or((line.as_str(), ""), |body| (body, "\n"))
+            },
+            |body| (body, "\r\n"),
+        );
+        match crate::app::wlb_inputs::replace_marker(body, spec) {
+            Ok(replaced) => lines[*index] = format!("{replaced}{ending}"),
+            Err(err) => debug!(
+                "Skipped {slot} WLB answers for {} #{}: {err}",
+                item.tp2, item.id
+            ),
+        }
+    }
 }
 
 fn rewrite_payload(

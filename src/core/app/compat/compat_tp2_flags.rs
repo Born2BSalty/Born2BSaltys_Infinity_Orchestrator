@@ -344,7 +344,8 @@ fn expression_end(tokens: &[SourceToken<'_>], start: usize) -> (usize, bool) {
             && token.kind == TokenKind::Word
             && !is_expression_word(token.text)
         {
-            return (index, false);
+            let complete = index == start || !is_dangling_operator(&tokens[index - 1]);
+            return (index, complete);
         }
         if token.text == "(" {
             depth += 1;
@@ -356,6 +357,13 @@ fn expression_end(tokens: &[SourceToken<'_>], start: usize) -> (usize, bool) {
         }
     }
     (tokens.len(), depth == 0)
+}
+
+fn is_dangling_operator(token: &SourceToken<'_>) -> bool {
+    token.is_word("AND")
+        || token.is_word("OR")
+        || token.is_word("NOT")
+        || matches!(token.text, "(" | "||" | "&&" | "!")
 }
 
 fn is_expression_word(text: &str) -> bool {
@@ -372,6 +380,37 @@ fn is_expression_word(text: &str) -> bool {
             | "MOD_IS_INSTALLED"
             | "FILE_EXISTS"
             | "FILE_EXISTS_IN_GAME"
+            | "STRING_EQUAL"
+            | "STRING_EQUAL_CASE"
+            | "STRING_COMPARE"
+            | "STRING_COMPARE_CASE"
+            | "STRING_COMPARE_REGEXP"
+            | "STRING_MATCHES_REGEXP"
+            | "STRING_CONTAINS_REGEXP"
+            | "STRING_LENGTH"
+            | "BAND"
+            | "BOR"
+            | "BXOR"
+            | "BNOT"
+            | "BLSL"
+            | "BLSR"
+            | "BASR"
+            | "ABS"
+            | "MODULO"
+            | "IS_AN_INT"
+            | "IS_SILENT"
+            | "VARIABLE_IS_SET"
+            | "FILE_CONTAINS"
+            | "FILE_CONTAINS_EVALUATED"
+            | "FILE_IS_IN_COMPRESSED_BIFF"
+            | "FILE_MD5"
+            | "FILE_SIZE"
+            | "RESOURCE_CONTAINS"
+            | "DIRECTORY_EXISTS"
+            | "IDS_OF_SYMBOL"
+            | "STATE_WHICH_SAYS"
+            | "TRA_ENTRY_EXISTS"
+            | "ID_OF_LABEL"
     )
 }
 
