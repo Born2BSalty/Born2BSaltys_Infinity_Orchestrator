@@ -39,6 +39,9 @@ fn old_two_tier_from_overlays(
     default_load: ModDownloadsOverlayLoad,
     user_load: ModDownloadsOverlayLoad,
 ) -> ModDownloadsLoad {
+    let mut categories = BTreeMap::new();
+    mod_downloads::collect_categories(&mut categories, &default_load.sources);
+    mod_downloads::collect_categories(&mut categories, &user_load.sources);
     let mut by_source = BTreeMap::<String, ModDownloadSource>::new();
 
     for overlay in default_load.sources {
@@ -77,9 +80,14 @@ fn old_two_tier_from_overlays(
     }
 
     let mut sources = by_source.into_values().collect::<Vec<_>>();
+    mod_downloads::apply_categories(&mut sources, &categories);
     mod_downloads::sort_sources(&mut sources);
     let error = mod_downloads::merge_load_errors(default_load.error, user_load.error);
-    ModDownloadsLoad { sources, error }
+    ModDownloadsLoad {
+        categories,
+        sources,
+        error,
+    }
 }
 
 const fn old_overlay_has_version_selector(overlay: &ModDownloadSourceOverlay) -> bool {
@@ -101,6 +109,8 @@ fn old_clear_source_version_selectors(source: &mut ModDownloadSource) {
 }
 
 fn old_apply_modlist_overlay(result: &mut ModDownloadsLoad, per_load: ModDownloadsOverlayLoad) {
+    let mut categories = std::mem::take(&mut result.categories);
+    mod_downloads::collect_categories(&mut categories, &per_load.sources);
     let mut by_source: BTreeMap<String, ModDownloadSource> = result
         .sources
         .drain(..)
@@ -139,6 +149,8 @@ fn old_apply_modlist_overlay(result: &mut ModDownloadsLoad, per_load: ModDownloa
         by_source.insert(key, source);
     }
     result.sources = by_source.into_values().collect();
+    mod_downloads::apply_categories(&mut result.sources, &categories);
+    result.categories = categories;
     mod_downloads::sort_sources(&mut result.sources);
     result.error = mod_downloads::merge_load_errors(result.error.take(), per_load.error);
 }
@@ -267,10 +279,29 @@ pub(crate) fn migrate_source_text(
             continue;
         };
         out.push_str("\n\n");
-        out.push_str(&mod_downloads::template_mod_header(&first.tp2, &first.name));
+        out.push_str(&mod_downloads::mod_header_with_categories(
+            &first.tp2,
+            &first.name,
+            &first.categories,
+        ));
         for source in sources {
             out.push_str("\n\n");
             out.push_str(&mod_downloads::complete_source_block(source));
+        }
+    }
+    let mut metadata_parents = BTreeSet::new();
+    for overlay in &own_overlays.sources {
+        let key = mod_downloads::overlay_tp2_key(overlay);
+        if grouped.contains_key(&key) || !metadata_parents.insert(key.clone()) {
+            continue;
+        }
+        if let Some(categories) = resolved.categories.get(&key) {
+            let tp2 = overlay.tp2.as_deref().unwrap_or_default();
+            let name = overlay.name.as_deref().unwrap_or(tp2);
+            out.push_str("\n\n");
+            out.push_str(&mod_downloads::mod_header_with_categories(
+                tp2, name, categories,
+            ));
         }
     }
     out.push_str("\n\n");

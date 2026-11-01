@@ -34,6 +34,7 @@ pub(crate) enum AssetPick {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct KeptFields {
+    pub(crate) categories: Vec<String>,
     pub(crate) exact_github: Vec<String>,
     pub(crate) tp2_rename: Option<ModDownloadTp2Rename>,
     pub(crate) source_default: bool,
@@ -220,6 +221,7 @@ pub(crate) fn from_source(
         note_seed: String::new(),
         note_who: String::new(),
         kept: KeptFields {
+            categories: source.categories.clone(),
             exact_github: source.exact_github.clone(),
             tp2_rename: source.tp2_rename.clone(),
             source_default: source.source_default,
@@ -234,6 +236,7 @@ pub(crate) fn from_source(
 
 pub(crate) fn to_source(form: &SourceForm) -> ModDownloadSource {
     let mut source = ModDownloadSource {
+        categories: form.kept.categories.clone(),
         tp2: form.tp2.clone(),
         name: form.name.clone(),
         source_id: form.source_id.clone(),
@@ -313,7 +316,8 @@ fn release_newest_channel(form: &SourceForm) -> Option<String> {
 pub(crate) fn source_form_save_text(form: &SourceForm) -> String {
     let source = to_source(form);
     let block = mod_downloads::complete_source_block(&source);
-    let header = mod_downloads::template_mod_header(&form.tp2, &form.name);
+    let header =
+        mod_downloads::mod_header_with_categories(&form.tp2, &form.name, &source.categories);
     format!("{header}\n\n{block}\n")
 }
 

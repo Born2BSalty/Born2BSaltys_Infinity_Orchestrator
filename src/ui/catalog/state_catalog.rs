@@ -69,10 +69,54 @@ pub(crate) struct CatalogRow {
     pub(crate) tp2: String,
     pub(crate) name: String,
     pub(crate) sources: Vec<ModDownloadSource>,
+    pub(crate) category_keys: BTreeSet<String>,
     search: String,
 }
 
 impl CatalogRow {
+    fn collect_category_keys(
+        sources: &[ModDownloadSource],
+        options: &mut BTreeMap<String, String>,
+    ) -> BTreeSet<String> {
+        sources
+            .iter()
+            .flat_map(|source| &source.categories)
+            .filter_map(|category| {
+                let label = category.trim();
+                let key = label.to_lowercase();
+                if key.is_empty()
+                    || matches!(
+                        key.as_str(),
+                        "bg1"
+                            | "bg2"
+                            | "bgee"
+                            | "sod"
+                            | "bg2ee"
+                            | "eet"
+                            | "tutu"
+                            | "bgt"
+                            | "iwd"
+                            | "iwdee"
+                            | "iwd2"
+                            | "pst"
+                            | "pstee"
+                    )
+                {
+                    return None;
+                }
+                options
+                    .entry(key.clone())
+                    .and_modify(|current| {
+                        if label < current.as_str() {
+                            label.clone_into(current);
+                        }
+                    })
+                    .or_insert_with(|| label.to_string());
+                Some(key)
+            })
+            .collect()
+    }
+
     fn matches_kind(&self, kind: CatalogKind) -> bool {
         kind == CatalogKind::All
             || self
@@ -126,6 +170,8 @@ pub(crate) struct CatalogScreenState {
     pub(crate) rows: Vec<CatalogRow>,
     pub(crate) query: String,
     pub(crate) kind: CatalogKind,
+    pub(crate) selected_types: BTreeSet<String>,
+    pub(crate) category_options: BTreeMap<String, String>,
     pub(crate) focused_tp2: Option<String>,
     pub(crate) selected_tp2: BTreeSet<String>,
     pub(crate) source_picks: BTreeMap<String, String>,
@@ -158,6 +204,7 @@ impl CatalogScreenState {
                 .or_default()
                 .push(source);
         }
+        let mut category_options = BTreeMap::<String, String>::new();
         self.rows = groups
             .into_iter()
             .map(|(tp2, mut sources)| {
@@ -170,26 +217,31 @@ impl CatalogScreenState {
                     .iter()
                     .map(|source| {
                         format!(
-                            "{} {} {} {} {} {}",
+                            "{} {} {} {} {} {} {}",
                             source.name,
                             source.tp2,
                             source.aliases.join(" "),
                             source.source_id,
                             source.source_label,
-                            source.github.as_deref().unwrap_or(&source.url)
+                            source.github.as_deref().unwrap_or(&source.url),
+                            source.categories.join(" ")
                         )
                     })
                     .collect::<Vec<_>>()
                     .join(" ")
                     .to_lowercase();
+                let category_keys =
+                    CatalogRow::collect_category_keys(&sources, &mut category_options);
                 CatalogRow {
                     tp2,
                     name,
                     sources,
+                    category_keys,
                     search,
                 }
             })
             .collect();
+        self.category_options = category_options;
         self.rows
             .sort_by_cached_key(|r| (r.name.to_lowercase(), r.tp2.clone()));
         let keys: BTreeSet<_> = self.rows.iter().map(|r| r.tp2.clone()).collect();
@@ -229,7 +281,10 @@ impl CatalogScreenState {
             .iter()
             .enumerate()
             .filter(|(_, row)| {
-                (query.is_empty() || row.search.contains(&query)) && row.matches_kind(self.kind)
+                (query.is_empty() || row.search.contains(&query))
+                    && row.matches_kind(self.kind)
+                    && (self.selected_types.is_empty()
+                        || !self.selected_types.is_disjoint(&row.category_keys))
             })
             .map(|(index, _)| index)
             .collect()
