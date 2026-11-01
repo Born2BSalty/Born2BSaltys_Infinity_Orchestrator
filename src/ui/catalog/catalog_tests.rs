@@ -2177,7 +2177,7 @@ fn assert_catalog_search_and_filters(shapes: &[egui::Shape], width: u16, content
         })
         .unwrap_or_else(|| panic!("{width}: missing full-height native search border"));
     assert!(
-        search.left() >= title.left() && (search.right() - content.right()).abs() < 1.0,
+        search.left() >= title.left() && search.right() < content.right(),
         "{width}: search border {search:?} does not align to right page edge"
     );
     assert!((title.left() - content.left()).abs() < 1.0);
@@ -3141,7 +3141,10 @@ fn catalog_search_grows_with_live_resize_and_preserves_query() {
         ];
         let tabs = labels.map(|label| catalog_painted_text(&harness, label));
         let content = harness.state().content_rect;
-        assert!((search.right() - content.right()).abs() < 1.0);
+        let filter = catalog_painted_text(&harness, "Filter");
+        assert!(filter.right() <= content.right());
+        assert!(filter.left() > search.right());
+        assert!((filter.center().y - search.center().y).abs() < 2.0);
         assert_eq!(
             harness.state().app.catalog_screen_state.query,
             "resize query"
@@ -3155,7 +3158,7 @@ fn catalog_search_grows_with_live_resize_and_preserves_query() {
             inline.push((search, tabs));
         } else {
             assert!((search.left() - content.left()).abs() < 1.0);
-            assert!((search.width() - content.width()).abs() < 1.0);
+            assert!(search.width() > content.width() - 140.0);
             assert!(tabs.iter().all(|tab| tab.bottom() < search.top()));
         }
         println!("SEARCH_RESIZE {width}: search={search:?} tabs={tabs:?} content={content:?}");
@@ -4648,4 +4651,426 @@ fn catalog_categories_migration_metadata_only_duplicates_keep_last_declaration()
         );
         assert!(parents[0].get("sources").is_none());
     }
+}
+
+fn catalog_type_sources() -> Vec<ModDownloadSource> {
+    let mut sources = fixture_sources();
+    sources[0].categories = vec![" Quests ".to_owned(), "BGEE".to_owned()];
+    sources[1].categories = vec!["NPC".to_owned()];
+    sources[2].categories = vec!["Quests".to_owned()];
+    let mut sibling = sources[0].clone();
+    sibling.source_id = "mirror".to_owned();
+    sibling.source_default = false;
+    sibling.categories = vec!["NPC".to_owned(), "quests".to_owned()];
+    sources.push(sibling);
+    sources
+}
+
+#[test]
+fn catalog_type_options_all_existing_custom_dedup_and_games_searchable() {
+    let types = [
+        "AI",
+        "Animations",
+        "Audio",
+        "Banter",
+        "Campaign",
+        "Classes",
+        "Content Restoration",
+        "Difficulty",
+        "Encounters",
+        "Fixes",
+        "Graphics",
+        "Items",
+        "Kits",
+        "Modding Resources",
+        "Music",
+        "NPC",
+        "NPC Expansion",
+        "Portraits",
+        "Quests",
+        "Romance",
+        "Rules",
+        "Soundsets",
+        "Spells",
+        "Tools",
+        "Total Conversion",
+        "Translations",
+        "Tweaks",
+        "UI",
+        "Worldmap",
+    ];
+    let games = [
+        "BG1", "BG2", "BGEE", "SoD", "BG2EE", "EET", "Tutu", "BGT", "IWD", "IWDEE", "IWD2", "PST",
+        "PSTEE",
+    ];
+    let mut source = github_source();
+    source.categories = types
+        .iter()
+        .chain(games.iter())
+        .map(|s| (*s).to_owned())
+        .collect();
+    source
+        .categories
+        .extend([" quests ".to_owned(), "Future Custom".to_owned()]);
+    let mut state = CatalogScreenState::default();
+    state.replace_sources(vec![source], None);
+    assert_eq!(state.category_options.len(), 30);
+    for category in types.into_iter().chain(["Future Custom"]) {
+        assert!(
+            state
+                .category_options
+                .contains_key(&category.to_lowercase())
+        );
+        assert!(
+            state.rows[0]
+                .category_keys
+                .contains(&category.to_lowercase())
+        );
+    }
+    for game in games {
+        assert!(!state.category_options.contains_key(&game.to_lowercase()));
+        assert!(!state.rows[0].category_keys.contains(&game.to_lowercase()));
+        state.query = game.to_owned();
+        assert_eq!(state.visible_rows(), vec![0]);
+    }
+}
+
+#[test]
+fn catalog_type_or_and_query_kind_refresh_and_selection_contract() {
+    let mut state = CatalogScreenState::default();
+    let sources = catalog_type_sources();
+    state.replace_sources(sources.clone(), None);
+    assert_eq!(state.category_options.len(), 2);
+    assert_eq!(state.visible_rows().len(), 4);
+    state.focus("tdd");
+    state.toggle("tdd");
+    state.choose_source("tdd", "mirror");
+    let picks = state.source_picks.clone();
+    state.selected_types.insert("npc".to_owned());
+    assert_eq!(state.visible_rows().len(), 2);
+    state.selected_types.insert("quests".to_owned());
+    assert_eq!(state.visible_rows().len(), 3);
+    state.query = "darkest".to_owned();
+    state.kind = CatalogKind::GitHub;
+    assert_eq!(state.visible_rows().len(), 1);
+    state.kind = CatalogKind::DirectArchive;
+    assert_eq!(state.visible_rows(), Vec::<usize>::new());
+    assert_eq!(state.kind_count(CatalogKind::All), 4);
+    assert_eq!(state.kind_count(CatalogKind::GitHub), 1);
+    assert_eq!(state.selected_tp2, BTreeSet::from(["tdd".to_owned()]));
+    assert_eq!(state.focused_tp2.as_deref(), Some("tdd"));
+    assert_eq!(state.source_picks, picks);
+    state.query.clear();
+    state.kind = CatalogKind::All;
+    state.replace_sources(sources, None);
+    assert_eq!(state.selected_types.len(), 2);
+    assert_eq!(state.source_picks, picks);
+    state.replace_sources(vec![fixture_sources()[3].clone()], None);
+    assert_eq!(state.selected_types.len(), 2);
+    assert!(state.category_options.is_empty());
+    assert_eq!(state.visible_rows(), Vec::<usize>::new());
+    state.selected_types.clear();
+    assert_eq!(state.visible_rows().len(), 1);
+}
+
+fn catalog_type_capture(harness: &mut Harness<'_, CatalogScene>, name: &str) {
+    if let Some(directory) = std::env::var_os("BIO_TEST_SCREENSHOT_DIR") {
+        let directory = PathBuf::from(directory);
+        assert!(directory.is_absolute());
+        std::fs::create_dir_all(&directory).unwrap();
+        harness
+            .render()
+            .unwrap()
+            .save(directory.join(format!("filter-{name}.png")))
+            .unwrap();
+    }
+}
+
+#[test]
+fn catalog_type_popup_click_clear_escape_outside_and_live_resize() {
+    let _ambient_lock = mod_downloads::AMBIENT_TEST_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let _ambient_guard = AmbientGuard(mod_downloads::active_modlist_dir());
+    for (palette, name) in [(ThemePalette::Dark, "dark"), (ThemePalette::Light, "light")] {
+        let mut harness = catalog_scene(egui::vec2(1570.0, 813.0), palette, "main");
+        harness
+            .state_mut()
+            .app
+            .catalog_screen_state
+            .replace_sources(catalog_type_sources(), None);
+        harness.run();
+        let selected = harness
+            .state()
+            .app
+            .catalog_screen_state
+            .selected_tp2
+            .clone();
+        catalog_type_capture(&mut harness, &format!("closed-{name}"));
+        let filter = catalog_painted_text(&harness, "Filter");
+        catalog_pointer_click(&mut harness, filter.center());
+        assert!(harness.state().popup_open);
+        catalog_type_capture(&mut harness, &format!("open-{name}"));
+        let npc = catalog_painted_text(&harness, "NPC");
+        catalog_pointer_click(&mut harness, npc.center());
+        assert!(harness.state().popup_open);
+        assert_eq!(
+            harness.state().app.catalog_screen_state.selected_types,
+            BTreeSet::from(["npc".to_owned()])
+        );
+        catalog_painted_text(&harness, "Filter (1)");
+        catalog_type_capture(&mut harness, &format!("selected-{name}"));
+        for width in [1280_u16, 1100, 900, 1570] {
+            harness.set_size(egui::vec2(f32::from(width), 813.0));
+            harness.run();
+            assert!(harness.state().popup_open);
+            for label in ["NPC", "Quests", "Clear filters"] {
+                let rect = catalog_painted_text(&harness, label);
+                assert!(
+                    egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(f32::from(width), 813.0)
+                    )
+                    .contains_rect(rect)
+                );
+            }
+            catalog_type_capture(&mut harness, &format!("resize-{width}-{name}"));
+        }
+        let clear = catalog_painted_text(&harness, "Clear filters");
+        catalog_pointer_click(&mut harness, clear.center());
+        assert!(harness.state().popup_open);
+        assert!(
+            harness
+                .state()
+                .app
+                .catalog_screen_state
+                .selected_types
+                .is_empty()
+        );
+        assert_eq!(
+            harness.state().app.catalog_screen_state.selected_tp2,
+            selected
+        );
+        assert_eq!(
+            harness
+                .state()
+                .app
+                .catalog_screen_state
+                .focused_tp2
+                .as_deref(),
+            Some("tdd")
+        );
+        catalog_type_capture(&mut harness, &format!("cleared-{name}"));
+        harness.press_key(egui::Key::Escape);
+        harness.run();
+        assert!(!harness.state().popup_open);
+        let filter = catalog_painted_text(&harness, "Filter");
+        catalog_pointer_click(&mut harness, filter.center());
+        assert!(harness.state().popup_open);
+        let outside = catalog_painted_text(&harness, "Mod catalog");
+        catalog_pointer_click(&mut harness, outside.center());
+        assert!(!harness.state().popup_open);
+    }
+}
+
+fn catalog_type_visible_text(
+    harness: &Harness<'_, CatalogScene>,
+    label: &str,
+) -> Option<egui::Rect> {
+    harness.output().shapes.iter().find_map(|clipped| {
+        let mut shapes = Vec::new();
+        catalog_shapes(&clipped.shape, &mut shapes);
+        shapes.iter().find_map(|shape| {
+            if let egui::Shape::Text(text) = shape
+                && text.galley.text() == label
+            {
+                let rect = egui::Rect::from_min_size(text.pos, text.galley.size());
+                return clipped.clip_rect.contains_rect(rect).then_some(rect);
+            }
+            None
+        })
+    })
+}
+
+#[test]
+fn catalog_type_many_options_scroll_last_checkbox_and_clear_reachable() {
+    let _ambient_lock = mod_downloads::AMBIENT_TEST_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let _ambient_guard = AmbientGuard(mod_downloads::active_modlist_dir());
+    for (palette, name) in [(ThemePalette::Dark, "dark"), (ThemePalette::Light, "light")] {
+        let mut harness = catalog_scene(egui::vec2(900.0, 620.0), palette, "main");
+        let mut source = github_source();
+        source.categories = (0..60).map(|i| format!("Type {i:02}")).collect();
+        harness
+            .state_mut()
+            .app
+            .catalog_screen_state
+            .replace_sources(vec![source], None);
+        harness.run();
+        let filter = catalog_painted_text(&harness, "Filter");
+        catalog_pointer_click(&mut harness, filter.center());
+        assert!(harness.state().popup_open);
+        let first = catalog_type_visible_text(&harness, "Type 00").unwrap();
+        catalog_picker_wheel(&mut harness, first.center(), -5000.0);
+        let last = catalog_type_visible_text(&harness, "Type 59")
+            .expect("final checkbox must be reachable by wheel");
+        catalog_pointer_click(&mut harness, last.center());
+        assert!(harness.state().popup_open);
+        assert!(
+            harness
+                .state()
+                .app
+                .catalog_screen_state
+                .selected_types
+                .contains("type 59")
+        );
+        catalog_type_capture(&mut harness, &format!("last-checkbox-{name}"));
+        let clear = catalog_type_visible_text(&harness, "Clear filters")
+            .expect("Clear filters must remain reachable");
+        catalog_pointer_click(&mut harness, clear.center());
+        assert!(harness.state().popup_open);
+        assert!(
+            harness
+                .state()
+                .app
+                .catalog_screen_state
+                .selected_types
+                .is_empty()
+        );
+    }
+}
+
+fn catalog_full_toolbar_geometry(
+    harness: &Harness<'_, CatalogScene>,
+    width: u16,
+    caption: &str,
+) -> egui::Rect {
+    let search = catalog_toolbar_widget(harness, "Search mods, source labels or TP2\u{2026}");
+    let filter = catalog_toolbar_widget(harness, caption);
+    let content = harness.state().content_rect;
+    let tabs = [
+        "All (",
+        "GitHub (",
+        "Weaselmods (",
+        "Morpheus Mart (",
+        "Direct archives (",
+    ]
+    .map(|label| catalog_painted_text(harness, label));
+    assert!(content.contains_rect(search));
+    assert!(content.contains_rect(filter));
+    assert!(
+        search.width() >= 140.0,
+        "{width}: unusable search {search:?}"
+    );
+    assert!(search.right() < filter.left());
+    assert!((search.center().y - filter.center().y).abs() < 2.0);
+    for pair in tabs.windows(2) {
+        assert!(!pair[0].intersects(pair[1]));
+    }
+    for tab in tabs {
+        assert!(content.contains_rect(tab));
+        if width >= 1280 {
+            assert!(
+                (tab.center().y - search.center().y).abs() < 2.0,
+                "{width}: normal toolbar wrapped: tab={tab:?} search={search:?} filter={filter:?}"
+            );
+            assert!(tab.right() < search.left());
+        } else {
+            assert!(tab.bottom() < search.top());
+        }
+    }
+    println!("FULL_TOOLBAR {width} {caption}: search={search:?} filter={filter:?}");
+    search
+}
+
+fn catalog_full_toolbar_states(harness: &mut Harness<'_, CatalogScene>, theme: &str) {
+    for count in [0, 2, 29] {
+        let state = &mut harness.state_mut().app.catalog_screen_state;
+        state.selected_types = state.category_options.keys().take(count).cloned().collect();
+        harness.run();
+        let caption = if count == 0 {
+            "Filter".to_owned()
+        } else {
+            format!("Filter ({count})")
+        };
+        let normal = catalog_full_toolbar_geometry(harness, 1280, &caption);
+        catalog_type_capture(harness, &format!("full-1280-closed-{count}-{theme}"));
+        let filter = catalog_painted_text(harness, &caption);
+        catalog_pointer_click(harness, filter.center());
+        assert!(harness.state().popup_open);
+        catalog_full_toolbar_geometry(harness, 1280, &caption);
+        catalog_type_capture(harness, &format!("full-1280-open-{count}-{theme}"));
+        for width in [1570_u16, 900, 1280] {
+            harness.set_size(egui::vec2(f32::from(width), 813.0));
+            harness.run();
+            assert!(harness.state().popup_open);
+            let search = catalog_full_toolbar_geometry(harness, width, &caption);
+            if width == 1570 {
+                assert!((search.width() - normal.width() - 290.0).abs() < 1.0);
+            } else if width == 1280 {
+                assert_eq!(search, normal);
+            }
+            catalog_type_capture(harness, &format!("full-{width}-open-{count}-{theme}"));
+        }
+        let clear = catalog_type_visible_text(harness, "Clear filters").unwrap();
+        catalog_picker_wheel(harness, clear.center() - egui::vec2(0.0, 60.0), 5000.0);
+        let first = catalog_type_visible_text(harness, "AI").unwrap();
+        catalog_picker_wheel(harness, first.center(), -5000.0);
+        assert!(catalog_type_visible_text(harness, "Worldmap").is_some());
+        assert!(catalog_type_visible_text(harness, "Clear filters").is_some());
+        catalog_type_capture(harness, &format!("full-1280-bottom-{count}-{theme}"));
+        harness.press_key(egui::Key::Escape);
+        harness.run();
+        assert!(!harness.state().popup_open);
+    }
+}
+
+#[test]
+fn catalog_full_default_normal_1280_toolbar_stays_inline() {
+    let _ambient_lock = mod_downloads::AMBIENT_TEST_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let _ambient_guard = AmbientGuard(mod_downloads::active_modlist_dir());
+    for (palette, theme) in [(ThemePalette::Dark, "dark"), (ThemePalette::Light, "light")] {
+        let mut harness = catalog_scene(egui::vec2(1280.0, 813.0), palette, "main");
+        let state = &mut harness.state_mut().app.catalog_screen_state;
+        state.replace_from_texts(mod_downloads::default_mod_downloads_content(), "");
+        assert_eq!(state.rows.len(), 1268);
+        assert_eq!(
+            state
+                .rows
+                .iter()
+                .map(|row| row.sources.len())
+                .sum::<usize>(),
+            1292
+        );
+        assert_eq!(state.category_options.len(), 29);
+        catalog_full_toolbar_states(&mut harness, theme);
+        harness.state_mut().app.catalog_screen_state.query = "baldur".to_owned();
+        harness.run();
+        assert_eq!(harness.state().app.catalog_screen_state.query, "baldur");
+        let search = catalog_toolbar_widget(&harness, "baldur");
+        assert!(search.contains_rect(catalog_painted_text(&harness, "baldur")));
+    }
+}
+
+fn catalog_toolbar_widget(harness: &Harness<'_, CatalogScene>, label: &str) -> egui::Rect {
+    let anchor = catalog_painted_text(harness, label);
+    let mut shapes = Vec::new();
+    for clipped in &harness.output().shapes {
+        catalog_shapes(&clipped.shape, &mut shapes);
+    }
+    shapes
+        .iter()
+        .find_map(|shape| match shape {
+            egui::Shape::Rect(rect)
+                if rect.rect.contains(anchor.left_center())
+                    && (36.0..=40.0).contains(&rect.rect.height()) =>
+            {
+                Some(rect.rect)
+            }
+            _ => None,
+        })
+        .unwrap_or_else(|| panic!("missing toolbar widget {label}"))
 }
