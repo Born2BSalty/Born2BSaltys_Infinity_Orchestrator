@@ -4183,3 +4183,469 @@ fn catalog_popup_live_resize_complete_rows_and_last_selection() {
         "choice-23"
     );
 }
+
+fn catalog_categories_text(categories: &str) -> String {
+    format!(
+        "[[mods]]\nname = \"Fixture Adventure\"\ntp2 = \"fixture\"\n{categories}\n\
+         [[mods.sources]]\nid = \"main\"\ndefault = true\nlabel = \"Maintainer\"\n\
+         type = \"github\"\nrepo = \"Fixture/Adventure\"\nbranch = \"stable\"\n\
+         [[mods.sources]]\nid = \"mirror\"\nlabel = \"Mirror\"\ntype = \"url\"\n\
+         url = \"https://example.invalid/adventure.zip\"\n"
+    )
+}
+
+fn catalog_categories_matches(sources: Vec<ModDownloadSource>, query: &str) -> usize {
+    let mut state = CatalogScreenState::default();
+    state.replace_sources(sources, None);
+    state.query = query.to_string();
+    state.visible_rows().len()
+}
+
+#[test]
+fn catalog_categories_search_is_case_insensitive_grouped_and_kind_filtered() {
+    let text = catalog_categories_text(
+        "categories = [\"Unusual Encounters\", \"NPC's \\\"Journeys\\\"\"]",
+    );
+    let mut state = CatalogScreenState::default();
+    state.replace_from_texts(&text, "");
+    assert!(state.error.is_none(), "{:?}", state.error);
+    assert_eq!(state.rows.len(), 1);
+    assert_eq!(state.rows[0].sources.len(), 2);
+    state.query = "  uNuSuAl EnC  ".to_string();
+    assert_eq!(state.visible_rows(), vec![0]);
+    assert_eq!(state.kind_count(CatalogKind::All), 1);
+    for kind in [CatalogKind::GitHub, CatalogKind::DirectArchive] {
+        state.kind = kind;
+        assert_eq!(state.visible_rows(), vec![0]);
+    }
+    state.kind = CatalogKind::WeaselMods;
+    assert_eq!(state.visible_rows().len(), 0);
+    state.kind = CatalogKind::All;
+    state.query = "npc's \"journeys\"".to_string();
+    assert_eq!(state.visible_rows(), vec![0]);
+}
+
+#[test]
+fn catalog_categories_legacy_empty_and_tp2_identity_remain_compatible() {
+    for categories in [
+        "",
+        "categories = []",
+        "categories = [\"Unusual Encounters\"]",
+    ] {
+        let load = mod_downloads::load_mod_download_sources_from_texts(
+            &catalog_categories_text(categories),
+            "",
+            "",
+        );
+        assert!(load.error.is_none(), "{:?}", load.error);
+        assert_eq!(load.find_sources("setup-fixture.tp2").len(), 2);
+        assert_eq!(load.find_sources("Unusual Encounters").len(), 0);
+        assert_eq!(load.default_source("fixture").unwrap().source_id, "main");
+        for query in [
+            "fixture adventure",
+            "fixture",
+            "maintainer",
+            "mirror",
+            "fixture/adventure",
+        ] {
+            assert_eq!(catalog_categories_matches(load.sources.clone(), query), 1);
+        }
+        if categories != "categories = [\"Unusual Encounters\"]" {
+            assert_eq!(catalog_categories_matches(load.sources, "unusual"), 0);
+        }
+    }
+}
+
+#[test]
+fn catalog_categories_tiers_inherit_replace_and_clear_every_sibling() {
+    let defaults = catalog_categories_text("categories = [\"Lower Category\"]");
+    let replacement = "[[mods]]\ntp2 = \"SETUP-FIXTURE.TP2\"\n[[mods.sources]]\nid = \"main\"\ntype = \"github\"\nrepo = \"Personal/Adventure\"\ntag = \"v2\"\n";
+    for (user_metadata, modlist, expected, rejected) in [
+        ("", "", "lower category", "upper category"),
+        (
+            "categories = [\"Upper Category\"]",
+            "",
+            "upper category",
+            "lower category",
+        ),
+        (
+            "categories = [\"Upper Category\"]",
+            "[[mods]]\ntp2 = \"fixture\"\ncategories = [\"Final Category\"]",
+            "final category",
+            "upper category",
+        ),
+        ("categories = []", "", "", "lower category"),
+        (
+            "",
+            "[[mods]]\ntp2 = \"fixture\"\ncategories = []",
+            "",
+            "lower category",
+        ),
+    ] {
+        let user = replacement.replace(
+            "[[mods.sources]]",
+            &format!("{user_metadata}\n[[mods.sources]]"),
+        );
+        let load = mod_downloads::load_mod_download_sources_from_texts(&defaults, &user, modlist);
+        assert!(load.error.is_none(), "{:?}", load.error);
+        assert_eq!(load.sources.len(), 2);
+        let main = load
+            .sources
+            .iter()
+            .find(|source| source.source_id == "main")
+            .unwrap();
+        assert_eq!(main.tag.as_deref(), Some("v2"));
+        assert!(main.branch.is_none());
+        for source in load.sources {
+            if !expected.is_empty() {
+                assert_eq!(
+                    catalog_categories_matches(vec![source.clone()], expected),
+                    1,
+                    "{user_metadata} {modlist} {}",
+                    source.source_id
+                );
+            }
+            assert_eq!(catalog_categories_matches(vec![source], rejected), 0);
+        }
+    }
+}
+
+#[test]
+fn catalog_categories_metadata_only_parent_and_added_source_inherit() {
+    let defaults = catalog_categories_text("categories = [\"Lower Category\"]");
+    let user = "[[mods]]\ntp2 = \"fixture\"\ncategories = [\"Upper Category\"]";
+    let modlist = "[[mods]]\ntp2 = \"fixture\"\n[[mods.sources]]\nid = \"third\"\ntype = \"url\"\nurl = \"https://example.invalid/third.zip\"";
+    let load = mod_downloads::load_mod_download_sources_from_texts(&defaults, user, modlist);
+    assert!(load.error.is_none(), "{:?}", load.error);
+    assert_eq!(load.sources.len(), 3);
+    for source in load.sources {
+        assert_eq!(
+            catalog_categories_matches(vec![source.clone()], "upper category"),
+            1,
+            "{}",
+            source.source_id
+        );
+        assert_eq!(
+            catalog_categories_matches(vec![source], "lower category"),
+            0
+        );
+    }
+}
+
+#[test]
+fn catalog_categories_invalid_metadata_is_rejected() {
+    for categories in [
+        "categories = \"text\"",
+        "categories = [1]",
+        "categories = [\"text\", false]",
+    ] {
+        let load = mod_downloads::load_mod_download_sources_from_texts(
+            &catalog_categories_text(categories),
+            "",
+            "",
+        );
+        assert!(load.error.is_some(), "accepted {categories}");
+    }
+}
+
+#[test]
+fn catalog_categories_form_roundtrip_keeps_parent_metadata_out_of_source_block() {
+    let text =
+        catalog_categories_text("categories = [\"NPC's \\\"Journeys\\\"\", \"Quest, story\"]");
+    let load = mod_downloads::load_mod_download_sources_from_texts(&text, "", "");
+    assert!(load.error.is_none(), "{:?}", load.error);
+    for source in load.sources {
+        let mut form = source_form::from_source(
+            &source,
+            SourceFormIdentity::default(),
+            ModSourceEditDestination::GlobalDefault,
+            "catalog:categories",
+        );
+        form.tag = "v3".to_string();
+        let saved = source_form::source_form_save_text(&form);
+        let parsed: toml::Value = toml::from_str(&saved).unwrap();
+        let parent = &parsed["mods"][0];
+        assert_eq!(
+            parent.get("categories"),
+            Some(&toml::Value::Array(vec![
+                toml::Value::String("NPC's \"Journeys\"".to_string()),
+                toml::Value::String("Quest, story".to_string())
+            ]))
+        );
+        assert!(parent["sources"][0].get("categories").is_none());
+        assert!(!mod_downloads::complete_source_block(&source).contains("categories"));
+        let roundtrip = mod_downloads::load_mod_download_sources_from_texts(&saved, "", "");
+        assert!(roundtrip.error.is_none(), "{:?}", roundtrip.error);
+        assert_eq!(
+            catalog_categories_matches(roundtrip.sources, "npc's \"journeys\""),
+            1
+        );
+    }
+}
+
+#[test]
+fn catalog_categories_save_preserves_destination_siblings_and_explicit_clear() {
+    let _lock = mod_downloads::AMBIENT_TEST_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let root = FixtureRoot::new();
+    for categories in ["categories = [\"Destination Category\"]", "categories = []"] {
+        let path = root.join("mod_downloads_user.toml");
+        let original = catalog_categories_text(categories);
+        std::fs::write(&path, &original).unwrap();
+        let incoming = catalog_categories_text("categories = [\"Placeholder Category\"]");
+        mod_downloads::save_user_mod_download_source_block(
+            "fixture",
+            "Fixture Adventure",
+            "main",
+            false,
+            &incoming,
+            Some(&path),
+        )
+        .unwrap();
+        let saved = std::fs::read_to_string(&path).unwrap();
+        let before: toml::Value = toml::from_str(&original).unwrap();
+        let after: toml::Value = toml::from_str(&saved).unwrap();
+        assert_eq!(
+            after["mods"][0].get("categories"),
+            before["mods"][0].get("categories")
+        );
+        let load = mod_downloads::load_mod_download_sources_from_texts(&saved, "", "");
+        assert!(load.error.is_none(), "{:?}", load.error);
+        assert_eq!(load.sources.len(), 2);
+        assert!(
+            load.sources
+                .iter()
+                .any(|source| source.source_id == "mirror")
+        );
+    }
+}
+
+#[test]
+fn catalog_categories_effective_lists_and_template_are_exact() {
+    let expected = vec!["NPC's \"Journeys\"".to_string(), "Quest, story".to_string()];
+    let defaults =
+        catalog_categories_text("categories = [\"NPC's \\\"Journeys\\\"\", \"Quest, story\"]");
+    for (user, wanted) in [
+        ("", expected),
+        ("[[mods]]\ntp2 = \"fixture\"\ncategories = []", Vec::new()),
+    ] {
+        let loaded = mod_downloads::load_mod_download_sources_from_texts(&defaults, user, "");
+        assert!(loaded.error.is_none());
+        assert_eq!(loaded.sources.len(), 2);
+        for source in loaded.sources {
+            assert_eq!(source.categories, wanted);
+        }
+    }
+    let header: toml::Value =
+        toml::from_str(&mod_downloads::template_mod_header("newmod", "New Mod")).unwrap();
+    assert_eq!(header["mods"][0]["categories"].as_array().unwrap().len(), 0);
+}
+
+#[test]
+fn catalog_categories_save_inherited_override_add_remove_and_unrelated() {
+    let _lock = mod_downloads::AMBIENT_TEST_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let root = FixtureRoot::new();
+    let global = mod_downloads::mod_downloads_user_path();
+    std::fs::create_dir_all(global.parent().unwrap()).unwrap();
+    let defaults = catalog_categories_text("categories = [\"Inherited Category\"]");
+    std::fs::write(&global, &defaults).unwrap();
+    let target = root.join("override.toml");
+    let unrelated = "[[mods]]\nname = \"Other\"\ntp2 = \"other\"\ncategories = [\"Other Category\"]\n[[mods.sources]]\nid = \"main\"\ntype = \"url\"\nurl = \"https://example.invalid/other.zip\"\n";
+    std::fs::write(&target, unrelated).unwrap();
+    let loaded = mod_downloads::load_mod_download_sources_from_texts(&defaults, "", "");
+    let mut source = loaded.default_source("fixture").unwrap();
+    source.tag = Some("v9".to_string());
+    source.branch = None;
+    let block = mod_downloads::complete_source_block(&source);
+    mod_downloads::save_user_mod_download_source_block(
+        "fixture",
+        "Fixture Adventure",
+        "main",
+        false,
+        &block,
+        Some(&target),
+    )
+    .unwrap();
+    let saved = std::fs::read_to_string(&target).unwrap();
+    let parsed: toml::Value = toml::from_str(&saved).unwrap();
+    let original: toml::Value = toml::from_str(unrelated).unwrap();
+    assert_eq!(parsed["mods"][0], original["mods"][0]);
+    assert_eq!(
+        parsed["mods"][1]["categories"][0].as_str(),
+        Some("Inherited Category")
+    );
+    source.source_id = "third".to_string();
+    mod_downloads::save_user_mod_download_source_block(
+        "fixture",
+        "Fixture Adventure",
+        "third",
+        true,
+        &mod_downloads::complete_source_block(&source),
+        Some(&target),
+    )
+    .unwrap();
+    mod_downloads::save_user_mod_download_source_block(
+        "fixture",
+        "Fixture Adventure",
+        "main",
+        false,
+        "",
+        Some(&target),
+    )
+    .unwrap();
+    let saved = std::fs::read_to_string(&target).unwrap();
+    let loaded = mod_downloads::load_mod_download_sources_from_texts(&defaults, "", &saved);
+    assert!(loaded.error.is_none(), "{:?}", loaded.error);
+    assert_eq!(loaded.find_sources("fixture").len(), 3);
+    for source in loaded.find_sources("fixture") {
+        assert_eq!(source.categories, vec!["Inherited Category"]);
+    }
+    let parsed: toml::Value = toml::from_str(&saved).unwrap();
+    assert_eq!(parsed["mods"][0], original["mods"][0]);
+    assert_eq!(parsed["mods"][1]["sources"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        parsed["mods"][1]["sources"][0]["id"].as_str(),
+        Some("third")
+    );
+}
+
+#[test]
+fn catalog_categories_migration_preserves_inherit_replace_and_clear() {
+    use crate::app::mod_downloads_migrate::{MigrateResult, MigrateTier, migrate_source_text};
+    let defaults = catalog_categories_text("categories = [\"Inherited Category\"]");
+    for (metadata, expected) in [
+        ("", vec!["Inherited Category"]),
+        ("categories = []", vec![]),
+        ("categories = [\"User Category\"]", vec!["User Category"]),
+    ] {
+        let user = format!(
+            "[[mods]]\nname = \"Fixture Adventure\"\ntp2 = \"fixture\"\n{metadata}\n[[mods.sources]]\nid = \"main\"\nbranch = \"custom\"\n"
+        );
+        let MigrateResult::Rewritten(migrated) =
+            migrate_source_text(&user, &defaults, "", MigrateTier::User)
+        else {
+            panic!("expected a migration rewrite");
+        };
+        let loaded = mod_downloads::load_mod_download_sources_from_texts(&defaults, &migrated, "");
+        assert!(loaded.error.is_none(), "{:?}", loaded.error);
+        for source in loaded.sources {
+            assert_eq!(source.categories, expected);
+            if source.source_id == "main" {
+                assert_eq!(source.branch.as_deref(), Some("custom"));
+                assert_eq!(source.github.as_deref(), Some("Fixture/Adventure"));
+            }
+        }
+    }
+}
+
+#[test]
+fn catalog_categories_history_preserves_metadata_without_identity_changes() {
+    use crate::app::mod_source_history;
+    let text =
+        catalog_categories_text("categories = [\"NPC's \\\"Journeys\\\"\", \"Quest, story\"]");
+    let loaded = mod_downloads::load_mod_download_sources_from_texts(&text, "", "");
+    for source in loaded.sources {
+        let normalized = mod_source_history::normalize_source("fixture", &source);
+        assert_eq!(normalized.categories, source.categories);
+        assert_eq!(normalized.source_id, source.source_id);
+        let mut other = source.clone();
+        other.categories = vec!["Different Category".to_string()];
+        assert_eq!(
+            mod_source_history::rule_signature(&source),
+            mod_source_history::rule_signature(&other)
+        );
+        let (bookmarked, _) =
+            mod_source_history::bookmark_block(&source, Some(&source.source_id), Some("v4"))
+                .unwrap();
+        assert_eq!(bookmarked.categories, source.categories);
+        assert!(!mod_downloads::complete_source_block(&bookmarked).contains("categories"));
+    }
+}
+
+#[test]
+fn catalog_categories_metadata_only_lower_tiers_survive_first_source() {
+    let defaults = "[[mods]]\ntp2 = \"fixture\"\ncategories = [\"Default Category\"]";
+    let modlist = "[[mods]]\ntp2 = \"fixture\"\n[[mods.sources]]\nid = \"main\"\ntype = \"url\"\nurl = \"https://example.invalid/first.zip\"";
+    for (user, expected) in [
+        ("", vec!["Default Category"]),
+        (
+            "[[mods]]\ntp2 = \"fixture\"\ncategories = [\"User Category\"]",
+            vec!["User Category"],
+        ),
+        ("[[mods]]\ntp2 = \"fixture\"\ncategories = []", vec![]),
+    ] {
+        let loaded = mod_downloads::load_mod_download_sources_from_texts(defaults, user, modlist);
+        assert!(loaded.error.is_none(), "{:?}", loaded.error);
+        assert_eq!(loaded.sources.len(), 1);
+        assert_eq!(loaded.sources[0].categories, expected);
+    }
+}
+
+#[test]
+fn catalog_categories_duplicate_parent_collapse_keeps_effective_metadata() {
+    let _lock = mod_downloads::AMBIENT_TEST_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let root = FixtureRoot::new();
+    let path = root.join("duplicates.toml");
+    let original = format!(
+        "{}\n[[mods]]\ntp2 = \"fixture\"\ncategories = [\"Effective Category\"]\n",
+        catalog_categories_text("categories = []")
+    );
+    std::fs::write(&path, &original).unwrap();
+    let loaded = mod_downloads::load_mod_download_sources_from_texts(&original, "", "");
+    assert!(loaded.error.is_none(), "{:?}", loaded.error);
+    let mut source = loaded.default_source("fixture").unwrap();
+    assert_eq!(source.categories, vec!["Effective Category"]);
+    source.github = Some("Edited/Adventure".to_string());
+    source.url = "https://github.com/Edited/Adventure".to_string();
+    let form = source_form::from_source(
+        &source,
+        SourceFormIdentity::default(),
+        ModSourceEditDestination::GlobalDefault,
+        "catalog:duplicates",
+    );
+    mod_downloads::save_user_mod_download_source_block(
+        "fixture",
+        "Fixture Adventure",
+        "main",
+        false,
+        &source_form::source_form_save_text(&form),
+        Some(&path),
+    )
+    .unwrap();
+    let saved = std::fs::read_to_string(&path).unwrap();
+    let loaded = mod_downloads::load_mod_download_sources_from_texts(&saved, "", "");
+    assert!(loaded.error.is_none(), "{:?}", loaded.error);
+    assert_eq!(loaded.sources.len(), 2);
+    for source in loaded.sources {
+        assert_eq!(source.categories, vec!["Effective Category"]);
+    }
+}
+
+#[test]
+fn catalog_categories_migration_metadata_only_duplicates_keep_last_declaration() {
+    use crate::app::mod_downloads_migrate::{MigrateResult, MigrateTier, migrate_source_text};
+    for first in ["", "categories = []"] {
+        let text = format!(
+            "[[mods]]\ntp2 = \"fixture\"\n{first}\n[[mods]]\ntp2 = \"fixture\"\ncategories = [\"Effective Category\"]\n"
+        );
+        let MigrateResult::Rewritten(migrated) =
+            migrate_source_text(&text, "", "", MigrateTier::User)
+        else {
+            panic!("expected a migration rewrite");
+        };
+        let parsed: toml::Value = toml::from_str(&migrated).unwrap();
+        let parents = parsed.get("mods").and_then(toml::Value::as_array).unwrap();
+        assert_eq!(parents.len(), 1);
+        assert_eq!(parents[0]["tp2"].as_str(), Some("fixture"));
+        assert_eq!(
+            parents[0]["categories"].as_array().unwrap(),
+            &vec![toml::Value::String("Effective Category".to_string())]
+        );
+        assert!(parents[0].get("sources").is_none());
+    }
+}

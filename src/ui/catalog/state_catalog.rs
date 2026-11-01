@@ -170,13 +170,14 @@ impl CatalogScreenState {
                     .iter()
                     .map(|source| {
                         format!(
-                            "{} {} {} {} {} {}",
+                            "{} {} {} {} {} {} {}",
                             source.name,
                             source.tp2,
                             source.aliases.join(" "),
                             source.source_id,
                             source.source_label,
-                            source.github.as_deref().unwrap_or(&source.url)
+                            source.github.as_deref().unwrap_or(&source.url),
+                            source.categories.join(" ")
                         )
                     })
                     .collect::<Vec<_>>()

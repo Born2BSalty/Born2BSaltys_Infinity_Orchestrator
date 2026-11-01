@@ -56,6 +56,7 @@ struct ModDownloadModOverlay {
 
 #[derive(Debug, Clone, Default, Deserialize)]
 pub(crate) struct ModDownloadSourceOverlay {
+    pub(crate) categories: Option<Vec<String>>,
     pub(crate) name: Option<String>,
     pub(crate) tp2: Option<String>,
     pub(crate) aliases: Option<Vec<String>>,
@@ -119,6 +120,8 @@ pub(crate) struct ModDownloadTp2Rename {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
 pub(crate) struct ModDownloadSource {
     #[serde(default)]
+    pub(crate) categories: Vec<String>,
+    #[serde(default)]
     pub(crate) name: String,
     #[serde(default)]
     pub(crate) tp2: String,
@@ -166,6 +169,7 @@ pub(crate) struct ModDownloadSource {
 
 #[derive(Debug, Clone, Default)]
 pub(crate) struct ModDownloadsLoad {
+    pub(crate) categories: BTreeMap<String, Vec<String>>,
     pub(crate) sources: Vec<ModDownloadSource>,
     pub(crate) error: Option<String>,
 }
@@ -340,6 +344,29 @@ fn save_source_block_with_context(
         fs::write(&path, updated).map_err(|err| err.to_string())?;
         return Ok(());
     }
+    let content = if find_mod_block(&content, &source_input.tp2).is_none() {
+        let categories = toml::from_str::<ModDownloadsFile>(source_block)
+            .ok()
+            .and_then(|parsed| parsed.mods.into_iter().next())
+            .and_then(|parent| parent.source.categories)
+            .or_else(|| {
+                let loaded = if global {
+                    load_two_tier_sources()
+                } else {
+                    load_mod_download_sources()
+                };
+                loaded
+                    .default_source(&source_input.tp2)
+                    .map(|source| source.categories)
+            })
+            .unwrap_or_default();
+        append_mod_block(
+            &content,
+            &mod_header_with_categories(&source_input.tp2, &source_input.label, &categories),
+        )
+    } else {
+        content
+    };
     let updated = replace_or_append_source_block(
         &content,
         &source_input.tp2,
@@ -362,6 +389,9 @@ pub(crate) fn two_tier_from_overlays(
     default_load: ModDownloadsOverlayLoad,
     user_load: ModDownloadsOverlayLoad,
 ) -> ModDownloadsLoad {
+    let mut categories = BTreeMap::new();
+    collect_categories(&mut categories, &default_load.sources);
+    collect_categories(&mut categories, &user_load.sources);
     let mut by_source = BTreeMap::<String, ModDownloadSource>::new();
 
     for overlay in default_load.sources {
@@ -400,9 +430,14 @@ pub(crate) fn two_tier_from_overlays(
     }
 
     let mut sources = by_source.into_values().collect::<Vec<_>>();
+    apply_categories(&mut sources, &categories);
     sort_sources(&mut sources);
     let error = merge_load_errors(default_load.error, user_load.error);
-    ModDownloadsLoad { sources, error }
+    ModDownloadsLoad {
+        categories,
+        sources,
+        error,
+    }
 }
 
 pub(crate) fn load_mod_download_sources() -> ModDownloadsLoad {
@@ -434,6 +469,8 @@ pub(crate) fn load_mod_download_sources_from_texts(
 }
 
 fn apply_modlist_overlay(result: &mut ModDownloadsLoad, per_load: ModDownloadsOverlayLoad) {
+    let mut categories = std::mem::take(&mut result.categories);
+    collect_categories(&mut categories, &per_load.sources);
     let mut by_source: BTreeMap<String, ModDownloadSource> = result
         .sources
         .drain(..)
@@ -469,8 +506,35 @@ fn apply_modlist_overlay(result: &mut ModDownloadsLoad, per_load: ModDownloadsOv
         by_source.insert(key, source);
     }
     result.sources = by_source.into_values().collect();
+    apply_categories(&mut result.sources, &categories);
+    result.categories = categories;
     sort_sources(&mut result.sources);
     result.error = merge_load_errors(result.error.take(), per_load.error);
+}
+
+pub(crate) fn collect_categories(
+    categories: &mut BTreeMap<String, Vec<String>>,
+    overlays: &[ModDownloadSourceOverlay],
+) {
+    for overlay in overlays {
+        if let Some(value) = &overlay.categories {
+            let key = overlay_tp2_key(overlay);
+            if !key.is_empty() {
+                categories.insert(key, value.clone());
+            }
+        }
+    }
+}
+
+pub(crate) fn apply_categories(
+    sources: &mut [ModDownloadSource],
+    categories: &BTreeMap<String, Vec<String>>,
+) {
+    for source in sources {
+        if let Some(value) = categories.get(&normalize_mod_download_tp2(&source.tp2)) {
+            source.categories.clone_from(value);
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -622,7 +686,30 @@ fn replace_or_append_source_block(
     };
 
     let first_block = &content[first.0..first.1];
-    let updated_first = replace_or_append_source_in_mod_block(first_block, source_id, source_block);
+    let mut updated_first =
+        replace_or_append_source_in_mod_block(first_block, source_id, source_block);
+    if let Some(categories) = toml::from_str::<ModDownloadsFile>(content)
+        .ok()
+        .and_then(|parsed| {
+            parsed.mods.into_iter().rev().find_map(|parent| {
+                parent
+                    .source
+                    .tp2
+                    .as_deref()
+                    .is_some_and(|value| normalize_mod_download_tp2(value) == target)
+                    .then_some(parent.source.categories)
+                    .flatten()
+            })
+        })
+        && let Ok(mut document) = updated_first.parse::<toml_edit::DocumentMut>()
+        && let Some(parent) = document["mods"]
+            .as_array_of_tables_mut()
+            .and_then(|parents| parents.iter_mut().next())
+    {
+        let categories = categories.into_iter().collect::<toml_edit::Array>();
+        parent["categories"] = toml_edit::value(categories);
+        updated_first = document.to_string();
+    }
 
     let preamble = if ranges.is_empty() {
         ""
@@ -737,7 +824,7 @@ fn normalize_source_save_input(tp2: &str, label: &str, source_block: &str) -> So
 }
 
 fn new_source_parent_error() -> String {
-    "New source entry must include a [[mods]] block with name and tp2.\n\nExample:\n\n[[mods]]\nname = \"My Mod\"\ntp2 = \"mymod\"\n\n  [[mods.sources]]\n  id = \"github\"\n  label = \"GitHub\"\n  type = \"github\"\n  url = \"https://github.com/OWNER/REPO\"\n  repo = \"OWNER/REPO\""
+    "New source entry must include a [[mods]] block with name and tp2.\n\nExample:\n\n[[mods]]\nname = \"My Mod\"\ntp2 = \"mymod\"\ncategories = []\n\n  [[mods.sources]]\n  id = \"github\"\n  label = \"GitHub\"\n  type = \"github\"\n  url = \"https://github.com/OWNER/REPO\"\n  repo = \"OWNER/REPO\""
         .to_string()
 }
 
@@ -779,7 +866,7 @@ fn remove_source_from_mod_block(mod_block: &str, source_id: &str) -> Option<Stri
     let mut kept_source = false;
     for (start, end) in source_block_ranges(mod_block) {
         if source_block_id_matches(&mod_block[start..end], &target) {
-            updated.push_str(mod_block[cursor..start].trim_end());
+            updated.push_str(&mod_block[cursor..start]);
         } else {
             updated.push_str(&mod_block[cursor..end]);
             kept_source = true;
@@ -787,7 +874,11 @@ fn remove_source_from_mod_block(mod_block: &str, source_id: &str) -> Option<Stri
         cursor = end;
     }
     updated.push_str(&mod_block[cursor..]);
-    kept_source.then(|| updated.trim_end().to_string())
+    let keeps_categories = toml::from_str::<ModDownloadsFile>(mod_block)
+        .ok()
+        .and_then(|parsed| parsed.mods.into_iter().next())
+        .is_some_and(|parent| parent.source.categories.is_some());
+    (kept_source || keeps_categories).then(|| updated.trim_end().to_string())
 }
 
 fn mod_block_ranges(content: &str) -> Vec<(usize, usize)> {
@@ -1013,15 +1104,24 @@ fn bool_value_from_assignment(line: &str, key: &str) -> Option<bool> {
 }
 
 pub(crate) fn template_mod_header(tp2: &str, label: &str) -> String {
+    mod_header_with_categories(tp2, label, &[])
+}
+
+pub(crate) fn mod_header_with_categories(tp2: &str, label: &str, categories: &[String]) -> String {
     let name = if label.trim().is_empty() {
         tp2.trim()
     } else {
         label.trim()
     };
     format!(
-        "[[mods]]\nname = \"{}\"\ntp2 = \"{}\"",
+        "[[mods]]\nname = \"{}\"\ntp2 = \"{}\"\ncategories = [{}]",
         escape_toml_string(name),
-        escape_toml_string(tp2.trim())
+        escape_toml_string(tp2.trim()),
+        categories
+            .iter()
+            .map(|value| toml::Value::String(value.clone()).to_string())
+            .collect::<Vec<_>>()
+            .join(", ")
     )
 }
 
@@ -1273,7 +1373,17 @@ pub(crate) fn overlay_tp2_key(source: &ModDownloadSourceOverlay) -> String {
         .unwrap_or_default()
 }
 
+const fn category_only_overlay(source: &ModDownloadSourceOverlay) -> bool {
+    source.categories.is_some()
+        && source.source_id.is_none()
+        && source.url.is_none()
+        && source.github.is_none()
+}
+
 pub(crate) fn overlay_source_key(source: &ModDownloadSourceOverlay) -> String {
+    if category_only_overlay(source) {
+        return String::new();
+    }
     let tp2 = overlay_tp2_key(source);
     if tp2.is_empty() {
         return String::new();
@@ -1286,6 +1396,9 @@ pub(crate) fn apply_source_overlay(
     target: &mut ModDownloadSource,
     overlay: ModDownloadSourceOverlay,
 ) {
+    if let Some(categories) = overlay.categories {
+        target.categories = categories;
+    }
     if let Some(name) = overlay.name {
         target.name = name;
     }
@@ -1371,6 +1484,9 @@ fn flatten_mod_overlay_entries(
 ) -> Vec<ModDownloadSourceOverlay> {
     if mod_overlay.sources.is_empty() {
         let mut overlay = mod_overlay.source;
+        if category_only_overlay(&overlay) {
+            return vec![overlay];
+        }
         overlay.source_default_explicit = overlay.source_default;
         if overlay.source_id.is_none() {
             overlay.source_id = Some("primary".to_string());
