@@ -1068,6 +1068,7 @@ mod tests {
                 url: "https://example.test/mod.zip".to_string(),
                 ..ModDownloadSource::default()
             }],
+            categories: BTreeMap::new(),
             error: None,
         }
     }
@@ -1292,6 +1293,7 @@ mod tests {
                 url: "https://www.nexusmods.com/baldursgateenhancededition/mods/1".to_string(),
                 ..ModDownloadSource::default()
             }],
+            categories: BTreeMap::new(),
             error: None,
         };
         let mut rx = None;
@@ -1335,6 +1337,7 @@ mod tests {
                 name: "House Rules".to_string(),
                 ..ModDownloadSource::default()
             }],
+            categories: BTreeMap::new(),
             error: None,
         };
         let mut rx = None;
@@ -1373,6 +1376,7 @@ mod tests {
                 url: "https://www.nexusmods.com/baldursgateenhancededition/mods/1".to_string(),
                 ..ModDownloadSource::default()
             }],
+            categories: BTreeMap::new(),
             error: None,
         };
         let mut rx = None;
