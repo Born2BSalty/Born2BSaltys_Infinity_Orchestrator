@@ -10,6 +10,7 @@ fn fixture_notice(count: usize) -> SelectionRecoveryNotice {
                 tp2: format!("LONG_MOD_{index}/SETUP_LONG_MOD_{index}.TP2"),
                 id: i64::try_from(index).unwrap(),
                 wlb_inputs: (index == 0).then(|| "yes".to_string()),
+                answers: crate::app::answer_sets::AnswerSets::default(),
             },
             reason: "mod no longer present".to_string(),
         })

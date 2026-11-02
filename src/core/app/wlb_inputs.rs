@@ -75,6 +75,17 @@ pub(crate) fn marker_spec(raw_line: &str) -> Option<&str> {
     Some(raw_line[start + MARKER.len()..].trim())
 }
 
+pub(crate) fn strip_marker(raw_line: &str) -> String {
+    let Some(start) = raw_line.to_ascii_lowercase().find(MARKER) else {
+        return raw_line.to_string();
+    };
+    let base = raw_line[..start].trim_end();
+    base.strip_suffix("//")
+        .unwrap_or(base)
+        .trim_end()
+        .to_string()
+}
+
 pub(crate) fn replace_marker(raw_line: &str, spec: &str) -> Result<String, String> {
     decode_answers(spec)?;
     let lower = raw_line.to_ascii_lowercase();

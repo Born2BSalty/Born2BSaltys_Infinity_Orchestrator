@@ -1,11 +1,13 @@
 use super::*;
+use crate::app::answer_sets::{AnswerKey, AnswerSets};
+use crate::app::game_authority::GameSlot;
 use crate::app::state::{Step2ComponentState, Step2ModState, WizardState};
 use crate::registry::workspace_model::{ModlistWorkspaceState, SelectionRecovery};
 use crate::ui::workspace::step2::step2_rescan_reconcile::{
     arm_post_download_snapshot, reconcile_on_scan_complete, snapshot_current_selection,
 };
 use crate::ui::workspace::workspace_state_loader::{
-    extract_wlb_inputs, extract_workspace_state_from_wizard, sync_step3_from_step2_if_changed,
+    extract_workspace_state_from_wizard, sync_step3_from_step2_if_changed,
 };
 
 fn comp(id: &str, checked: bool, order: Option<usize>) -> Step2ComponentState {
@@ -61,8 +63,18 @@ fn saved(id: i64) -> ComponentRef {
     ComponentRef {
         tp2: "TEST/TEST.TP2".to_string(),
         id,
-        wlb_inputs: None,
+        ..ComponentRef::default()
     }
+}
+
+fn as_written(original: &ComponentRef) -> ComponentRef {
+    original.clone().with_answer_sets(original.answer_sets())
+}
+
+fn marker(raw_line: &str) -> Option<String> {
+    crate::app::wlb_inputs::marker_spec(raw_line)
+        .filter(|spec| !spec.is_empty())
+        .map(str::to_string)
 }
 
 fn scanned(id: i64, language: u8, selected: Option<usize>) -> Step2ComponentState {
@@ -233,7 +245,7 @@ fn include_unresolved_keeps_first_of_duplicate_entries() {
         tp2_upper: tp2.to_string(),
         component_id: id.to_string(),
         selected_order: Some(order),
-        wlb_inputs: None,
+        answers: AnswerSets::default(),
     };
     let mut snapshot = RescanSnapshot {
         bgee: vec![
@@ -345,14 +357,23 @@ fn language_change_rescan_keeps_selection_and_order() {
             scanned(13, 1, None),
         ],
     )];
+    app.wizard_state
+        .step2
+        .bgee_mod_languages
+        .insert("test".to_string(), "polish".to_string());
     rescan(&mut app);
     let rows = &app.wizard_state.step2.bgee_mods[0].components;
     assert!(rows[0].checked && rows[1].checked && !rows[2].checked);
     assert_eq!(rows[0].selected_order, Some(2));
     assert_eq!(rows[1].selected_order, Some(1));
+    assert_eq!(marker(&rows[0].raw_line), None);
     assert_eq!(
-        extract_wlb_inputs(&rows[0].raw_line).as_deref(),
-        Some("y,1")
+        app.wizard_state.step3.answer_book.others(&AnswerKey::new(
+            GameSlot::First,
+            "TEST/TEST.TP2",
+            11
+        )),
+        Some(&AnswerSets::from_legacy(Some("y,1")))
     );
     assert_eq!(step3_ids(&app), ["12", "11"]);
     let workspace = &app.workspace_state["RECOVERY"];
@@ -368,6 +389,11 @@ fn language_change_rescan_keeps_selection_and_order() {
     assert!(app.workspace_view.step2.rescan_drop_warning.is_none());
     let extracted = extract_workspace_state_from_wizard(&app.wizard_state, workspace);
     assert_eq!(extracted.order_bgee, workspace.order_bgee);
+    assert_eq!(
+        extracted.order_bgee[1].answer_sets(),
+        AnswerSets::from_legacy(Some("y,1"))
+    );
+    assert_eq!(extracted.order_bgee[1].wlb_inputs.as_deref(), Some("y,1"));
 }
 
 #[test]
@@ -457,7 +483,7 @@ fn selection_recovery_exact_match_keeps_answers_and_ignores_unselected() {
                 tp2_upper: original.tp2.clone(),
                 component_id: "11".to_string(),
                 selected_order: Some(1),
-                wlb_inputs: original.wlb_inputs.clone(),
+                answers: original.answer_sets(),
             }],
             ..Default::default()
         });
@@ -467,12 +493,12 @@ fn selection_recovery_exact_match_keeps_answers_and_ignores_unselected() {
         assert!(rows[0].checked);
         assert!(!rows[1].checked);
         assert_eq!(rows[0].selected_order, Some(1));
-        assert_eq!(extract_wlb_inputs(&rows[0].raw_line), original.wlb_inputs);
+        assert_eq!(marker(&rows[0].raw_line), original.wlb_inputs);
         let extracted = extract_workspace_state_from_wizard(
             &app.wizard_state,
             &app.workspace_state["RECOVERY"],
         );
-        assert_eq!(extracted.order_bgee, [original]);
+        assert_eq!(extracted.order_bgee, [as_written(&original)]);
         assert!(extracted.selection_recovery.is_empty());
     }
 }
@@ -529,10 +555,10 @@ fn selection_recovery_failed_preview_save_and_fresh_load_keep_original_intent() 
     crate::ui::workspace::workspace_header::save_draft(&mut app);
     eframe::App::on_exit(&mut app, None);
     let reopened = app.workspace_stores["RECOVERY"].load().unwrap();
-    assert_eq!(reopened.order_bgee, [original.clone()]);
+    assert_eq!(reopened.order_bgee, [as_written(&original)]);
     assert_eq!(
         reopened.selection_recovery["BGEE"].unresolved[0].original,
-        original
+        as_written(&original)
     );
     app.workspace_state.insert("RECOVERY".to_string(), reopened);
     snapshot_current_selection(&mut app);

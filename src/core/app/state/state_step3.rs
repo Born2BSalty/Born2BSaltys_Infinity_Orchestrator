@@ -3,6 +3,7 @@
 
 use std::collections::BTreeSet;
 
+use crate::app::answer_sets::AnswerBook;
 use crate::app::game_authority::GameSlot;
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -107,6 +108,7 @@ pub struct Step3State<Flag = bool> {
     pub prompt_edit_json: String,
     pub prompt_edit_status: String,
     pub pending_log_placements: Vec<Step3LogPlacement>,
+    pub answer_book: AnswerBook,
 }
 
 impl<Flag> Step3State<Flag> {
@@ -175,6 +177,7 @@ impl Default for Step3State {
             prompt_edit_json: String::new(),
             prompt_edit_status: String::new(),
             pending_log_placements: Vec::new(),
+            answer_book: AnswerBook::default(),
         }
     }
 }

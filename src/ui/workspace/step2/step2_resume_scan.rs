@@ -117,7 +117,7 @@ fn snapshot_from_order(order: &[ComponentRef]) -> Vec<RescanSelection> {
             tp2_upper: c.tp2.to_ascii_uppercase(),
             component_id: c.id.to_string(),
             selected_order: Some(i + 1),
-            wlb_inputs: c.wlb_inputs.clone(),
+            answers: c.answer_sets(),
         })
         .collect()
 }
@@ -132,12 +132,12 @@ mod tests {
             ComponentRef {
                 tp2: "BG1UB/SETUP-BG1UB.TP2".to_string(),
                 id: 0,
-                wlb_inputs: None,
+                ..ComponentRef::default()
             },
             ComponentRef {
                 tp2: "EeFixPack/EeFixPack.TP2".to_string(),
                 id: 2,
-                wlb_inputs: None,
+                ..ComponentRef::default()
             },
         ];
         let snap = snapshot_from_order(&order);
@@ -360,23 +360,24 @@ mod tests {
                 tp2: "MOD/MOD.TP2".to_string(),
                 id: 5,
                 wlb_inputs: Some(r"y,D:\test1".to_string()),
+                ..ComponentRef::default()
             },
             ComponentRef {
                 tp2: "OTHER/OTHER.TP2".to_string(),
                 id: 0,
-                wlb_inputs: None,
+                ..ComponentRef::default()
             },
         ];
         let snap = snapshot_from_order(&order);
         assert_eq!(snap.len(), 2);
         assert_eq!(
-            snap[0].wlb_inputs.as_deref(),
+            snap[0].answers.get("english"),
             Some(r"y,D:\test1"),
-            "snapshot_from_order must carry wlb_inputs from ComponentRef"
+            "snapshot_from_order must carry wlb_inputs from ComponentRef as English"
         );
-        assert_eq!(
-            snap[1].wlb_inputs, None,
-            "snapshot_from_order must preserve None when wlb_inputs is absent"
+        assert!(
+            snap[1].answers.is_empty(),
+            "snapshot_from_order must preserve no answers when wlb_inputs is absent"
         );
     }
 
@@ -388,12 +389,12 @@ mod tests {
                 ComponentRef {
                     tp2: "BG1UB/BG1UB.TP2".to_string(),
                     id: 11,
-                    wlb_inputs: None,
+                    ..ComponentRef::default()
                 },
                 ComponentRef {
                     tp2: "BG1UB/BG1UB.TP2".to_string(),
                     id: 0,
-                    wlb_inputs: None,
+                    ..ComponentRef::default()
                 },
             ],
             dev_scanned_mods_folder: Some("/some/scanned/mods".to_string()),
@@ -482,11 +483,13 @@ mod tests {
                 tp2: "OLD/OLD.TP2".to_string(),
                 id: 1,
                 wlb_inputs: Some("old".to_string()),
+                ..ComponentRef::default()
             };
             let current = ComponentRef {
                 tp2: "MOD/MOD.TP2".to_string(),
                 id: 17,
                 wlb_inputs: Some("bio-json-v1:[\"a,b\",\"\"]".to_string()),
+                ..ComponentRef::default()
             };
             let workspace = ModlistWorkspaceState {
                 mods_source: ModsSource::InstallationFolder,
@@ -518,7 +521,7 @@ mod tests {
             if canonical {
                 assert_eq!(snapshot.bgee[0].tp2_upper, current.tp2);
                 assert_eq!(snapshot.bgee[0].component_id, current.id.to_string());
-                assert_eq!(snapshot.bgee[0].wlb_inputs, current.wlb_inputs);
+                assert_eq!(snapshot.bgee[0].answers, current.answer_sets());
             }
             assert_eq!(
                 snapshot.bg2ee,

@@ -32,11 +32,14 @@ fn order_for<'a>(
 }
 
 fn reference(entry: &RescanSelection) -> Option<ComponentRef> {
-    Some(ComponentRef {
-        tp2: entry.tp2_upper.clone(),
-        id: entry.component_id.parse().ok()?,
-        wlb_inputs: entry.wlb_inputs.clone(),
-    })
+    Some(
+        ComponentRef {
+            tp2: entry.tp2_upper.clone(),
+            id: entry.component_id.parse().ok()?,
+            ..ComponentRef::default()
+        }
+        .with_answer_sets(entry.answers.clone()),
+    )
 }
 
 pub(crate) fn include_unresolved(app: &OrchestratorApp, snapshot: &mut RescanSnapshot) {
@@ -66,7 +69,7 @@ pub(crate) fn include_unresolved(app: &OrchestratorApp, snapshot: &mut RescanSna
                 tp2_upper: original.tp2.to_ascii_uppercase(),
                 component_id: original.id.to_string(),
                 selected_order: Some(position + 1),
-                wlb_inputs: original.wlb_inputs,
+                answers: original.answer_sets(),
             })
             .collect();
     }
@@ -101,10 +104,7 @@ pub(crate) fn persist_completed_snapshot(app: &mut OrchestratorApp, snapshot: &R
                 .cloned()
                 .map_or_else(
                     || captured.clone(),
-                    |mut item| {
-                        item.wlb_inputs.clone_from(&captured.wlb_inputs);
-                        item
-                    },
+                    |item| item.with_answer_sets(captured.answer_sets()),
                 );
             if intended.iter().any(|item| same_component(item, &original)) {
                 continue;

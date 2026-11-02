@@ -6,6 +6,7 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::path::PathBuf;
 
 use crate::app::added_mods;
+use crate::app::answer_sets::{AnswerBook, AnswerSide};
 use crate::app::controller::log_apply::{
     LogApplyReport, LogLineOutcome, apply_log_to_mods, log_line_allow_keys, normalize_path_key,
 };
@@ -16,6 +17,7 @@ use crate::app::state::{
     Step2LogPendingDownload, Step2LogTarget, Step2LogUnticked, Step2ModState, Step2State,
     WizardState,
 };
+use crate::app::wlb_inputs::marker_spec;
 use crate::mods::component::Component;
 use crate::mods::log_file::LogFile;
 
@@ -125,6 +127,11 @@ fn apply_log_to_trees(
         game_install: &state.step1.game_install,
         first: &mut state.step2.bgee_mods,
         second: &mut state.step2.bg2ee_mods,
+        answers: Some(LogAnswers {
+            first_languages: &state.step2.bgee_mod_languages,
+            second_languages: &state.step2.bg2ee_mod_languages,
+            book: &mut state.step3.answer_book,
+        }),
     };
     let mode = ApplyMode {
         allow: None,
@@ -137,6 +144,97 @@ struct TreePair<'a> {
     game_install: &'a str,
     first: &'a mut [Step2ModState],
     second: &'a mut [Step2ModState],
+    answers: Option<LogAnswers<'a>>,
+}
+
+struct LogAnswers<'a> {
+    first_languages: &'a BTreeMap<String, String>,
+    second_languages: &'a BTreeMap<String, String>,
+    book: &'a mut AnswerBook,
+}
+
+type MarkersBefore = BTreeMap<(usize, usize), String>;
+
+fn markers_before(mods: &[Step2ModState]) -> MarkersBefore {
+    mods.iter()
+        .enumerate()
+        .flat_map(|(mod_index, mod_state)| {
+            mod_state.components.iter().enumerate().filter_map(
+                move |(component_index, component)| {
+                    marker_spec(&component.raw_line)
+                        .filter(|spec| !spec.is_empty())
+                        .map(|spec| ((mod_index, component_index), spec.to_string()))
+                },
+            )
+        })
+        .collect()
+}
+
+impl LogAnswers<'_> {
+    fn tag(
+        &mut self,
+        slot: GameSlot,
+        mods: &mut [Step2ModState],
+        log: &LogFile,
+        report: &LogApplyReport,
+        before: &MarkersBefore,
+    ) {
+        let languages = match slot {
+            GameSlot::First => self.first_languages,
+            GameSlot::Second => self.second_languages,
+        };
+        let mut side = AnswerSide {
+            slot,
+            languages,
+            book: self.book,
+        };
+        for result in &report.lines {
+            let LogLineOutcome::Ticked(targets) = &result.outcome else {
+                continue;
+            };
+            let Some(log_spec) = log
+                .components()
+                .get(result.line)
+                .and_then(|installed| installed.wlb_inputs.as_deref())
+                .map(str::trim)
+                .filter(|inputs| !inputs.is_empty())
+            else {
+                continue;
+            };
+            for &(mod_index, component_index) in targets {
+                if let Some(component) = mods
+                    .get_mut(mod_index)
+                    .and_then(|mod_state| mod_state.components.get_mut(component_index))
+                {
+                    let previous = before
+                        .get(&(mod_index, component_index))
+                        .map(String::as_str);
+                    side.intake_log_answers(component, log_spec, previous);
+                }
+            }
+        }
+        side.settle(mods);
+    }
+}
+
+fn apply_and_tag(
+    answers: Option<&mut LogAnswers<'_>>,
+    slot: GameSlot,
+    mods: &mut [Step2ModState],
+    log: &LogFile,
+    apply_mode: ApplyMode<'_>,
+    next_order: &mut usize,
+) -> LogApplyReport {
+    let before = if answers.is_some() {
+        markers_before(mods)
+    } else {
+        MarkersBefore::new()
+    };
+    let report = apply_log_to_mods(mods, log, apply_mode.allow, apply_mode.reset, next_order);
+    if let Some(answers) = answers {
+        answers.tag(slot, mods, log, &report, &before);
+    }
+    report
 }
 
 #[derive(Clone, Copy)]
@@ -157,28 +255,58 @@ fn apply_log_to_tree_pair(
         game_install,
         first,
         second,
+        mut answers,
     } = trees;
     match (game_install, first_slot) {
         ("EET", true) => {
-            let picked_first = apply_log_to_mods(first, log, mode.allow, mode.reset, next_order);
+            let picked_first = apply_and_tag(
+                answers.as_mut(),
+                GameSlot::First,
+                first,
+                log,
+                mode,
+                next_order,
+            );
             let eet_core_allow = std::iter::once(normalize_path_key(r"EET\EET.TP2"))
                 .filter(|key| mode.allow.is_none_or(|allow| allow.contains(key)))
                 .collect::<HashSet<_>>();
-            let picked_eet_core =
-                apply_log_to_mods(second, log, Some(&eet_core_allow), false, next_order);
+            let eet_core_mode = ApplyMode {
+                allow: Some(&eet_core_allow),
+                reset: false,
+            };
+            let picked_eet_core = apply_and_tag(
+                answers.as_mut(),
+                GameSlot::Second,
+                second,
+                log,
+                eet_core_mode,
+                next_order,
+            );
             merge_log_report(logged, GameSlot::First, picked_first)
                 + merge_log_report(logged, GameSlot::Second, picked_eet_core)
         }
-        (_, true) => merge_log_report(
-            logged,
-            GameSlot::First,
-            apply_log_to_mods(first, log, mode.allow, mode.reset, next_order),
-        ),
-        _ => merge_log_report(
-            logged,
-            GameSlot::Second,
-            apply_log_to_mods(second, log, mode.allow, mode.reset, next_order),
-        ),
+        (_, true) => {
+            let picked = apply_and_tag(
+                answers.as_mut(),
+                GameSlot::First,
+                first,
+                log,
+                mode,
+                next_order,
+            );
+            merge_log_report(logged, GameSlot::First, picked)
+        }
+        _ => {
+            let picked = apply_and_tag(
+                answers.as_mut(),
+                GameSlot::Second,
+                second,
+                log,
+                mode,
+                next_order,
+            );
+            merge_log_report(logged, GameSlot::Second, picked)
+        }
     }
 }
 
@@ -266,6 +394,7 @@ impl LogDryRun {
             game_install: &state.step1.game_install,
             first: &mut first,
             second: &mut second,
+            answers: None,
         };
         let mode = ApplyMode {
             allow: None,
@@ -452,6 +581,11 @@ pub(crate) fn tick_logged_mods(
         game_install: &state.step1.game_install,
         first: &mut state.step2.bgee_mods,
         second: &mut state.step2.bg2ee_mods,
+        answers: Some(LogAnswers {
+            first_languages: &state.step2.bgee_mod_languages,
+            second_languages: &state.step2.bg2ee_mod_languages,
+            book: &mut state.step3.answer_book,
+        }),
     };
     let mode = ApplyMode {
         allow: Some(allow),
@@ -1252,6 +1386,146 @@ mod tests {
             },
             ..WizardState::default()
         }
+    }
+
+    #[test]
+    fn log_import_answers_count_as_english_on_a_polish_install() {
+        use crate::app::answer_sets::{AnswerKey, AnswerSets};
+
+        let _lock = ambient_lock();
+        let ambient = IsolatedAmbient::create();
+        for polish in [true, false] {
+            let mut state = install_state("BGEE");
+            let mut mod_state = scanned_mod_with("X", "X/SETUP-X.TP2", &["1", "2"]);
+            mod_state.components[0].raw_line = "~X/SETUP-X.TP2~ #1 #1 // X one".to_string();
+            mod_state.components[1].raw_line =
+                "~X/SETUP-X.TP2~ #1 #2 // X two // @wlb-inputs: t".to_string();
+            state.step2.bgee_mods = vec![mod_state];
+            if polish {
+                state
+                    .step2
+                    .bgee_mod_languages
+                    .insert("x".to_string(), "polish".to_string());
+            }
+
+            apply_log_text(
+                &mut state,
+                &ambient.root,
+                true,
+                "~X/SETUP-X.TP2~ #0 #1 // X one // @wlb-inputs: y,1\n",
+            );
+
+            let components = &state.step2.bgee_mods[0].components;
+            assert!(components[0].checked);
+            let key = AnswerKey::new(GameSlot::First, "X/SETUP-X.TP2", 1);
+            if polish {
+                assert_eq!(components[0].raw_line, "~X/SETUP-X.TP2~ #1 #1 // X one");
+                assert_eq!(
+                    state.step3.answer_book.others(&key),
+                    Some(&AnswerSets::from_legacy(Some("y,1")))
+                );
+            } else {
+                assert!(
+                    components[0].raw_line.ends_with("// @wlb-inputs: y,1"),
+                    "{}",
+                    components[0].raw_line
+                );
+                assert_eq!(state.step3.answer_book.others(&key), None);
+            }
+            assert!(components[1].raw_line.ends_with("// @wlb-inputs: t"));
+        }
+    }
+
+    fn answered_mod(name: &str, tp2_path: &str, id: &str, spec: &str) -> Step2ModState {
+        let mut mod_state = scanned_mod_with(name, tp2_path, &[id]);
+        mod_state.components[0].raw_line =
+            format!("~{tp2_path}~ #1 #{id} // {name} {id} // @wlb-inputs: {spec}");
+        mod_state
+    }
+
+    #[test]
+    fn log_import_on_polish_install_keeps_polish_set_and_adds_english() {
+        use crate::app::answer_sets::{AnswerKey, AnswerSets};
+
+        let _lock = ambient_lock();
+        let ambient = IsolatedAmbient::create();
+        let mut state = install_state("BGEE");
+        state.step2.bgee_mods = vec![answered_mod("X", "X/SETUP-X.TP2", "1", "t")];
+        state
+            .step2
+            .bgee_mod_languages
+            .insert("x".to_string(), "polish".to_string());
+
+        apply_log_text(
+            &mut state,
+            &ambient.root,
+            true,
+            "~X/SETUP-X.TP2~ #0 #1 // X one // @wlb-inputs: y\n",
+        );
+
+        let component = &state.step2.bgee_mods[0].components[0];
+        assert!(component.checked);
+        assert_eq!(marker_spec(&component.raw_line), Some("t"));
+        assert_eq!(
+            state
+                .step3
+                .answer_book
+                .others(&AnswerKey::new(GameSlot::First, "X/SETUP-X.TP2", 1)),
+            Some(&AnswerSets::from_legacy(Some("y")))
+        );
+    }
+
+    #[test]
+    fn log_import_on_eet_second_tree_keeps_its_install_language_set() {
+        use crate::app::answer_sets::{AnswerKey, AnswerSets};
+
+        let _lock = ambient_lock();
+        let ambient = IsolatedAmbient::create();
+        let mut state = install_state("EET");
+        state.step2.bgee_mods = vec![scanned_mod_with("X", "X/SETUP-X.TP2", &["1"])];
+        state.step2.bg2ee_mods = vec![answered_mod("EET", "EET/EET.TP2", "0", "t")];
+        state
+            .step2
+            .bg2ee_mod_languages
+            .insert("eet".to_string(), "polish".to_string());
+
+        apply_log_text(
+            &mut state,
+            &ambient.root,
+            true,
+            "~EET/EET.TP2~ #0 #0 // EET core // @wlb-inputs: y\n~X/SETUP-X.TP2~ #0 #1 // X one\n",
+        );
+
+        let core = &state.step2.bg2ee_mods[0].components[0];
+        assert!(core.checked);
+        assert_eq!(marker_spec(&core.raw_line), Some("t"));
+        assert_eq!(
+            state
+                .step3
+                .answer_book
+                .others(&AnswerKey::new(GameSlot::Second, "EET/EET.TP2", 0)),
+            Some(&AnswerSets::from_legacy(Some("y")))
+        );
+    }
+
+    #[test]
+    fn log_import_on_english_install_replaces_english_set() {
+        let _lock = ambient_lock();
+        let ambient = IsolatedAmbient::create();
+        let mut state = install_state("BGEE");
+        state.step2.bgee_mods = vec![answered_mod("X", "X/SETUP-X.TP2", "1", "y")];
+
+        apply_log_text(
+            &mut state,
+            &ambient.root,
+            true,
+            "~X/SETUP-X.TP2~ #0 #1 // X one // @wlb-inputs: z\n",
+        );
+
+        let component = &state.step2.bgee_mods[0].components[0];
+        assert!(component.checked);
+        assert_eq!(marker_spec(&component.raw_line), Some("z"));
+        assert!(state.step3.answer_book.is_empty());
     }
 
     #[test]

@@ -149,6 +149,46 @@ fn reopening_saved_answers_preserves_exact_values_identity_and_selection_key() {
 }
 
 #[test]
+fn editor_save_on_polish_line_persists_both_languages_through_step2_mirror() {
+    use crate::app::answer_sets::{AnswerKey, AnswerSets};
+    use crate::app::game_authority::GameSlot;
+
+    let mut state = with_mirror();
+    state
+        .step2
+        .bgee_mod_languages
+        .insert("quest".to_string(), "polish".to_string());
+    let english = AnswerSets::from_legacy(Some("y"));
+    state.step3.answer_book.set_others(
+        AnswerKey::new(GameSlot::First, "QUEST/SETUP-QUEST.TP2", 11),
+        english.clone(),
+    );
+    assert_eq!(
+        wlb_inputs::marker_spec(&state.step3.bgee_items[0].raw_line),
+        None
+    );
+    open_fixture(&mut state);
+    answers(&mut state, &[("t", false)]);
+    save_current(&mut state).unwrap();
+
+    assert_eq!(
+        wlb_inputs::marker_spec(&state.step2.bgee_mods[0].components[0].raw_line),
+        Some("t")
+    );
+    let extracted =
+        crate::ui::workspace::workspace_state_loader::extract_workspace_state_from_wizard(
+            &state,
+            &crate::registry::workspace_model::ModlistWorkspaceState::default(),
+        );
+    assert_eq!(extracted.order_bgee.len(), 1);
+    assert_eq!(
+        extracted.order_bgee[0].answer_sets(),
+        english.merged("polish", Some("t"))
+    );
+    assert_eq!(extracted.order_bgee[0].wlb_inputs.as_deref(), Some("y"));
+}
+
+#[test]
 fn missing_queue_uses_relevant_game_slots_and_existing_install_order() {
     let mut state = fixture();
     state.step1.game_install = "EET".to_string();

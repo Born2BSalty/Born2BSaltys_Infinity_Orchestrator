@@ -23,6 +23,7 @@ fn workspace() -> ModlistWorkspaceState {
             tp2: "mod/mod.tp2".to_string(),
             id: 17,
             wlb_inputs: Some("bio-json-v1:[\"a,b\",\"\"]".to_string()),
+            answers: crate::app::answer_sets::AnswerSets::default(),
         }],
         ..Default::default()
     }
@@ -51,6 +52,7 @@ fn answered(tp2: &str, id: i64, answers: &str) -> ComponentRef {
         tp2: tp2.to_string(),
         id,
         wlb_inputs: Some(answers.to_string()),
+        answers: crate::app::answer_sets::AnswerSets::default(),
     }
 }
 

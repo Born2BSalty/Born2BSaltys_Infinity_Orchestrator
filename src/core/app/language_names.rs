@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-pub const UNTAGGED_LANGUAGE: &str = "english";
+pub(crate) const UNTAGGED_LANGUAGE: &str = "english";
 
 const LANGUAGE_NAMES: [(&str, &str); 12] = [
     ("de", "german"),
@@ -19,7 +19,7 @@ const LANGUAGE_NAMES: [(&str, &str); 12] = [
 ];
 
 #[must_use]
-pub fn canonical_language_name(label: &str) -> String {
+pub(crate) fn canonical_language_name(label: &str) -> String {
     let trimmed = label.trim();
     if trimmed.is_empty() {
         return UNTAGGED_LANGUAGE.to_string();

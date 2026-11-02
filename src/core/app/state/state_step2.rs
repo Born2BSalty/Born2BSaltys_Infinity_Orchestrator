@@ -376,7 +376,7 @@ impl Step2State {
     }
 
     #[must_use]
-    pub fn mod_install_language(&self, tab: &str, tp2: &str) -> Option<&str> {
+    pub(crate) fn mod_install_language(&self, tab: &str, tp2: &str) -> Option<&str> {
         let languages = if tab == "BG2EE" {
             &self.bg2ee_mod_languages
         } else {

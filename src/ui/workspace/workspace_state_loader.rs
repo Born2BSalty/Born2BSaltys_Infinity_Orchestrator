@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
+use crate::app::answer_sets::{AnswerBook, AnswerSide, outgoing_for_line, tree_with_answers};
 use crate::app::controller::step3_sync;
-use crate::app::game_authority;
-use crate::app::state::{
-    Step1State, Step2ComponentState, Step2ModState, Step3ItemState, WizardState,
-};
+use crate::app::game_authority::{self, GameSlot};
+use crate::app::state::{Step1State, Step2ModState, Step2State, Step3ItemState, WizardState};
 use crate::registry::model::{Game, ModlistEntry};
 use crate::registry::workspace_model::{ComponentRef, ModlistWorkspaceState, ModsSource};
 use crate::settings::store::SettingsStore;
@@ -81,11 +80,15 @@ pub fn populate_wizard_state_from_workspace(
     apply_mods_source(workspace, settings_store, wizard_state);
 
     reset_scanned_step2_set(wizard_state);
+    wizard_state.step3.answer_book.clear();
 
-    apply_order_to_mods(&workspace.order_bgee, &mut wizard_state.step2.bgee_mods);
-    apply_order_to_mods(&workspace.order_bg2ee, &mut wizard_state.step2.bg2ee_mods);
+    let (mods, side) = tree_with_answers(wizard_state, GameSlot::First);
+    apply_order_to_mods(&workspace.order_bgee, mods, side);
+    let (mods, side) = tree_with_answers(wizard_state, GameSlot::Second);
+    apply_order_to_mods(&workspace.order_bg2ee, mods, side);
     if entry.game == Game::IWDEE {
-        apply_order_to_mods(&workspace.order_iwdee, &mut wizard_state.step2.bgee_mods);
+        let (mods, side) = tree_with_answers(wizard_state, GameSlot::First);
+        apply_order_to_mods(&workspace.order_iwdee, mods, side);
     }
     recompute_mod_checked(&mut wizard_state.step2.bgee_mods);
     recompute_mod_checked(&mut wizard_state.step2.bg2ee_mods);
@@ -133,7 +136,11 @@ fn reset_scanned_step2_set(wizard_state: &mut WizardState) {
     wizard_state.step2.is_scanning = false;
 }
 
-fn apply_order_to_mods(order: &[ComponentRef], mods: &mut [Step2ModState]) {
+fn apply_order_to_mods(
+    order: &[ComponentRef],
+    mods: &mut [Step2ModState],
+    mut side: AnswerSide<'_>,
+) {
     for mod_state in mods.iter_mut() {
         for component in &mut mod_state.components {
             component.checked = false;
@@ -143,6 +150,7 @@ fn apply_order_to_mods(order: &[ComponentRef], mods: &mut [Step2ModState]) {
     for (position, item) in order.iter().enumerate() {
         let want_tp2 = crate::app::mod_downloads::normalize_mod_download_tp2(&item.tp2);
         let want_id = item.id.to_string();
+        let sets = item.answer_sets();
         for mod_state in mods.iter_mut() {
             if crate::app::mod_downloads::normalize_mod_download_tp2(&mod_state.tp_file) != want_tp2
             {
@@ -152,25 +160,12 @@ fn apply_order_to_mods(order: &[ComponentRef], mods: &mut [Step2ModState]) {
                 if component.component_id == want_id && component.selected_order.is_none() {
                     component.checked = true;
                     component.selected_order = Some(position + 1);
-                    if let Some(inputs) = item.wlb_inputs.as_deref() {
-                        reattach_wlb_inputs(component, inputs);
-                    }
+                    side.intake_component(component, &sets);
                 }
             }
         }
     }
-}
-
-pub(crate) fn extract_wlb_inputs(raw_line: &str) -> Option<String> {
-    crate::app::wlb_inputs::marker_spec(raw_line)
-        .filter(|spec| !spec.is_empty())
-        .map(str::to_string)
-}
-
-pub(crate) fn reattach_wlb_inputs(component: &mut Step2ComponentState, inputs: &str) {
-    if let Ok(line) = crate::app::wlb_inputs::replace_marker(&component.raw_line, inputs) {
-        component.raw_line = line;
-    }
+    side.settle(mods);
 }
 
 fn recompute_mod_checked(mods: &mut [Step2ModState]) {
@@ -229,12 +224,22 @@ pub fn extract_workspace_state_from_wizard(
         &prior.order_bgee
     };
     let first_order = order_for_tab(
-        order_from_items(&wizard_state.step3.bgee_items),
+        order_from_items(
+            &wizard_state.step3.bgee_items,
+            GameSlot::First,
+            &wizard_state.step2,
+            &wizard_state.step3.answer_book,
+        ),
         prior_first,
         wizard_state.step2.bgee_mods.is_empty(),
     );
     let second_order = order_for_tab(
-        order_from_items(&wizard_state.step3.bg2ee_items),
+        order_from_items(
+            &wizard_state.step3.bg2ee_items,
+            GameSlot::Second,
+            &wizard_state.step2,
+            &wizard_state.step3.answer_book,
+        ),
         &prior.order_bg2ee,
         wizard_state.step2.bg2ee_mods.is_empty(),
     );
@@ -325,18 +330,26 @@ pub(crate) fn merge_unresolved_order(
     order
 }
 
-fn order_from_items(items: &[Step3ItemState]) -> Vec<ComponentRef> {
+fn order_from_items(
+    items: &[Step3ItemState],
+    slot: GameSlot,
+    step2: &Step2State,
+    book: &AnswerBook,
+) -> Vec<ComponentRef> {
     items
         .iter()
         .filter(|item| !item.is_parent && item.component_id != PARENT_PLACEHOLDER_ID)
         .filter_map(|item| {
             let id = item.component_id.trim().parse::<i64>().ok()?;
-            let wlb_inputs = extract_wlb_inputs(&item.raw_line);
-            Some(ComponentRef {
-                tp2: item.tp_file.clone(),
-                id,
-                wlb_inputs,
-            })
+            let sets = outgoing_for_line(&item.raw_line, &item.tp_file, slot, step2, book);
+            Some(
+                ComponentRef {
+                    tp2: item.tp_file.clone(),
+                    id,
+                    ..ComponentRef::default()
+                }
+                .with_answer_sets(sets),
+            )
         })
         .collect()
 }
@@ -464,6 +477,20 @@ mod tests {
         }
     }
 
+    fn apply_plain(order: &[ComponentRef], mods: &mut [Step2ModState]) {
+        let languages = std::collections::BTreeMap::new();
+        let mut book = AnswerBook::default();
+        apply_order_to_mods(
+            order,
+            mods,
+            AnswerSide {
+                slot: GameSlot::First,
+                languages: &languages,
+                book: &mut book,
+            },
+        );
+    }
+
     fn entry(game: Game) -> ModlistEntry {
         ModlistEntry {
             id: "ABCDEFGHIJKL".to_string(),
@@ -483,12 +510,12 @@ mod tests {
                 ComponentRef {
                     tp2: "BG1UB/SETUP-BG1UB.TP2".to_string(),
                     id: 0,
-                    wlb_inputs: None,
+                    ..ComponentRef::default()
                 },
                 ComponentRef {
                     tp2: "EEFIXPACK/EEFIXPACK.TP2".to_string(),
                     id: 2,
-                    wlb_inputs: None,
+                    ..ComponentRef::default()
                 },
             ],
             ..Default::default()
@@ -518,7 +545,7 @@ mod tests {
                 vec![comp("0", "Restored")],
             ),
         ];
-        apply_order_to_mods(&workspace.order_bgee, &mut ws.step2.bgee_mods);
+        apply_plain(&workspace.order_bgee, &mut ws.step2.bgee_mods);
         recompute_mod_checked(&mut ws.step2.bgee_mods);
         let max_order =
             max_selected_order(&ws.step2.bgee_mods).max(max_selected_order(&ws.step2.bg2ee_mods));
@@ -560,12 +587,12 @@ mod tests {
                 ComponentRef {
                     tp2: "EEFIXPACK/EEFIXPACK.TP2".to_string(),
                     id: 0,
-                    wlb_inputs: None,
+                    ..ComponentRef::default()
                 },
                 ComponentRef {
                     tp2: "EEFIXPACK/EEFIXPACK.TP2".to_string(),
                     id: 2,
-                    wlb_inputs: None,
+                    ..ComponentRef::default()
                 },
             ],
             ..Default::default()
@@ -581,7 +608,7 @@ mod tests {
             "EEFIXPACK/EEFIXPACK.TP2",
             vec![comp("0", "Core"), comp("2", "GTU")],
         )];
-        apply_order_to_mods(&workspace.order_bgee, &mut ws.step2.bgee_mods);
+        apply_plain(&workspace.order_bgee, &mut ws.step2.bgee_mods);
         recompute_mod_checked(&mut ws.step2.bgee_mods);
         ws.step3.bgee_items = step3_sync::build_step3_items(&ws.step2.bgee_mods);
 
@@ -595,24 +622,24 @@ mod tests {
             ComponentRef {
                 tp2: "MOD/MOD.TP2".to_string(),
                 id: 3,
-                wlb_inputs: None,
+                ..ComponentRef::default()
             },
             ComponentRef {
                 tp2: "OTHER/OTHER.TP2".to_string(),
                 id: 1,
-                wlb_inputs: None,
+                ..ComponentRef::default()
             },
             ComponentRef {
                 tp2: "mod/mod.tp2".to_string(),
                 id: 3,
-                wlb_inputs: None,
+                ..ComponentRef::default()
             },
         ];
         let mut mods = vec![
             mod_state("Mod", "MOD/MOD.TP2", vec![comp("3", "Three")]),
             mod_state("Other", "OTHER/OTHER.TP2", vec![comp("1", "One")]),
         ];
-        apply_order_to_mods(&order, &mut mods);
+        apply_plain(&order, &mut mods);
 
         assert!(mods[0].components[0].checked);
         assert_eq!(mods[0].components[0].selected_order, Some(1));
@@ -755,7 +782,7 @@ mod tests {
             order_bgee: vec![ComponentRef {
                 tp2: "EEFIXPACK/EEFIXPACK.TP2".to_string(),
                 id: 0,
-                wlb_inputs: None,
+                ..ComponentRef::default()
             }],
             ..Default::default()
         };
@@ -919,7 +946,7 @@ mod tests {
             vec![ComponentRef {
                 tp2: "EEFIXPACK/EEFIXPACK.TP2".to_string(),
                 id: 2,
-                wlb_inputs: None,
+                ..ComponentRef::default()
             }],
             "Bug A: the Step-2 toggle must reach the persisted order"
         );
@@ -933,7 +960,7 @@ mod tests {
             &mut ws2,
         );
         ws2.step2.bgee_mods = scanned_eefix();
-        apply_order_to_mods(&reloaded.order_bgee, &mut ws2.step2.bgee_mods);
+        apply_plain(&reloaded.order_bgee, &mut ws2.step2.bgee_mods);
         recompute_mod_checked(&mut ws2.step2.bgee_mods);
         ws2.step3.bgee_items = step3_sync::build_step3_items(&ws2.step2.bgee_mods);
 
@@ -970,7 +997,7 @@ mod tests {
             order_bgee: vec![ComponentRef {
                 tp2: "EEFIXPACK/EEFIXPACK.TP2".to_string(),
                 id: 0,
-                wlb_inputs: None,
+                ..ComponentRef::default()
             }],
             ..Default::default()
         };
@@ -983,7 +1010,7 @@ mod tests {
             &mut ws,
         );
         ws.step2.bgee_mods = scanned_eefix();
-        apply_order_to_mods(&a_ws.order_bgee, &mut ws.step2.bgee_mods);
+        apply_plain(&a_ws.order_bgee, &mut ws.step2.bgee_mods);
         recompute_mod_checked(&mut ws.step2.bgee_mods);
         ws.step3.bgee_items = step3_sync::build_step3_items(&ws.step2.bgee_mods);
         assert!(
@@ -1016,7 +1043,7 @@ mod tests {
             &mut ws,
         );
         ws.step2.bgee_mods = scanned_eefix();
-        apply_order_to_mods(&a_ws.order_bgee, &mut ws.step2.bgee_mods);
+        apply_plain(&a_ws.order_bgee, &mut ws.step2.bgee_mods);
         recompute_mod_checked(&mut ws.step2.bgee_mods);
         ws.step3.bgee_items = step3_sync::build_step3_items(&ws.step2.bgee_mods);
         assert!(
@@ -1037,12 +1064,12 @@ mod tests {
                 ComponentRef {
                     tp2: "BG1UB/SETUP-BG1UB.TP2".to_string(),
                     id: 0,
-                    wlb_inputs: None,
+                    ..ComponentRef::default()
                 },
                 ComponentRef {
                     tp2: "EEFIXPACK/EEFIXPACK.TP2".to_string(),
                     id: 2,
-                    wlb_inputs: None,
+                    ..ComponentRef::default()
                 },
             ],
             ..Default::default()
@@ -1074,7 +1101,7 @@ mod tests {
             order_bgee: vec![ComponentRef {
                 tp2: "EEFIXPACK/EEFIXPACK.TP2".to_string(),
                 id: 0,
-                wlb_inputs: None,
+                ..ComponentRef::default()
             }],
             ..Default::default()
         };
@@ -1364,6 +1391,7 @@ mod tests {
             tp2: "MOD/MOD.TP2".to_string(),
             id: 5,
             wlb_inputs: Some(r"y,D:\test1".to_string()),
+            ..ComponentRef::default()
         }];
 
         let mut ws: WizardState = WizardState::default();
@@ -1393,7 +1421,8 @@ mod tests {
                 selected_order: None,
             }],
         )];
-        apply_order_to_mods(&order, &mut ws.step2.bgee_mods);
+        let (mods, side) = tree_with_answers(&mut ws, GameSlot::First);
+        apply_order_to_mods(&order, mods, side);
         recompute_mod_checked(&mut ws.step2.bgee_mods);
         ws.step3.bgee_items = step3_sync::build_step3_items(&ws.step2.bgee_mods);
 
@@ -1410,6 +1439,76 @@ mod tests {
              got: {}",
             leaves[0].raw_line
         );
+    }
+
+    #[test]
+    fn edit_on_polish_line_saves_both_languages() {
+        use crate::app::answer_sets::{AnswerKey, AnswerSets};
+
+        let mut ws = WizardState::default();
+        ws.step1.game_install = "BGEE".to_string();
+        ws.step2
+            .bgee_mod_languages
+            .insert("mod".to_string(), "polish".to_string());
+        let mut row = comp("5", "Label");
+        row.raw_line = "~MOD/MOD.TP2~ #1 #5 // Label".to_string();
+        ws.step2.bgee_mods = vec![mod_state("MOD", "MOD/MOD.TP2", vec![row])];
+        let order = vec![ComponentRef {
+            tp2: "MOD/MOD.TP2".to_string(),
+            id: 5,
+            wlb_inputs: Some("y".to_string()),
+            ..ComponentRef::default()
+        }];
+        let (mods, side) = tree_with_answers(&mut ws, GameSlot::First);
+        apply_order_to_mods(&order, mods, side);
+        assert!(
+            !ws.step2.bgee_mods[0].components[0]
+                .raw_line
+                .contains("@wlb-inputs")
+        );
+        assert_eq!(
+            ws.step3
+                .answer_book
+                .others(&AnswerKey::new(GameSlot::First, "MOD/MOD.TP2", 5)),
+            Some(&AnswerSets::from_legacy(Some("y")))
+        );
+        ws.step3.bgee_items = step3_sync::build_step3_items(&ws.step2.bgee_mods);
+        let item = ws
+            .step3
+            .bgee_items
+            .iter_mut()
+            .find(|item| !item.is_parent)
+            .expect("leaf");
+        item.raw_line = crate::app::wlb_inputs::replace_marker(&item.raw_line, "t").unwrap();
+
+        let extracted = extract_workspace_state_from_wizard(&ws, &ModlistWorkspaceState::default());
+        let mut expected = AnswerSets::from_legacy(Some("y"));
+        expected.set("polish", "t");
+        assert_eq!(extracted.order_bgee[0].answer_sets(), expected);
+        assert_eq!(extracted.order_bgee[0].answers, expected);
+        assert_eq!(extracted.order_bgee[0].wlb_inputs.as_deref(), Some("y"));
+    }
+
+    #[test]
+    fn book_cleared_on_list_switch() {
+        use crate::app::answer_sets::{AnswerKey, AnswerSets};
+
+        let root = TempRoot::named("bio_loader_book");
+        let store = SettingsStore::new_with_path(root.0.join("bio_settings.json"));
+        let mut ws = WizardState::default();
+        ws.step3.answer_book.set_others(
+            AnswerKey::new(GameSlot::First, "MOD/MOD.TP2", 5),
+            AnswerSets::from_legacy(Some("y")),
+        );
+        let mut list = entry(Game::BGEE);
+        list.destination_folder = root.path_of("dest");
+        populate_wizard_state_from_workspace(
+            &ModlistWorkspaceState::default(),
+            &list,
+            &store,
+            &mut ws,
+        );
+        assert!(ws.step3.answer_book.is_empty());
     }
 
     struct TempRoot(std::path::PathBuf);

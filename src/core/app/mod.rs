@@ -2,6 +2,7 @@
 // Copyright (c) 2026 Born2BSalty
 
 pub mod added_mods;
+pub mod answer_sets;
 pub mod app_bootstrap_init;
 #[path = "navigation/app_nav.rs"]
 pub mod app_nav;

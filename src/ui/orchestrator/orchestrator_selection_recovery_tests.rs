@@ -90,6 +90,7 @@ fn selection_recovery_actual_autosave_and_nav_away_keep_unresolved_with_new_edit
             tp2: "TEST/TEST.TP2".to_string(),
             id: 11,
             wlb_inputs: Some("unchanged answers".to_string()),
+            answers: crate::app::answer_sets::AnswerSets::default(),
         };
         let workspace = ModlistWorkspaceState {
             order_bgee: vec![original.clone()],
