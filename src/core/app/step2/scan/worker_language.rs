@@ -5,8 +5,11 @@ use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use crate::app::language_names::{
+    contains_any_hint, language_hints_for_locale, locale_key, matches_locale_token,
+};
 use crate::app::state::Step1State;
-use crate::install::weidu_scan;
+use crate::install::weidu_scan::{self, LanguageEntry};
 
 #[derive(Debug, Clone)]
 pub(super) struct PreferredLocaleInfo {
@@ -52,7 +55,7 @@ pub(super) fn candidate_language_ids(
     game_dir: &Path,
     work_dir: &Path,
     preferred_locale: &str,
-) -> Result<Vec<String>, String> {
+) -> Result<Vec<LanguageEntry>, String> {
     let langs = match weidu_scan::list_languages_for_game(weidu, tp2, game_dir, work_dir) {
         Ok(langs) if !langs.is_empty() => langs,
         Ok(_) => weidu_scan::list_languages(weidu, tp2)
@@ -66,112 +69,54 @@ pub(super) fn candidate_language_ids(
             })?
         }
     };
+    Ok(order_language_entries(langs, preferred_locale))
+}
 
-    if langs.is_empty() {
-        return Ok(vec!["0".to_string()]);
-    }
-
-    let locale = preferred_locale.to_ascii_lowercase();
-    let locale_key = locale
-        .split(['_', '-'])
-        .next()
-        .unwrap_or_default()
-        .to_string();
+pub(super) fn order_language_entries(
+    langs: Vec<LanguageEntry>,
+    preferred_locale: &str,
+) -> Vec<LanguageEntry> {
+    let locale_key = locale_key(preferred_locale);
     let preferred_hints = language_hints_for_locale(&locale_key);
     let english_hints = language_hints_for_locale("en");
     let wants_english = locale_key.is_empty() || locale_key == "en";
 
-    let mut preferred = Vec::<String>::new();
-    let mut english = Vec::<String>::new();
-    let mut others = Vec::<String>::new();
+    let mut preferred = Vec::<LanguageEntry>::new();
+    let mut english = Vec::<LanguageEntry>::new();
+    let mut others = Vec::<LanguageEntry>::new();
     for entry in langs {
-        let id = entry.id;
         let label = entry.label.to_ascii_lowercase();
         let locale_matches_label = !wants_english && matches_locale_token(&label, &locale_key);
         if !wants_english && (contains_any_hint(&label, &preferred_hints) || locale_matches_label) {
-            preferred.push(id);
+            preferred.push(entry);
         } else if contains_any_hint(&label, &english_hints) {
-            english.push(id);
+            english.push(entry);
         } else {
-            others.push(id);
+            others.push(entry);
         }
     }
 
-    let mut ordered = Vec::<String>::new();
+    let mut ordered = Vec::<LanguageEntry>::new();
     if !wants_english {
         ordered.extend(preferred);
     }
     ordered.extend(english);
     ordered.extend(others);
 
-    let mut deduped = Vec::<String>::new();
-    for id in ordered {
-        if !deduped.iter().any(|v| v == &id) {
-            deduped.push(id);
+    let mut deduped = Vec::<LanguageEntry>::new();
+    for entry in ordered {
+        if !deduped.iter().any(|kept| kept.id == entry.id) {
+            deduped.push(entry);
         }
     }
 
-    let mut preferred = deduped;
-    if preferred.is_empty() {
-        preferred.push("0".to_string());
+    if deduped.is_empty() {
+        deduped.push(LanguageEntry {
+            id: "0".to_string(),
+            label: String::new(),
+        });
     }
-    Ok(preferred)
-}
-
-fn contains_any_hint(text: &str, hints: &[&str]) -> bool {
-    let text_tokens = tokenize_language_label(text);
-    let normalized_text = normalize_language_phrase(text);
-    hints.iter().any(|hint| {
-        let hint = normalize_language_phrase(hint);
-        !hint.is_empty()
-            && (normalized_text == hint
-                || normalized_text.contains(&hint)
-                || text_tokens.iter().any(|token| token == &hint))
-    })
-}
-
-fn matches_locale_token(label: &str, locale_key: &str) -> bool {
-    if locale_key.is_empty() {
-        return false;
-    }
-    tokenize_language_label(label)
-        .into_iter()
-        .any(|token| token == locale_key)
-}
-
-fn tokenize_language_label(label: &str) -> Vec<String> {
-    label
-        .split(|c: char| !c.is_ascii_alphanumeric())
-        .filter(|part| !part.is_empty())
-        .map(str::to_ascii_lowercase)
-        .collect()
-}
-
-fn normalize_language_phrase(value: &str) -> String {
-    let tokens = tokenize_language_label(value);
-    if tokens.is_empty() {
-        String::new()
-    } else {
-        format!(" {} ", tokens.join(" "))
-    }
-}
-
-fn language_hints_for_locale(locale_key: &str) -> Vec<&'static str> {
-    match locale_key {
-        "en" => vec!["english", "en", "en_us", "en-gb", "american english"],
-        "de" => vec!["german", "deutsch", "de_de"],
-        "ru" => vec!["russian", "ru_ru", "рус"],
-        "fr" => vec!["french", "fr_fr", "francais", "français"],
-        "es" => vec!["spanish", "es", "es_es", "es-es", "español", "espanol"],
-        "it" => vec!["italian", "it_it", "italiano"],
-        "pl" => vec!["polish", "pl_pl", "polski"],
-        "pt" => vec!["portuguese", "pt_br", "pt_pt", "português", "portugues"],
-        "cs" => vec!["czech", "cs_cz", "čeština", "cestina"],
-        "tr" => vec!["turkish", "tr_tr", "türkçe", "turkce"],
-        "uk" => vec!["ukrainian", "uk_ua", "україн"],
-        "zh" => vec!["zh", "zh_cn", "zh_tw", "chinese", "schinese", "tchinese"],
-        _ => vec![],
-    }
+    deduped
 }
 
 fn profile_dir_names(game_install: &str) -> Vec<&'static str> {

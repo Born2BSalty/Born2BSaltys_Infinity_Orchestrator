@@ -78,12 +78,18 @@ pub fn normalize_context_path(path: &Path) -> String {
 }
 
 #[must_use]
-pub fn cache_context(weidu: &Path, game_dir: &Path, mods_root: &Path) -> String {
+pub fn cache_context(
+    weidu: &Path,
+    game_dir: &Path,
+    mods_root: &Path,
+    preferred_locale: &str,
+) -> String {
     format!(
-        "v={SCAN_CACHE_VERSION}|weidu={}|game={}|mods={}",
+        "v={SCAN_CACHE_VERSION}|weidu={}|game={}|mods={}|lang={}",
         normalize_context_path(weidu),
         normalize_context_path(game_dir),
-        normalize_context_path(mods_root)
+        normalize_context_path(mods_root),
+        preferred_locale.to_lowercase()
     )
 }
 
@@ -382,5 +388,71 @@ fn non_empty(value: &str) -> Option<String> {
         None
     } else {
         Some(trimmed.to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use super::{SCAN_CACHE_VERSION, cache_context, inspect_and_parse_cache_text};
+
+    fn context_for(locale: &str) -> String {
+        cache_context(
+            Path::new("C:/Tools/weidu.exe"),
+            Path::new("C:/Games/BG2EE"),
+            Path::new("C:/Games/Mods"),
+            locale,
+        )
+    }
+
+    fn cache_text(version: u32) -> String {
+        serde_json::json!({
+            "version": version,
+            "entries": {
+                "c:/games/mods/atweaks/setup-atweaks.tp2": {
+                    "context": "v=6|weidu=c:/tools/weidu.exe|game=c:/games/bg2ee|mods=c:/games/mods",
+                    "mtime_secs": 1,
+                    "size": 1,
+                    "components": [{
+                        "tp_file": "SETUP-ATWEAKS.TP2",
+                        "component_id": "100",
+                        "display": "Restore innate infravision",
+                        "raw_line": "~ATWEAKS/SETUP-ATWEAKS.TP2~ #0 #100"
+                    }]
+                }
+            }
+        })
+        .to_string()
+    }
+
+    #[test]
+    fn cache_context_changes_with_language() {
+        assert_ne!(context_for("en_US"), context_for("pl_PL"));
+        assert_eq!(context_for("pl_PL"), context_for("PL_pl"));
+        assert!(context_for("pl_PL").ends_with("|lang=pl_pl"));
+        assert!(context_for("pl_PL").starts_with(&format!("v={SCAN_CACHE_VERSION}|")));
+    }
+
+    #[test]
+    fn old_cache_version_is_rescanned() {
+        let path = Path::new("bio_scan_cache_version_probe_never_written.json");
+        let old = inspect_and_parse_cache_text(path, "test", &cache_text(6))
+            .expect_err("a version 6 cache is not served");
+        assert_eq!(old.load_status, "version_mismatch");
+        assert_eq!(old.file_version, Some(6));
+        assert!(!old.version_matches_current_schema);
+
+        let (meta, current) =
+            inspect_and_parse_cache_text(path, "test", &cache_text(SCAN_CACHE_VERSION))
+                .expect("the current version loads");
+        assert!(meta.version_matches_current_schema);
+        let entry = current
+            .entries
+            .values()
+            .next()
+            .expect("entry kept at the current version");
+        assert_eq!(entry.components[0].language_name, "");
+        assert_ne!(entry.context, context_for("en_US"));
     }
 }

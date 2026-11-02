@@ -104,6 +104,7 @@ pub mod game_version;
 pub mod github_forks_list;
 #[path = "step2/update/github_release_list.rs"]
 pub mod github_release_list;
+pub mod language_names;
 pub mod mod_downloads;
 pub mod mod_downloads_migrate;
 pub mod mod_installer_parser;
@@ -162,5 +163,7 @@ pub mod tp2_component_begin;
 pub mod versions_view;
 pub mod wlb_inputs;
 
+#[cfg(test)]
+mod language_names_tests;
 #[cfg(test)]
 mod wlb_inputs_tests;

@@ -5,11 +5,12 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
+use crate::app::language_names::canonical_language_name;
 use crate::app::scan::ScannedComponent;
 use crate::app::scan::cache::{ScanCache, cache_get, cache_put};
 use crate::app::scan::parse::{normalize_tp_file, parse_component_line};
 use crate::app::state::Step2Tp2ProbeReport;
-use crate::install::weidu_scan;
+use crate::install::weidu_scan::{self, LanguageEntry};
 use crate::parser;
 
 use super::language::candidate_language_ids;
@@ -99,24 +100,22 @@ fn scan_components_for_tp2(
         .and_then(|n| n.to_str())
         .map(normalize_tp_file)
         .unwrap_or_default();
-    let mut fallback_components = Vec::<ScannedComponent>::new();
-    let mut fallback_language = None::<String>;
-    let language_ids = candidate_language_ids(
+    let languages = candidate_language_ids(
         scan_ctx.weidu,
         tp2,
         scan_ctx.game_dir,
         work_dir,
         scan_ctx.preferred_locale,
     )?;
-    probe.language_ids_tried.clone_from(&language_ids);
+    probe.language_ids_tried = languages.iter().map(|entry| entry.id.clone()).collect();
 
-    for lang_id in language_ids {
+    let chosen = choose_language_components(languages, |lang_id| {
         let lines = weidu_scan::list_components_lines(
             scan_ctx.weidu,
             scan_ctx.game_dir,
             work_dir,
             tp2,
-            &lang_id,
+            lang_id,
         )
         .map_err(|err| {
             format!(
@@ -125,39 +124,53 @@ fn scan_components_for_tp2(
                 lang_id
             )
         })?;
-        let parsed_for_tp2 = parse_lines_for_tp2(tp2, &expected_tp2, lines);
-        if parsed_for_tp2.is_empty() {
+        Ok(parse_lines_for_tp2(tp2, &expected_tp2, lines))
+    })?;
+    let Some((language, components)) = chosen else {
+        return Ok(Vec::new());
+    };
+    probe.selected_language_id = Some(language.id);
+    let components = apply_prompt_index(components, prompt_index);
+    probe.parsed_count = components.len();
+    probe.undefined_count = count_undefined_components(&components);
+    cache_put(scan_ctx.cache, scan_ctx.ctx, tp2, components.clone());
+    Ok(components)
+}
+
+type LanguageComponents = (LanguageEntry, Vec<ScannedComponent>);
+
+fn choose_language_components<F>(
+    languages: Vec<LanguageEntry>,
+    mut components_for: F,
+) -> Result<Option<LanguageComponents>, String>
+where
+    F: FnMut(&str) -> Result<Vec<ScannedComponent>, String>,
+{
+    let mut fallback = None::<LanguageComponents>;
+    for language in languages {
+        let parsed = components_for(&language.id)?;
+        if parsed.is_empty() {
             continue;
         }
-        let undefined = count_undefined_components(&parsed_for_tp2);
-        if undefined < parsed_for_tp2.len() {
-            probe.selected_language_id = Some(lang_id);
-            let parsed_for_tp2 = apply_prompt_index(parsed_for_tp2, prompt_index);
-            probe.parsed_count = parsed_for_tp2.len();
-            probe.undefined_count = undefined;
-            cache_put(scan_ctx.cache, scan_ctx.ctx, tp2, parsed_for_tp2.clone());
-            return Ok(parsed_for_tp2);
+        if count_undefined_components(&parsed) < parsed.len() {
+            return Ok(Some(tag_language(language, parsed)));
         }
-        if fallback_components.is_empty() {
-            fallback_language = Some(lang_id);
-            fallback_components = parsed_for_tp2;
+        if fallback.is_none() {
+            fallback = Some((language, parsed));
         }
     }
+    Ok(fallback.map(|(language, parsed)| tag_language(language, parsed)))
+}
 
-    if fallback_components.is_empty() {
-        return Ok(Vec::new());
+fn tag_language(
+    language: LanguageEntry,
+    mut components: Vec<ScannedComponent>,
+) -> LanguageComponents {
+    let name = canonical_language_name(&language.label);
+    for component in &mut components {
+        component.language_name.clone_from(&name);
     }
-    probe.selected_language_id = fallback_language;
-    let fallback_components = apply_prompt_index(fallback_components, prompt_index);
-    probe.parsed_count = fallback_components.len();
-    probe.undefined_count = count_undefined_components(&fallback_components);
-    cache_put(
-        scan_ctx.cache,
-        scan_ctx.ctx,
-        tp2,
-        fallback_components.clone(),
-    );
-    Ok(fallback_components)
+    (language, components)
 }
 
 fn apply_prompt_index(
@@ -345,9 +358,11 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::{Arc, Mutex};
 
+    use super::super::language::order_language_entries;
     use super::{
-        ScanCache, ScanGroupContext, ScannedComponent, Step2Tp2ProbeReport, cache_put,
-        cached_components, parser, preferred_scan_work_dir, usable_cached_components,
+        LanguageEntry, ScanCache, ScanGroupContext, ScannedComponent, Step2Tp2ProbeReport,
+        cache_put, cached_components, choose_language_components, parser, preferred_scan_work_dir,
+        usable_cached_components,
     };
 
     static ROOT_SEQ: AtomicUsize = AtomicUsize::new(0);
@@ -403,6 +418,7 @@ mod tests {
             prompt_events: Vec::new(),
             mod_prompt_summary: None,
             mod_prompt_events: Vec::new(),
+            language_name: String::new(),
         }
     }
 
@@ -494,6 +510,69 @@ mod tests {
             serve_from_cache(&["UNDEFINED STRING:   @100", "Restore innate infravision"]),
             (Some(2), true)
         );
+    }
+
+    fn entry(id: &str, label: &str) -> LanguageEntry {
+        LanguageEntry {
+            id: id.to_string(),
+            label: label.to_string(),
+        }
+    }
+
+    fn scan_with(languages: Vec<LanguageEntry>, locale: &str) -> (String, Vec<String>) {
+        let ordered = order_language_entries(languages, locale);
+        let (chosen, components) = choose_language_components(ordered, |id| {
+            Ok(vec![component(&format!("Component in language {id}"))])
+        })
+        .expect("fake listing succeeds")
+        .expect("a language is chosen");
+        (
+            chosen.id,
+            components
+                .into_iter()
+                .map(|component| component.language_name)
+                .collect(),
+        )
+    }
+
+    #[test]
+    fn scan_records_chosen_language_name() {
+        let with_polish = vec![
+            entry("0", "English"),
+            entry("1", "Deutsch"),
+            entry("2", "Polski"),
+        ];
+        assert_eq!(
+            scan_with(with_polish, "pl_PL"),
+            ("2".to_string(), vec!["polish".to_string()])
+        );
+
+        let without_polish = vec![entry("0", "Deutsch"), entry("1", "American English")];
+        assert_eq!(
+            scan_with(without_polish, "pl_PL"),
+            ("1".to_string(), vec!["english".to_string()])
+        );
+
+        assert_eq!(
+            scan_with(Vec::new(), "pl_PL"),
+            ("0".to_string(), vec!["english".to_string()])
+        );
+    }
+
+    #[test]
+    fn all_undefined_language_falls_back_to_the_next_defined_one() {
+        let languages = vec![entry("0", "Polski"), entry("1", "English")];
+        let (chosen, components) = choose_language_components(languages, |id| {
+            Ok(vec![component(if id == "0" {
+                "UNDEFINED STRING:   @100"
+            } else {
+                "Restore innate infravision"
+            })])
+        })
+        .expect("fake listing succeeds")
+        .expect("a language is chosen");
+        assert_eq!(chosen.id, "1");
+        assert_eq!(components[0].language_name, "english");
     }
 
     #[test]

@@ -121,6 +121,8 @@ pub fn populate_wizard_state_from_workspace(
 fn reset_scanned_step2_set(wizard_state: &mut WizardState) {
     wizard_state.step2.bgee_mods.clear();
     wizard_state.step2.bg2ee_mods.clear();
+    wizard_state.step2.bgee_mod_languages.clear();
+    wizard_state.step2.bg2ee_mod_languages.clear();
     wizard_state.step3.bgee_items.clear();
     wizard_state.step3.bg2ee_items.clear();
     wizard_state.step2.selected = None;
@@ -147,10 +149,7 @@ fn apply_order_to_mods(order: &[ComponentRef], mods: &mut [Step2ModState]) {
                 continue;
             }
             for component in &mut mod_state.components {
-                if component.component_id == want_id
-                    && crate::app::wlb_inputs::parse_identity(&component.raw_line)
-                        .is_some_and(|identity| identity.language == item.language)
-                {
+                if component.component_id == want_id && component.selected_order.is_none() {
                     component.checked = true;
                     component.selected_order = Some(position + 1);
                     if let Some(inputs) = item.wlb_inputs.as_deref() {
@@ -289,7 +288,7 @@ pub fn extract_workspace_state_from_wizard(
 }
 
 pub(crate) fn same_component(a: &ComponentRef, b: &ComponentRef) -> bool {
-    a.tp2.eq_ignore_ascii_case(&b.tp2) && a.id == b.id && a.language == b.language
+    a.tp2.eq_ignore_ascii_case(&b.tp2) && a.id == b.id
 }
 
 pub(crate) fn merge_unresolved_order(
@@ -332,13 +331,10 @@ fn order_from_items(items: &[Step3ItemState]) -> Vec<ComponentRef> {
         .filter(|item| !item.is_parent && item.component_id != PARENT_PLACEHOLDER_ID)
         .filter_map(|item| {
             let id = item.component_id.trim().parse::<i64>().ok()?;
-            let language = crate::app::wlb_inputs::parse_identity(&item.raw_line)
-                .map_or(0, |identity| identity.language);
             let wlb_inputs = extract_wlb_inputs(&item.raw_line);
             Some(ComponentRef {
                 tp2: item.tp_file.clone(),
                 id,
-                language,
                 wlb_inputs,
             })
         })
@@ -487,13 +483,11 @@ mod tests {
                 ComponentRef {
                     tp2: "BG1UB/SETUP-BG1UB.TP2".to_string(),
                     id: 0,
-                    language: 0,
                     wlb_inputs: None,
                 },
                 ComponentRef {
                     tp2: "EEFIXPACK/EEFIXPACK.TP2".to_string(),
                     id: 2,
-                    language: 0,
                     wlb_inputs: None,
                 },
             ],
@@ -566,13 +560,11 @@ mod tests {
                 ComponentRef {
                     tp2: "EEFIXPACK/EEFIXPACK.TP2".to_string(),
                     id: 0,
-                    language: 0,
                     wlb_inputs: None,
                 },
                 ComponentRef {
                     tp2: "EEFIXPACK/EEFIXPACK.TP2".to_string(),
                     id: 2,
-                    language: 0,
                     wlb_inputs: None,
                 },
             ],
@@ -595,6 +587,36 @@ mod tests {
 
         let extracted = extract_workspace_state_from_wizard(&ws, &workspace);
         assert_eq!(extracted.order_bgee, workspace.order_bgee);
+    }
+
+    #[test]
+    fn cold_restore_keeps_the_first_copy_of_a_duplicated_component() {
+        let order = vec![
+            ComponentRef {
+                tp2: "MOD/MOD.TP2".to_string(),
+                id: 3,
+                wlb_inputs: None,
+            },
+            ComponentRef {
+                tp2: "OTHER/OTHER.TP2".to_string(),
+                id: 1,
+                wlb_inputs: None,
+            },
+            ComponentRef {
+                tp2: "mod/mod.tp2".to_string(),
+                id: 3,
+                wlb_inputs: None,
+            },
+        ];
+        let mut mods = vec![
+            mod_state("Mod", "MOD/MOD.TP2", vec![comp("3", "Three")]),
+            mod_state("Other", "OTHER/OTHER.TP2", vec![comp("1", "One")]),
+        ];
+        apply_order_to_mods(&order, &mut mods);
+
+        assert!(mods[0].components[0].checked);
+        assert_eq!(mods[0].components[0].selected_order, Some(1));
+        assert_eq!(mods[1].components[0].selected_order, Some(2));
     }
 
     #[test]
@@ -733,7 +755,6 @@ mod tests {
             order_bgee: vec![ComponentRef {
                 tp2: "EEFIXPACK/EEFIXPACK.TP2".to_string(),
                 id: 0,
-                language: 0,
                 wlb_inputs: None,
             }],
             ..Default::default()
@@ -898,7 +919,6 @@ mod tests {
             vec![ComponentRef {
                 tp2: "EEFIXPACK/EEFIXPACK.TP2".to_string(),
                 id: 2,
-                language: 0,
                 wlb_inputs: None,
             }],
             "Bug A: the Step-2 toggle must reach the persisted order"
@@ -950,7 +970,6 @@ mod tests {
             order_bgee: vec![ComponentRef {
                 tp2: "EEFIXPACK/EEFIXPACK.TP2".to_string(),
                 id: 0,
-                language: 0,
                 wlb_inputs: None,
             }],
             ..Default::default()
@@ -1018,13 +1037,11 @@ mod tests {
                 ComponentRef {
                     tp2: "BG1UB/SETUP-BG1UB.TP2".to_string(),
                     id: 0,
-                    language: 0,
                     wlb_inputs: None,
                 },
                 ComponentRef {
                     tp2: "EEFIXPACK/EEFIXPACK.TP2".to_string(),
                     id: 2,
-                    language: 0,
                     wlb_inputs: None,
                 },
             ],
@@ -1057,7 +1074,6 @@ mod tests {
             order_bgee: vec![ComponentRef {
                 tp2: "EEFIXPACK/EEFIXPACK.TP2".to_string(),
                 id: 0,
-                language: 0,
                 wlb_inputs: None,
             }],
             ..Default::default()
@@ -1347,7 +1363,6 @@ mod tests {
         let order = vec![ComponentRef {
             tp2: "MOD/MOD.TP2".to_string(),
             id: 5,
-            language: 0,
             wlb_inputs: Some(r"y,D:\test1".to_string()),
         }];
 

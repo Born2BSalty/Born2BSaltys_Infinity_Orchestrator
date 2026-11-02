@@ -64,6 +64,7 @@ pub fn parse_component_line(line: &str) -> Option<ScannedComponent> {
             prompt_events: Vec::new(),
             mod_prompt_summary: None,
             mod_prompt_events: Vec::new(),
+            language_name: String::new(),
         });
     }
 
@@ -98,6 +99,7 @@ pub fn parse_component_line(line: &str) -> Option<ScannedComponent> {
             prompt_events: Vec::new(),
             mod_prompt_summary: None,
             mod_prompt_events: Vec::new(),
+            language_name: String::new(),
         })
     }
 }

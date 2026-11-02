@@ -17,11 +17,12 @@ pub fn run_scan(step1: Step1State, sender: Sender<Step2ScanEvent>, cancel: Arc<A
     let runtime = (sender, cancel);
     let step1 = Arc::new(step1);
     match scan_impl(&step1, &runtime.0, &runtime.1) {
-        Ok((first_game_mods, second_game_mods, report)) => {
+        Ok((first_game_mods, second_game_mods, mod_languages, report)) => {
             prewarm_import_compat_caches(&first_game_mods, &second_game_mods);
             let _ = runtime.0.send(Step2ScanEvent::Finished {
                 bgee_mods: first_game_mods,
                 bg2ee_mods: second_game_mods,
+                mod_languages,
                 report: Box::new(report),
             });
         }

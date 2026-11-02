@@ -1,8 +1,11 @@
 use super::*;
 use crate::app::state::{Step2ComponentState, Step2ModState, WizardState};
 use crate::registry::workspace_model::{ModlistWorkspaceState, SelectionRecovery};
+use crate::ui::workspace::step2::step2_rescan_reconcile::{
+    arm_post_download_snapshot, reconcile_on_scan_complete, snapshot_current_selection,
+};
 use crate::ui::workspace::workspace_state_loader::{
-    extract_workspace_state_from_wizard, sync_step3_from_step2_if_changed,
+    extract_wlb_inputs, extract_workspace_state_from_wizard, sync_step3_from_step2_if_changed,
 };
 
 fn comp(id: &str, checked: bool, order: Option<usize>) -> Step2ComponentState {
@@ -54,11 +57,10 @@ fn mod_state(tp: &str, mut comps: Vec<Step2ComponentState>) -> Step2ModState {
     }
 }
 
-fn saved(id: i64, language: u8) -> ComponentRef {
+fn saved(id: i64) -> ComponentRef {
     ComponentRef {
         tp2: "TEST/TEST.TP2".to_string(),
         id,
-        language,
         wlb_inputs: None,
     }
 }
@@ -72,12 +74,11 @@ fn scanned(id: i64, language: u8, selected: Option<usize>) -> Step2ComponentStat
 fn recovery(original: ComponentRef, position: usize) -> SelectionRecovery {
     SelectionRecovery {
         unresolved: vec![UnresolvedSelection { original, position }],
-        ..Default::default()
     }
 }
 
 fn recovery_app(game: &str) -> OrchestratorApp {
-    let mut app = OrchestratorApp::new_isolated_for_test("language-recovery-regression");
+    let mut app = OrchestratorApp::new_isolated_for_test("selection-recovery-regression");
     app.workspace_view.modlist_id = "RECOVERY".to_string();
     app.workspace_view.loaded_workspace_id = Some("RECOVERY".to_string());
     app.wizard_state.step1.game_install = game.to_string();
@@ -87,26 +88,45 @@ fn recovery_app(game: &str) -> OrchestratorApp {
     app
 }
 
-fn notice(
-    app: &OrchestratorApp,
-    original: ComponentRef,
-    language: u8,
-    tab: &str,
-) -> LanguageRecoveryNotice {
-    LanguageRecoveryNotice {
-        owner: "RECOVERY".to_string(),
-        generation: app.workspace_view.step2.recovery_scan_generation,
-        rows: vec![LanguageRecoveryRow {
-            tab: tab.to_string(),
-            original,
-            available_language: Some(language),
-            reason: String::new(),
-        }],
+fn rescan(app: &mut OrchestratorApp) {
+    app.workspace_view.step2.resume_pending = true;
+    assert!(reconcile_on_scan_complete(app));
+}
+
+fn step3_ids(app: &OrchestratorApp) -> Vec<String> {
+    app.wizard_state
+        .step3
+        .bgee_items
+        .iter()
+        .filter(|item| !item.is_parent)
+        .map(|item| item.component_id.clone())
+        .collect()
+}
+
+struct TempRoot(std::path::PathBuf);
+
+impl TempRoot {
+    fn new() -> Self {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static N: AtomicU64 = AtomicU64::new(0);
+        let root = Self(std::env::temp_dir().join(format!(
+            "bio_selection_recovery_{}_{}",
+            std::process::id(),
+            N.fetch_add(1, Ordering::Relaxed)
+        )));
+        std::fs::create_dir_all(&root.0).expect("create temp root");
+        root
+    }
+}
+
+impl Drop for TempRoot {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
     }
 }
 
 #[test]
-fn language_recovery_model_legacy_and_unresolved_only_roundtrip() {
+fn selection_recovery_model_legacy_and_unresolved_only_roundtrip() {
     let legacy: ModlistWorkspaceState = serde_json::from_str("{}").unwrap();
     assert!(legacy.selection_recovery.is_empty());
     assert!(legacy.is_empty());
@@ -116,7 +136,7 @@ fn language_recovery_model_legacy_and_unresolved_only_roundtrip() {
             .contains("selection_recovery")
     );
     let mut workspace = legacy;
-    let mut original = saved(11, 0);
+    let mut original = saved(11);
     original.wlb_inputs = Some("yes,  ,C:\\old path".to_string());
     workspace
         .selection_recovery
@@ -130,10 +150,32 @@ fn language_recovery_model_legacy_and_unresolved_only_roundtrip() {
 }
 
 #[test]
-fn language_recovery_merge_keeps_reorder_new_rows_and_real_deselection() {
-    let unresolved = saved(11, 0);
+fn retained_answers_in_old_json_loads_and_is_dropped_on_save() {
+    let root = TempRoot::new();
+    let path = root.0.join("workspace.json");
+    std::fs::write(
+        &path,
+        r#"{"order_bgee":[{"tp2":"TEST/TEST.TP2","id":11,"language":0,"wlb_inputs":"yes"}],"selection_recovery":{"BGEE":{"unresolved":[{"original":{"tp2":"TEST/TEST.TP2","id":11,"language":0,"wlb_inputs":"yes"},"position":0}],"retained_answers":[{"original":{"tp2":"TEST/TEST.TP2","id":12,"language":0,"wlb_inputs":"old"},"target":{"tp2":"TEST/TEST.TP2","id":12,"language":1}}]}}}"#,
+    )
+    .unwrap();
+    let store = crate::registry::store_workspace::WorkspaceStore::new_with_path(path.clone());
+    let loaded = store.load().expect("old workspace loads");
+    let mut original = saved(11);
+    original.wlb_inputs = Some("yes".to_string());
+    assert_eq!(loaded.order_bgee, [original.clone()]);
+    assert_eq!(loaded.selection_recovery["BGEE"], recovery(original, 0));
+    store.save(&loaded).unwrap();
+    let written = std::fs::read_to_string(&path).unwrap();
+    assert!(!written.contains("retained_answers"), "got: {written}");
+    assert!(!written.contains("\"language\""), "got: {written}");
+    assert_eq!(store.load().unwrap(), loaded);
+}
+
+#[test]
+fn selection_recovery_merge_keeps_reorder_new_rows_and_real_deselection() {
+    let unresolved = saved(11);
     let mut prior = ModlistWorkspaceState {
-        order_bgee: vec![saved(1, 1), unresolved.clone(), saved(2, 1), saved(3, 1)],
+        order_bgee: vec![saved(1), unresolved.clone(), saved(2), saved(3)],
         ..Default::default()
     };
     prior
@@ -154,7 +196,7 @@ fn language_recovery_merge_keeps_reorder_new_rows_and_real_deselection() {
     let extracted = extract_workspace_state_from_wizard(&wizard, &prior);
     assert_eq!(
         extracted.order_bgee,
-        [saved(2, 1), unresolved, saved(1, 1), saved(4, 1)]
+        [saved(2), unresolved, saved(1), saved(4)]
     );
     assert_eq!(
         extract_workspace_state_from_wizard(&wizard, &extracted),
@@ -163,9 +205,9 @@ fn language_recovery_merge_keeps_reorder_new_rows_and_real_deselection() {
 }
 
 #[test]
-fn language_recovery_equal_positions_keep_sequence_without_duplicates() {
-    let a = saved(10, 0);
-    let b = saved(11, 0);
+fn selection_recovery_equal_positions_keep_sequence_without_duplicates() {
+    let a = saved(10);
+    let b = saved(11);
     let mut state = SelectionRecovery {
         unresolved: vec![
             UnresolvedSelection {
@@ -177,33 +219,60 @@ fn language_recovery_equal_positions_keep_sequence_without_duplicates() {
                 position: 1,
             },
         ],
-        ..Default::default()
     };
-    let expected = vec![saved(1, 1), a, b, saved(2, 1)];
-    let merged = merge_unresolved_order(vec![saved(1, 1), saved(2, 1)], Some(&mut state));
+    let expected = vec![saved(1), a, b, saved(2)];
+    let merged = merge_unresolved_order(vec![saved(1), saved(2)], Some(&mut state));
     assert_eq!(merged, expected);
     assert_eq!(merge_unresolved_order(merged, Some(&mut state)), expected);
 }
 
 #[test]
-fn language_recovery_iwdee_alias_does_not_extract_bgee_unresolved() {
+fn include_unresolved_keeps_first_of_duplicate_entries() {
+    let app = recovery_app("BGEE");
+    let entry = |tp2: &str, id: &str, order: usize| RescanSelection {
+        tp2_upper: tp2.to_string(),
+        component_id: id.to_string(),
+        selected_order: Some(order),
+        wlb_inputs: None,
+    };
+    let mut snapshot = RescanSnapshot {
+        bgee: vec![
+            entry("TEST/TEST.TP2", "3", 1),
+            entry("TEST/TEST.TP2", "1", 2),
+            entry("test/test.tp2", "3", 3),
+        ],
+        ..Default::default()
+    };
+    include_unresolved(&app, &mut snapshot);
+    assert_eq!(
+        snapshot
+            .bgee
+            .iter()
+            .map(|entry| (entry.component_id.as_str(), entry.selected_order))
+            .collect::<Vec<_>>(),
+        [("3", Some(1)), ("1", Some(2))]
+    );
+}
+
+#[test]
+fn selection_recovery_iwdee_alias_does_not_extract_bgee_unresolved() {
     let mut prior = ModlistWorkspaceState {
-        order_bgee: vec![saved(90, 0)],
-        order_iwdee: vec![saved(10, 0)],
+        order_bgee: vec![saved(90)],
+        order_iwdee: vec![saved(10)],
         ..Default::default()
     };
     prior
         .selection_recovery
-        .insert("BGEE".to_string(), recovery(saved(90, 0), 0));
+        .insert("BGEE".to_string(), recovery(saved(90), 0));
     prior
         .selection_recovery
-        .insert("IWDEE".to_string(), recovery(saved(10, 0), 0));
+        .insert("IWDEE".to_string(), recovery(saved(10), 0));
     let mut wizard = WizardState::default();
     wizard.step1.game_install = "IWDEE".to_string();
     wizard.step2.bgee_mods = vec![mod_state("TEST/TEST.TP2", vec![scanned(2, 1, Some(1))])];
     sync_step3_from_step2_if_changed(&mut wizard);
     let extracted = extract_workspace_state_from_wizard(&wizard, &prior);
-    assert_eq!(extracted.order_iwdee, [saved(10, 0), saved(2, 1)]);
+    assert_eq!(extracted.order_iwdee, [saved(10), saved(2)]);
     assert_eq!(extracted.order_bgee, prior.order_bgee);
     assert_eq!(
         extracted.selection_recovery["BGEE"],
@@ -212,149 +281,132 @@ fn language_recovery_iwdee_alias_does_not_extract_bgee_unresolved() {
 }
 
 #[test]
-fn language_recovery_candidates_reject_duplicate_malformed_disabled_and_exact() {
-    let original = saved(11, 0);
+fn unresolved_reason_names_missing_duplicate_malformed_and_disabled_and_clears_unique() {
+    let original = saved(11);
+    for language in [0, 1, 2] {
+        for selected in [None, Some(1)] {
+            let unique = mod_state("TEST/TEST.TP2", vec![scanned(11, language, selected)]);
+            assert_eq!(
+                unresolved_reason(&original, std::slice::from_ref(&unique)),
+                None
+            );
+        }
+    }
     let unique = mod_state("TEST/TEST.TP2", vec![scanned(11, 1, None)]);
     assert_eq!(
-        candidate(&original, std::slice::from_ref(&unique)),
-        Ok((0, 0, 1))
-    );
-    assert!(
-        candidate(&original, &[unique.clone(), unique.clone()])
-            .unwrap_err()
-            .contains("ambiguous")
+        unresolved_reason(&original, &[unique.clone(), unique.clone()]).as_deref(),
+        Some("ambiguous component candidates")
     );
     let mut invalid = unique.clone();
     invalid.components[0].raw_line = "~OTHER/OTHER.TP2~ #1 #11 // wrong path".to_string();
-    assert!(
-        candidate(&original, &[invalid])
-            .unwrap_err()
-            .contains("invalid")
+    assert_eq!(
+        unresolved_reason(&original, &[invalid]).as_deref(),
+        Some("invalid component identity")
     );
     let mut disabled = unique;
     disabled.components[0].disabled = true;
     disabled.components[0].disabled_reason = Some("blocked fixture".to_string());
-    assert!(candidate(&original, &[disabled]).is_err());
-    assert!(
-        candidate(
+    assert_eq!(
+        unresolved_reason(&original, &[disabled]).as_deref(),
+        Some("blocked fixture")
+    );
+    assert_eq!(
+        unresolved_reason(
             &original,
-            &[mod_state("TEST/TEST.TP2", vec![scanned(11, 0, None)])]
+            &[mod_state("TEST/TEST.TP2", vec![scanned(12, 1, None)])]
         )
-        .is_err()
+        .as_deref(),
+        Some("component no longer present")
     );
-    assert!(candidate(&original, &[]).unwrap_err().contains("mod"));
+    assert_eq!(
+        unresolved_reason(&original, &[]).as_deref(),
+        Some("mod no longer present")
+    );
 }
 
 #[test]
-fn language_recovery_action_revalidates_owner_generation_scan_and_candidate() {
-    for mutation in 0..6 {
-        let mut app = recovery_app("BGEE");
-        let original = saved(11, 0);
-        app.workspace_state
-            .get_mut("RECOVERY")
-            .unwrap()
-            .selection_recovery
-            .insert("BGEE".to_string(), recovery(original.clone(), 0));
-        app.wizard_state.step2.bgee_mods =
-            vec![mod_state("TEST/TEST.TP2", vec![scanned(11, 1, None)])];
-        let action = notice(&app, original, 1, "BGEE");
-        match mutation {
-            0 => app.workspace_view.modlist_id = "OTHER".to_string(),
-            1 => app.workspace_view.step2.recovery_scan_generation += 1,
-            2 => app.wizard_state.step2.is_scanning = true,
-            3 => app.wizard_state.step2.bgee_mods.clear(),
-            4 => app.wizard_state.step2.bgee_mods[0].components[0].disabled = true,
-            _ => app.wizard_state.step2.last_scan_report = None,
-        }
-        let before = app.workspace_state["RECOVERY"].clone();
-        apply_recovery(&mut app, action);
-        assert_eq!(
-            app.workspace_state["RECOVERY"], before,
-            "mutation {mutation}"
-        );
-        assert!(
-            app.wizard_state
-                .step2
-                .bgee_mods
-                .iter()
-                .flat_map(|m| &m.components)
-                .all(|c| !c.checked)
-        );
-    }
-}
-
-#[test]
-fn language_recovery_acceptance_retains_answers_and_persists_new_identity() {
+fn language_change_rescan_keeps_selection_and_order() {
     let mut app = recovery_app("BGEE");
-    let mut original = saved(11, 0);
-    original.wlb_inputs = Some("yes,  ,C:\\old path".to_string());
-    let workspace = app.workspace_state.get_mut("RECOVERY").unwrap();
-    workspace.order_bgee = vec![original.clone(), saved(12, 0)];
-    workspace.selection_recovery.insert(
-        "BGEE".to_string(),
-        SelectionRecovery {
-            unresolved: vec![
-                UnresolvedSelection {
-                    original: original.clone(),
-                    position: 0,
-                },
-                UnresolvedSelection {
-                    original: saved(12, 0),
-                    position: 1,
-                },
-            ],
-            ..Default::default()
-        },
-    );
-    let mut row = scanned(11, 1, None);
-    row.raw_line
-        .push_str(" // @wlb-inputs: old-language-marker");
-    app.wizard_state.step2.bgee_mods = vec![mod_state("TEST/TEST.TP2", vec![row])];
-    let action = notice(&app, original.clone(), 1, "BGEE");
-    apply_recovery(&mut app, action);
-    let selected = &app.wizard_state.step2.bgee_mods[0].components[0];
-    assert!(selected.checked);
-    assert_eq!(selected.selected_order, Some(1));
-    assert!(!selected.raw_line.contains("@wlb-inputs"));
+    let mut answered = saved(11);
+    answered.wlb_inputs = Some("y,1".to_string());
+    app.workspace_state.get_mut("RECOVERY").unwrap().order_bgee = vec![saved(12), answered];
+    let mut first = scanned(11, 0, Some(2));
+    first.raw_line.push_str(" // @wlb-inputs: y,1");
+    app.wizard_state.step2.bgee_mods = vec![mod_state(
+        "TEST/TEST.TP2",
+        vec![first, scanned(12, 0, Some(1)), scanned(13, 0, None)],
+    )];
+    snapshot_current_selection(&mut app);
+    app.wizard_state.step2.bgee_mods = vec![mod_state(
+        "TEST/TEST.TP2",
+        vec![
+            scanned(11, 1, None),
+            scanned(12, 1, None),
+            scanned(13, 1, None),
+        ],
+    )];
+    rescan(&mut app);
+    let rows = &app.wizard_state.step2.bgee_mods[0].components;
+    assert!(rows[0].checked && rows[1].checked && !rows[2].checked);
+    assert_eq!(rows[0].selected_order, Some(2));
+    assert_eq!(rows[1].selected_order, Some(1));
     assert_eq!(
-        app.workspace_state["RECOVERY"].order_bgee,
-        [saved(11, 1), saved(12, 0)]
+        extract_wlb_inputs(&rows[0].raw_line).as_deref(),
+        Some("y,1")
     );
-    let retained = &app.workspace_state["RECOVERY"].selection_recovery["BGEE"];
-    assert_eq!(retained.unresolved.len(), 1);
-    assert_eq!(retained.retained_answers[0].original, original);
-    assert_eq!(retained.retained_answers[0].target, saved(11, 1));
-    let fresh = app
-        .wizard_state
-        .step3
-        .bgee_items
-        .iter_mut()
-        .find(|item| !item.is_parent)
-        .unwrap();
-    fresh.raw_line.push_str(" // @wlb-inputs: fresh");
-    let extracted =
-        extract_workspace_state_from_wizard(&app.wizard_state, &app.workspace_state["RECOVERY"]);
+    assert_eq!(step3_ids(&app), ["12", "11"]);
+    let workspace = &app.workspace_state["RECOVERY"];
+    assert!(workspace.selection_recovery.is_empty());
     assert_eq!(
-        extracted.selection_recovery["BGEE"].retained_answers,
-        retained.retained_answers
+        workspace
+            .order_bgee
+            .iter()
+            .map(|item| item.id)
+            .collect::<Vec<_>>(),
+        [12, 11]
     );
-    assert_eq!(extracted.order_bgee[0].wlb_inputs.as_deref(), Some("fresh"));
-    let path = std::env::temp_dir().join(format!("recovery-answers-{}.json", std::process::id()));
-    let store = crate::registry::store_workspace::WorkspaceStore::new_with_path(path);
-    store.save(&extracted).unwrap();
-    assert_eq!(store.load().unwrap(), extracted);
+    assert!(app.workspace_view.step2.rescan_drop_warning.is_none());
+    let extracted = extract_workspace_state_from_wizard(&app.wizard_state, workspace);
+    assert_eq!(extracted.order_bgee, workspace.order_bgee);
 }
 
 #[test]
-fn language_recovery_mixed_survivor_order_saves_and_reopens() {
+fn missing_component_still_unresolved_with_reason() {
+    let mut app = recovery_app("BGEE");
+    let original = saved(11);
+    let workspace = app.workspace_state.get_mut("RECOVERY").unwrap();
+    workspace.order_bgee = vec![original.clone(), saved(1)];
+    workspace
+        .selection_recovery
+        .insert("BGEE".to_string(), recovery(original.clone(), 0));
+    app.wizard_state.step2.bgee_mods =
+        vec![mod_state("TEST/TEST.TP2", vec![scanned(1, 1, Some(1))])];
+    snapshot_current_selection(&mut app);
+    rescan(&mut app);
+    let workspace = &app.workspace_state["RECOVERY"];
+    assert_eq!(workspace.order_bgee, [original.clone(), saved(1)]);
+    assert_eq!(workspace.selection_recovery["BGEE"], recovery(original, 0));
+    assert_eq!(
+        app.workspace_view.step2.rescan_drop_warning.as_deref(),
+        Some("1 saved component(s) remain unresolved")
+    );
+    let text = &app.notification_manager.history().back().unwrap().text;
+    assert_eq!(
+        text,
+        "Some saved selections could not be restored\nBGEE / TEST/TEST.TP2 #11: component no longer present\nUnresolved selections stay saved. You can keep editing and return after another scan."
+    );
+}
+
+#[test]
+fn selection_recovery_later_language_match_restores_mixed_survivor_order_and_reopens() {
     for reordered in [false, true] {
         let mut app = recovery_app("BGEE");
-        let original = saved(11, 0);
+        let original = saved(11);
         let workspace = app.workspace_state.get_mut("RECOVERY").unwrap();
-        workspace.order_bgee = vec![original.clone(), saved(1, 1), saved(2, 1)];
+        workspace.order_bgee = vec![original.clone(), saved(1), saved(2)];
         workspace
             .selection_recovery
-            .insert("BGEE".to_string(), recovery(original.clone(), 0));
+            .insert("BGEE".to_string(), recovery(original, 0));
         app.wizard_state.step2.bgee_mods = vec![mod_state(
             "TEST/TEST.TP2",
             vec![
@@ -364,22 +416,14 @@ fn language_recovery_mixed_survivor_order_saves_and_reopens() {
             ],
         )];
         sync_step3_from_step2_if_changed(&mut app.wizard_state);
-        let action = notice(&app, original, 1, "BGEE");
-        apply_recovery(&mut app, action);
-        let active = app
-            .wizard_state
-            .step3
-            .bgee_items
-            .iter()
-            .filter(|item| !item.is_parent)
-            .map(|item| item.component_id.as_str())
-            .collect::<Vec<_>>();
+        snapshot_current_selection(&mut app);
+        rescan(&mut app);
         let expected = if reordered {
             ["11", "2", "1"]
         } else {
             ["11", "1", "2"]
         };
-        assert_eq!(active, expected);
+        assert_eq!(step3_ids(&app), expected);
         crate::ui::workspace::workspace_header::save_draft(&mut app);
         eframe::App::on_exit(&mut app, None);
         let store = &app.workspace_stores["RECOVERY"];
@@ -393,16 +437,15 @@ fn language_recovery_mixed_survivor_order_saves_and_reopens() {
                 .collect::<Vec<_>>(),
             expected_ids
         );
-        assert_eq!(loaded.order_bgee[0].language, 1);
         assert!(loaded.selection_recovery.is_empty());
     }
 }
 
 #[test]
-fn language_recovery_exact_zero_one_two_keep_answers_and_ignore_unselected() {
+fn selection_recovery_exact_match_keeps_answers_and_ignores_unselected() {
     for language in [0, 1, 2] {
         let mut app = recovery_app("BGEE");
-        let mut original = saved(11, language);
+        let mut original = saved(11);
         original.wlb_inputs = Some("yes,  ,unchanged".to_string());
         app.workspace_state.get_mut("RECOVERY").unwrap().order_bgee = vec![original.clone()];
         app.wizard_state.step2.bgee_mods = vec![mod_state(
@@ -413,27 +456,18 @@ fn language_recovery_exact_zero_one_two_keep_answers_and_ignore_unselected() {
             bgee: vec![RescanSelection {
                 tp2_upper: original.tp2.clone(),
                 component_id: "11".to_string(),
-                language,
                 selected_order: Some(1),
                 wlb_inputs: original.wlb_inputs.clone(),
             }],
             ..Default::default()
         });
         app.workspace_view.step2.was_scanning = true;
-        app.workspace_view.step2.resume_pending = true;
-        assert!(
-            crate::ui::workspace::step2::step2_rescan_reconcile::reconcile_on_scan_complete(
-                &mut app
-            )
-        );
+        rescan(&mut app);
         let rows = &app.wizard_state.step2.bgee_mods[0].components;
         assert!(rows[0].checked);
         assert!(!rows[1].checked);
         assert_eq!(rows[0].selected_order, Some(1));
-        assert_eq!(
-            crate::ui::workspace::workspace_state_loader::extract_wlb_inputs(&rows[0].raw_line),
-            original.wlb_inputs
-        );
+        assert_eq!(extract_wlb_inputs(&rows[0].raw_line), original.wlb_inputs);
         let extracted = extract_workspace_state_from_wizard(
             &app.wizard_state,
             &app.workspace_state["RECOVERY"],
@@ -444,9 +478,9 @@ fn language_recovery_exact_zero_one_two_keep_answers_and_ignore_unselected() {
 }
 
 #[test]
-fn language_recovery_no_report_and_warm_download_snapshot_retain_intent() {
+fn selection_recovery_no_report_and_warm_download_snapshot_retain_intent() {
     let mut app = recovery_app("BGEE");
-    let original = saved(11, 0);
+    let original = saved(11);
     let workspace = app.workspace_state.get_mut("RECOVERY").unwrap();
     workspace.order_bgee = vec![original.clone()];
     workspace
@@ -454,24 +488,17 @@ fn language_recovery_no_report_and_warm_download_snapshot_retain_intent() {
         .insert("BGEE".to_string(), recovery(original.clone(), 0));
     app.wizard_state.step2.bgee_mods =
         vec![mod_state("TEST/TEST.TP2", vec![scanned(1, 1, Some(1))])];
-    crate::ui::workspace::step2::step2_rescan_reconcile::snapshot_current_selection(&mut app);
+    snapshot_current_selection(&mut app);
     let snapshot = app.workspace_view.step2.rescan_snapshot.clone().unwrap();
-    assert!(
-        snapshot
-            .bgee
-            .iter()
-            .any(|entry| entry.component_id == "11" && entry.language == 0)
-    );
+    assert!(snapshot.bgee.iter().any(|entry| entry.component_id == "11"));
     app.wizard_state.step2.last_scan_report = None;
-    assert!(
-        crate::ui::workspace::step2::step2_rescan_reconcile::reconcile_on_scan_complete(&mut app)
-    );
+    assert!(reconcile_on_scan_complete(&mut app));
     assert_eq!(app.workspace_view.step2.rescan_snapshot, Some(snapshot));
     assert_eq!(
         app.workspace_state["RECOVERY"].order_bgee,
-        [original, saved(1, 1)]
+        [original, saved(1)]
     );
-    crate::ui::workspace::step2::step2_rescan_reconcile::arm_post_download_snapshot(&mut app);
+    arm_post_download_snapshot(&mut app);
     assert!(
         app.workspace_view
             .step2
@@ -480,14 +507,14 @@ fn language_recovery_no_report_and_warm_download_snapshot_retain_intent() {
             .unwrap()
             .bgee
             .iter()
-            .any(|entry| entry.component_id == "11" && entry.language == 0)
+            .any(|entry| entry.component_id == "11")
     );
 }
 
 #[test]
-fn language_recovery_failed_preview_save_and_fresh_load_keep_original_intent() {
+fn selection_recovery_failed_preview_save_and_fresh_load_keep_original_intent() {
     let mut app = recovery_app("BGEE");
-    let mut original = saved(11, 0);
+    let mut original = saved(11);
     original.wlb_inputs = Some("retain me".to_string());
     app.workspace_state.get_mut("RECOVERY").unwrap().order_bgee = vec![original.clone()];
     app.wizard_state.step2.bgee_mods =
@@ -495,12 +522,10 @@ fn language_recovery_failed_preview_save_and_fresh_load_keep_original_intent() {
     app.wizard_state.step2.bgee_mods[0].components[0]
         .raw_line
         .push_str(" // @wlb-inputs: retain me");
-    crate::ui::workspace::step2::step2_rescan_reconcile::snapshot_current_selection(&mut app);
+    snapshot_current_selection(&mut app);
     app.wizard_state.step2.bgee_mods = vec![mod_state("TEST/TEST.TP2", vec![scanned(11, 1, None)])];
     app.wizard_state.step2.last_scan_report = None;
-    assert!(
-        crate::ui::workspace::step2::step2_rescan_reconcile::reconcile_on_scan_complete(&mut app)
-    );
+    assert!(reconcile_on_scan_complete(&mut app));
     crate::ui::workspace::workspace_header::save_draft(&mut app);
     eframe::App::on_exit(&mut app, None);
     let reopened = app.workspace_stores["RECOVERY"].load().unwrap();
@@ -510,7 +535,7 @@ fn language_recovery_failed_preview_save_and_fresh_load_keep_original_intent() {
         original
     );
     app.workspace_state.insert("RECOVERY".to_string(), reopened);
-    crate::ui::workspace::step2::step2_rescan_reconcile::snapshot_current_selection(&mut app);
+    snapshot_current_selection(&mut app);
     assert_eq!(
         app.workspace_view
             .step2
@@ -524,20 +549,17 @@ fn language_recovery_failed_preview_save_and_fresh_load_keep_original_intent() {
 }
 
 #[test]
-fn language_recovery_keeps_survivor_answers_fresher_in_step3() {
+fn selection_recovery_merge_keeps_survivor_answers_fresher_in_step3() {
     let mut app = recovery_app("BGEE");
-    let original = saved(11, 0);
+    let original = saved(11);
     let workspace = app.workspace_state.get_mut("RECOVERY").unwrap();
-    workspace.order_bgee = vec![original.clone(), saved(1, 1)];
+    workspace.order_bgee = vec![original.clone(), saved(1)];
     workspace
         .selection_recovery
         .insert("BGEE".to_string(), recovery(original.clone(), 0));
     let mut survivor = scanned(1, 1, Some(1));
     survivor.raw_line.push_str(" // @wlb-inputs: stale");
-    app.wizard_state.step2.bgee_mods = vec![mod_state(
-        "TEST/TEST.TP2",
-        vec![scanned(11, 1, None), survivor],
-    )];
+    app.wizard_state.step2.bgee_mods = vec![mod_state("TEST/TEST.TP2", vec![survivor])];
     sync_step3_from_step2_if_changed(&mut app.wizard_state);
     let item = app
         .wizard_state
@@ -548,11 +570,9 @@ fn language_recovery_keeps_survivor_answers_fresher_in_step3() {
         .unwrap();
     item.raw_line =
         crate::app::wlb_inputs::replace_marker(&item.raw_line, "fresh-survivor").unwrap();
-    let action = notice(&app, original, 1, "BGEE");
-    apply_recovery(&mut app, action);
     let extracted =
         extract_workspace_state_from_wizard(&app.wizard_state, &app.workspace_state["RECOVERY"]);
-    assert_eq!(extracted.order_bgee[0], saved(11, 1));
+    assert_eq!(extracted.order_bgee[0], original);
     assert_eq!(
         extracted.order_bgee[1].wlb_inputs.as_deref(),
         Some("fresh-survivor")
@@ -560,15 +580,23 @@ fn language_recovery_keeps_survivor_answers_fresher_in_step3() {
 }
 
 #[test]
-fn language_recovery_eet_mixed_action_resolves_both_tabs_and_keeps_disabled() {
+fn selection_recovery_eet_rescan_resolves_both_tabs_and_keeps_missing_and_disabled() {
+    let root = TempRoot::new();
+    let tp2_path = root.0.join("TEST.TP2");
+    std::fs::write(
+        &tp2_path,
+        "BEGIN ~Kept~ DESIGNATED 22\nBEGIN ~Retired~ DESIGNATED 24\nDEPRECATED ~retired fixture~\n",
+    )
+    .unwrap();
     let mut app = recovery_app("EET");
-    let first = saved(11, 0);
-    let second = saved(22, 0);
-    let blocked = saved(23, 0);
+    let first = saved(11);
+    let second = saved(22);
+    let missing = saved(23);
+    let retired = saved(24);
     let workspace = app.workspace_state.get_mut("RECOVERY").unwrap();
     workspace.order_bgee = vec![first.clone()];
-    workspace.order_bg2ee = vec![second.clone(), blocked.clone()];
-    workspace.order_iwdee = vec![saved(90, 2)];
+    workspace.order_bg2ee = vec![second.clone(), missing.clone(), retired.clone()];
+    workspace.order_iwdee = vec![saved(90)];
     workspace
         .selection_recovery
         .insert("BGEE".to_string(), recovery(first.clone(), 0));
@@ -581,64 +609,88 @@ fn language_recovery_eet_mixed_action_resolves_both_tabs_and_keeps_disabled() {
                     position: 0,
                 },
                 UnresolvedSelection {
-                    original: blocked.clone(),
+                    original: missing.clone(),
                     position: 1,
                 },
+                UnresolvedSelection {
+                    original: retired.clone(),
+                    position: 2,
+                },
             ],
-            ..Default::default()
         },
     );
+    snapshot_current_selection(&mut app);
     app.wizard_state.step2.bgee_mods = vec![mod_state("TEST/TEST.TP2", vec![scanned(11, 1, None)])];
-    let mut disabled = scanned(23, 1, None);
-    disabled.disabled = true;
-    app.wizard_state.step2.bg2ee_mods = vec![mod_state(
+    let mut bg2ee = mod_state(
         "TEST/TEST.TP2",
-        vec![scanned(22, 2, None), disabled],
-    )];
-    let mut action = notice(&app, first, 1, "BGEE");
-    action.rows.extend([
-        LanguageRecoveryRow {
-            tab: "BG2EE".to_string(),
-            original: second,
-            available_language: Some(2),
-            reason: String::new(),
-        },
-        LanguageRecoveryRow {
-            tab: "BG2EE".to_string(),
-            original: blocked.clone(),
-            available_language: Some(1),
-            reason: String::new(),
-        },
-    ]);
-    apply_recovery(&mut app, action);
+        vec![scanned(22, 2, None), scanned(24, 2, None)],
+    );
+    bg2ee.tp2_path = tp2_path.to_string_lossy().into_owned();
+    app.wizard_state.step2.bg2ee_mods = vec![bg2ee];
+    rescan(&mut app);
     let workspace = &app.workspace_state["RECOVERY"];
-    assert_eq!(workspace.order_bgee, [saved(11, 1)]);
-    assert_eq!(workspace.order_bg2ee, [saved(22, 2), blocked.clone()]);
-    assert_eq!(workspace.order_iwdee, [saved(90, 2)]);
+    assert_eq!(workspace.order_bgee, [first]);
+    assert_eq!(
+        workspace.order_bg2ee,
+        [second, missing.clone(), retired.clone()]
+    );
+    assert_eq!(workspace.order_iwdee, [saved(90)]);
     assert!(!workspace.selection_recovery.contains_key("BGEE"));
     assert_eq!(
-        workspace.selection_recovery["BG2EE"].unresolved[0].original,
-        blocked
+        workspace.selection_recovery["BG2EE"],
+        SelectionRecovery {
+            unresolved: vec![
+                UnresolvedSelection {
+                    original: missing,
+                    position: 1,
+                },
+                UnresolvedSelection {
+                    original: retired,
+                    position: 2,
+                },
+            ],
+        }
     );
-    assert!(app.wizard_state.step2.bg2ee_mods[0].components[0].checked);
-    assert!(!app.wizard_state.step2.bg2ee_mods[0].components[1].checked);
+    assert!(app.wizard_state.step2.bgee_mods[0].components[0].checked);
+    let bg2ee_rows = &app.wizard_state.step2.bg2ee_mods[0].components;
+    assert!(bg2ee_rows[0].checked);
+    assert!(bg2ee_rows[1].disabled);
+    assert_eq!(
+        bg2ee_rows[1].disabled_reason.as_deref(),
+        Some("retired fixture")
+    );
+    assert_eq!(
+        app.workspace_view.step2.rescan_drop_warning.as_deref(),
+        Some("2 saved component(s) remain unresolved")
+    );
+    let text = &app.notification_manager.history().back().unwrap().text;
+    assert!(
+        text.contains("BG2EE / TEST/TEST.TP2 #23: component no longer present"),
+        "got: {text}"
+    );
+    assert!(
+        text.contains("BG2EE / TEST/TEST.TP2 #24: retired fixture"),
+        "got: {text}"
+    );
 }
 
 #[test]
-fn language_recovery_later_exact_match_resolves_then_deselection_stays_removed() {
+fn selection_recovery_later_exact_match_resolves_then_deselection_stays_removed() {
     let mut app = recovery_app("BGEE");
-    let original = saved(11, 0);
+    let original = saved(11);
     let workspace = app.workspace_state.get_mut("RECOVERY").unwrap();
     workspace.order_bgee = vec![original.clone()];
     workspace
         .selection_recovery
         .insert("BGEE".to_string(), recovery(original, 0));
-    app.wizard_state.step2.bgee_mods = vec![mod_state("TEST/TEST.TP2", vec![scanned(11, 0, None)])];
-    crate::ui::workspace::step2::step2_rescan_reconcile::snapshot_current_selection(&mut app);
-    assert!(
-        crate::ui::workspace::step2::step2_rescan_reconcile::reconcile_on_scan_complete(&mut app)
-    );
+    app.wizard_state.step2.bgee_mods = vec![mod_state("TEST/TEST.TP2", vec![scanned(11, 1, None)])];
+    snapshot_current_selection(&mut app);
+    assert!(reconcile_on_scan_complete(&mut app));
     assert!(app.wizard_state.step2.bgee_mods[0].components[0].checked);
+    assert_eq!(
+        app.wizard_state.step2.bgee_mods[0].components[0].selected_order,
+        Some(1)
+    );
     assert!(
         app.workspace_state["RECOVERY"]
             .selection_recovery

@@ -53,20 +53,42 @@ fn mod_state(tp: &str, mut comps: Vec<Step2ComponentState>) -> Step2ModState {
     }
 }
 
+struct TempRoot(std::path::PathBuf);
+
+impl TempRoot {
+    fn new() -> Self {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static N: AtomicU64 = AtomicU64::new(0);
+        let root = Self(std::env::temp_dir().join(format!(
+            "bio_recovery_routes_{}_{}",
+            std::process::id(),
+            N.fetch_add(1, Ordering::Relaxed)
+        )));
+        std::fs::create_dir_all(&root.0).expect("create temp root");
+        root
+    }
+}
+
+impl Drop for TempRoot {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
 #[test]
-fn language_recovery_actual_autosave_and_nav_away_keep_unresolved_with_new_edits() {
+fn selection_recovery_actual_autosave_and_nav_away_keep_unresolved_with_new_edits() {
     let _ambient_lock = crate::app::mod_downloads::AMBIENT_TEST_LOCK
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     for autosave in [false, true] {
-        let mut app = OrchestratorApp::new_isolated_for_test("language-recovery-routes");
+        let root = TempRoot::new();
+        let mut app = OrchestratorApp::new_isolated_for_test("selection-recovery-routes");
         app.workspace_view.modlist_id = "RECOVERYROUTES".to_string();
         app.workspace_view.loaded_workspace_id = Some("RECOVERYROUTES".to_string());
         app.wizard_state.step1.game_install = "BGEE".to_string();
         let original = ComponentRef {
             tp2: "TEST/TEST.TP2".to_string(),
             id: 11,
-            language: 0,
             wlb_inputs: Some("unchanged answers".to_string()),
         };
         let workspace = ModlistWorkspaceState {
@@ -78,7 +100,6 @@ fn language_recovery_actual_autosave_and_nav_away_keep_unresolved_with_new_edits
                         original: original.clone(),
                         position: 0,
                     }],
-                    ..Default::default()
                 },
             )]),
             ..Default::default()
@@ -86,10 +107,7 @@ fn language_recovery_actual_autosave_and_nav_away_keep_unresolved_with_new_edits
         app.workspace_state
             .insert("RECOVERYROUTES".to_string(), workspace);
         let store = crate::registry::store_workspace::WorkspaceStore::new_with_path(
-            std::env::temp_dir().join(format!(
-                "recovery-routes-{}-{autosave}.json",
-                std::process::id()
-            )),
+            root.0.join("workspace.json"),
         );
         app.workspace_stores
             .insert("RECOVERYROUTES".to_string(), store.clone());

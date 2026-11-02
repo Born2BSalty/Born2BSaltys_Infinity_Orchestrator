@@ -4,7 +4,7 @@ use crate::registry::workspace_model::ModlistWorkspaceState;
 use crate::ui::workspace::workspace_state_loader::extract_workspace_state_from_wizard;
 
 #[test]
-fn manual_wlb_workspace_extraction_persists_actual_language_and_iwdee_carrier() {
+fn manual_wlb_workspace_extraction_persists_component_and_iwdee_carrier() {
     let mut state = WizardState::default();
     state.step1.game_install = "IWDEE".to_string();
     state.parser_choice_phrases = vec!["Prior parser phrase".to_string()];
@@ -24,7 +24,7 @@ fn manual_wlb_workspace_extraction_persists_actual_language_and_iwdee_carrier() 
     });
     let workspace = extract_workspace_state_from_wizard(&state, &ModlistWorkspaceState::default());
     assert_eq!(workspace.order_iwdee.len(), 1);
-    assert_eq!(workspace.order_iwdee[0].language, 2);
+    assert_eq!(workspace.order_iwdee[0].id, 17);
     assert_eq!(
         workspace.order_iwdee[0].wlb_inputs.as_deref(),
         Some("bio-json-v1:[\"\",\"a,b\"]")

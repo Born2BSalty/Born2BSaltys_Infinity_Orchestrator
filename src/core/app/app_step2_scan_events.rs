@@ -41,8 +41,10 @@ pub(super) fn poll_step2_scan_events(
             Ok(Step2ScanEvent::Finished {
                 bgee_mods,
                 bg2ee_mods,
+                mod_languages,
                 report,
             }) => {
+                state.step2.replace_mod_languages(mod_languages);
                 handle_finished(
                     state,
                     step2_scan_rx,
@@ -128,6 +130,8 @@ fn handle_preview(
     let lock_load_error = crate::app::mod_update_locks::take_last_load_error();
     state.step2.bgee_mods = bgee_scan_mods;
     state.step2.bg2ee_mods = bg2_scan_mods;
+    state.step2.bgee_mod_languages.clear();
+    state.step2.bg2ee_mod_languages.clear();
     reset_scan_selection(state);
     state.step2.scan_progress_percent = 0;
     state.step2.scan_status = scan_preview_status(total, lock_load_error, compat_error);
