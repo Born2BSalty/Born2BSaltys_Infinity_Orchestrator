@@ -18,7 +18,7 @@ use crate::install_runtime::manual_archive_probe::{self, ArchiveProbe, ProbeMatc
 use crate::install_runtime::manual_download_watcher::{self, WatchEvent};
 use crate::ui::install::manual_downloads_panel::{self, PanelAction};
 use crate::ui::install::state_install::{
-    ManualDownloadRow, ManualDownloadsState, ManualRowStatus, PipelineKind,
+    ManualDownloadRow, ManualDownloadsState, ManualRowStatus, PipelineKind, ReviewOrigin,
 };
 use crate::ui::install::sub_flow_footer::{self, BackBtn, LeftActionBtn, PrimaryBtn};
 use crate::ui::orchestrator::orchestrator_app::{
@@ -557,10 +557,62 @@ pub fn render_live(
         return DownloadingOutcome::Cancel;
     }
     if auto_build_driver::pipeline_reached_install(&orchestrator.wizard_state) {
-        return DownloadingOutcome::Advance;
+        rewrite_install_languages_once(orchestrator);
+        if !install_language_rewrite_failed(orchestrator) {
+            return DownloadingOutcome::Advance;
+        }
     }
     auto_build_driver::log_if_pipeline_stopped(&orchestrator.wizard_state);
     DownloadingOutcome::Stay
+}
+
+fn install_language_rewrite_route(orchestrator: &OrchestratorApp) -> bool {
+    let state = &orchestrator.install_screen_state;
+    state.pipeline_kind == PipelineKind::Install
+        && orchestrator.pending_reinstall_id.is_none()
+        && state.review.origin != ReviewOrigin::Reinstall
+}
+
+fn rewrite_install_languages_once(orchestrator: &mut OrchestratorApp) {
+    if orchestrator
+        .install_screen_state
+        .pipeline_flags
+        .install_languages_rewritten()
+        || orchestrator
+            .install_screen_state
+            .pipeline_arm_error
+            .is_some()
+        || orchestrator.wizard_state.step5.start_install_requested
+        || !install_language_rewrite_route(orchestrator)
+    {
+        return;
+    }
+    orchestrator
+        .install_screen_state
+        .pipeline_flags
+        .set_install_languages_rewritten(true);
+    match crate::app::install_language_rewrite::rewrite_imported_logs(&orchestrator.wizard_state) {
+        Ok(changed) => tracing::info!(
+            target = "orchestrator",
+            "install path: {changed} imported WeiDU log lines set to the scanned install language"
+        ),
+        Err(err) => {
+            let reason = format!("Could not prepare the WeiDU logs for install: {err}");
+            orchestrator.install_screen_state.pipeline_arm_error = Some(reason.clone());
+            tracing::warn!(target = "orchestrator", "{reason}");
+        }
+    }
+}
+
+const fn install_language_rewrite_failed(orchestrator: &OrchestratorApp) -> bool {
+    orchestrator
+        .install_screen_state
+        .pipeline_flags
+        .install_languages_rewritten()
+        && orchestrator
+            .install_screen_state
+            .pipeline_arm_error
+            .is_some()
 }
 
 pub(crate) struct LivePipelineInputs {
@@ -4734,5 +4786,158 @@ mod tests {
         fallback.display_name = String::new();
         let fallback_row = manual_row_from_request(&fallback);
         assert_eq!(fallback_row.label, "Ascension");
+    }
+
+    struct RewriteLogGuard(std::path::PathBuf);
+
+    impl RewriteLogGuard {
+        fn new(tag: &str) -> Self {
+            let path = std::env::temp_dir().join(format!(
+                "bio_install_language_hook_{tag}_{}",
+                std::process::id()
+            ));
+            std::fs::create_dir_all(&path).expect("create hook temp root");
+            Self(path)
+        }
+
+        fn log(&self) -> std::path::PathBuf {
+            self.0.join("weidu.log")
+        }
+    }
+
+    impl Drop for RewriteLogGuard {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    const HOOK_LOG: &str = "~MOD/MOD.TP2~ #0 #2 // Comp: v1 // @wlb-inputs: y\n";
+    const HOOK_REWRITTEN: &str = "~MOD/MOD.TP2~ #1 #2 // Comp: v1 // @wlb-inputs: t\n";
+
+    fn scanned_mod(raw_line: &str) -> crate::app::state::Step2ModState {
+        crate::app::state::Step2ModState {
+            name: "MOD".to_string(),
+            tp_file: "MOD.TP2".to_string(),
+            tp2_path: "/mods/MOD/MOD.TP2".to_string(),
+            readme_path: None,
+            ini_path: None,
+            web_url: None,
+            package_marker: None,
+            latest_checked_version: None,
+            update_locked: false,
+            mod_prompt_summary: None,
+            mod_prompt_events: Vec::new(),
+            checked: true,
+            hidden_components: Vec::new(),
+            components: vec![crate::app::state::Step2ComponentState {
+                component_id: "2".to_string(),
+                label: "Comp".to_string(),
+                weidu_group: None,
+                collapsible_group: None,
+                collapsible_group_is_umbrella: false,
+                collapsible_group_combinable: false,
+                raw_line: raw_line.to_string(),
+                prompt_summary: None,
+                prompt_events: Vec::new(),
+                is_meta_mode_component: false,
+                disabled: false,
+                compat_kind: None,
+                compat_source: None,
+                compat_related_mod: None,
+                compat_related_component: None,
+                compat_graph: None,
+                compat_evidence: None,
+                disabled_reason: None,
+                checked: true,
+                selected_order: Some(1),
+            }],
+        }
+    }
+
+    fn hook_app(tag: &str, log: &std::path::Path) -> OrchestratorApp {
+        std::fs::write(log, HOOK_LOG).expect("write imported log");
+        let mut app = OrchestratorApp::new_isolated_for_test(tag);
+        app.wizard_state.step1.game_install = "BGEE".to_string();
+        app.wizard_state.step1.have_weidu_logs = true;
+        app.wizard_state.step1.bgee_log_file = log.to_string_lossy().into_owned();
+        app.wizard_state.step2.bgee_mods = vec![scanned_mod(HOOK_REWRITTEN.trim_end())];
+        app.install_screen_state.pipeline_kind = PipelineKind::Install;
+        app
+    }
+
+    type SetRoute = fn(&mut OrchestratorApp);
+
+    fn read_log(log: &std::path::Path) -> String {
+        std::fs::read_to_string(log).expect("read imported log")
+    }
+
+    #[test]
+    fn rewrite_runs_once_on_install_route_only() {
+        let root = RewriteLogGuard::new("route");
+        let log = root.log();
+
+        {
+            let mut app = hook_app("language-hook-install", &log);
+            rewrite_install_languages_once(&mut app);
+            assert_eq!(read_log(&log), HOOK_REWRITTEN);
+            assert!(
+                app.install_screen_state
+                    .pipeline_flags
+                    .install_languages_rewritten()
+            );
+            assert!(!install_language_rewrite_failed(&app));
+            std::fs::write(&log, HOOK_LOG).expect("restore imported log");
+            rewrite_install_languages_once(&mut app);
+            assert_eq!(
+                read_log(&log),
+                HOOK_LOG,
+                "the rewrite runs once per pipeline"
+            );
+        }
+
+        let skipped_routes: [(&str, SetRoute); 4] = [
+            ("language-hook-reinstall-id", |app| {
+                app.pending_reinstall_id = Some("RE".to_string());
+            }),
+            ("language-hook-reinstall-origin", |app| {
+                app.install_screen_state.review.origin = ReviewOrigin::Reinstall;
+            }),
+            ("language-hook-fork", |app| {
+                app.install_screen_state.pipeline_kind = PipelineKind::Fork;
+            }),
+            ("language-hook-started", |app| {
+                app.wizard_state.step5.start_install_requested = true;
+            }),
+        ];
+        for (tag, route) in skipped_routes {
+            let mut app = hook_app(tag, &log);
+            route(&mut app);
+            rewrite_install_languages_once(&mut app);
+            assert_eq!(read_log(&log), HOOK_LOG, "{tag}");
+            assert!(
+                !app.install_screen_state
+                    .pipeline_flags
+                    .install_languages_rewritten(),
+                "{tag}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_failed_rewrite_holds_the_install() {
+        let root = RewriteLogGuard::new("failed");
+        let log = root.log();
+        let mut app = hook_app("language-hook-failed", &log);
+        std::fs::remove_file(&log).expect("remove imported log");
+
+        rewrite_install_languages_once(&mut app);
+
+        assert!(install_language_rewrite_failed(&app));
+        let error = app
+            .install_screen_state
+            .pipeline_arm_error
+            .clone()
+            .expect("the failure is shown on the stage");
+        assert!(error.contains(&log.display().to_string()), "{error}");
     }
 }

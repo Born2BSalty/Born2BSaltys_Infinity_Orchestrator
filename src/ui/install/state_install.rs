@@ -176,6 +176,7 @@ impl InstallPipelineFlags {
     const EXPLICIT_RESOLVE_STARTED: u16 = 0b0100_0000;
     const OVERRIDE_WARNINGS_TOASTED: u16 = 0b1000_0000;
     const AUTO_START_FIRED: u16 = 0b1_0000_0000;
+    const INSTALL_LANGUAGES_REWRITTEN: u16 = 0b10_0000_0000;
 
     #[must_use]
     pub const fn armed(self) -> bool {
@@ -256,6 +257,15 @@ impl InstallPipelineFlags {
 
     pub const fn set_auto_start_fired(&mut self, value: bool) {
         self.set_bit(Self::AUTO_START_FIRED, value);
+    }
+
+    #[must_use]
+    pub const fn install_languages_rewritten(self) -> bool {
+        self.bits & Self::INSTALL_LANGUAGES_REWRITTEN != 0
+    }
+
+    pub const fn set_install_languages_rewritten(&mut self, value: bool) {
+        self.set_bit(Self::INSTALL_LANGUAGES_REWRITTEN, value);
     }
 
     pub const fn reset(&mut self) {
@@ -347,9 +357,17 @@ impl ManualDownloadsState {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct AnswerLanguageIssue {
+    pub(crate) language: String,
+    pub(crate) components: usize,
+    pub(crate) answers: usize,
+}
+
 #[derive(Debug, Default)]
 pub struct InstallScreenState {
     pub(crate) source_compat_issue: Option<crate::app::compat_dlc_source::SourceNotice>,
+    pub(crate) answer_language_issue: Option<AnswerLanguageIssue>,
     pub(crate) source_residue_issue: Option<crate::app::compat_dlc_source::SourceNotice>,
     pub(crate) unresolved_sources_issue: Option<crate::app::compat_dlc_source::SourceNotice>,
     pub(crate) missing_source_issue: Option<String>,
@@ -432,6 +450,7 @@ impl InstallScreenState {
 
     pub fn clear_preview(&mut self) {
         self.source_compat_issue = None;
+        self.answer_language_issue = None;
         self.source_residue_issue = None;
         self.unresolved_sources_issue = None;
         self.missing_source_issue = None;
@@ -645,8 +664,14 @@ mod tests {
             fork_info_open: true,
             preview_parse_error: Some("boom".to_string()),
             pipeline_arm_error: Some("arm boom".to_string()),
+            answer_language_issue: Some(AnswerLanguageIssue {
+                language: "polish".to_string(),
+                components: 1,
+                answers: 2,
+            }),
             ..Default::default()
         };
+        st.pipeline_flags.set_install_languages_rewritten(true);
         st.pipeline_flags.set_armed(true);
         st.pipeline_flags.set_archives_staged(true);
         st.pipeline_flags.set_archives_ingested(true);
@@ -662,6 +687,8 @@ mod tests {
         assert!(!st.preview_cached);
         assert!(!st.pipeline_flags.armed());
         assert!(st.pipeline_arm_error.is_none());
+        assert!(st.answer_language_issue.is_none());
+        assert!(!st.pipeline_flags.install_languages_rewritten());
         assert!(
             !st.pipeline_flags.archives_staged() && !st.pipeline_flags.archives_ingested(),
             "D1: a re-entry must re-stage/re-ingest from scratch"

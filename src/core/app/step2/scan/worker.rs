@@ -7,6 +7,8 @@ mod build_states;
 #[path = "worker_language.rs"]
 mod language;
 
+pub use language::detect_preferred_game_locale;
+
 mod orchestrate {
     use std::collections::BTreeMap;
     use std::path::{Path, PathBuf};

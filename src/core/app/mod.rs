@@ -105,6 +105,7 @@ pub mod game_version;
 pub mod github_forks_list;
 #[path = "step2/update/github_release_list.rs"]
 pub mod github_release_list;
+pub mod install_language_rewrite;
 pub mod language_names;
 pub mod mod_downloads;
 pub mod mod_downloads_migrate;

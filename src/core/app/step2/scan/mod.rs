@@ -15,6 +15,8 @@ pub mod parse;
 pub mod readme;
 pub mod worker;
 
+pub use worker::detect_preferred_game_locale;
+
 pub const ENABLE_TWO_PHASE_PREVIEW: bool = true;
 pub const SCAN_CACHE_FILE: &str = "bio_scan_cache.json";
 pub const SCAN_CACHE_VERSION: u32 = 7;

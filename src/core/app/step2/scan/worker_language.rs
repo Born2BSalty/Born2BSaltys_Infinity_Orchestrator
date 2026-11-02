@@ -12,13 +12,14 @@ use crate::app::state::Step1State;
 use crate::install::weidu_scan::{self, LanguageEntry};
 
 #[derive(Debug, Clone)]
-pub(super) struct PreferredLocaleInfo {
+pub struct PreferredLocaleInfo {
     pub locale: String,
     pub source: String,
     pub baldur_lua_path: Option<PathBuf>,
 }
 
-pub(super) fn detect_preferred_game_locale(step1: &Step1State) -> PreferredLocaleInfo {
+#[must_use]
+pub fn detect_preferred_game_locale(step1: &Step1State) -> PreferredLocaleInfo {
     if !step1.language.trim().is_empty() {
         return PreferredLocaleInfo {
             locale: step1.language.trim().to_string(),
