@@ -9,6 +9,7 @@ format = 2
 [[mods]]
 name = "Example Mod"
 tp2 = "examplemod"
+categories = []
 
   [[mods.sources]]
   id = "main"

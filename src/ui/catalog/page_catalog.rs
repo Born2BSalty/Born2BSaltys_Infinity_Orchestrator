@@ -19,7 +19,9 @@ use crate::ui::shared::redesign_tokens::{
 use crate::ui::workspace::versions::{versions_form, versions_menus, versions_sheets};
 
 use super::catalog_runtime::CatalogItemOutcome;
-use super::state_catalog::{CatalogDestination, CatalogKind, CatalogRow, LocalPresence};
+use super::state_catalog::{
+    CatalogDestination, CatalogKind, CatalogRow, CatalogScreenState, LocalPresence,
+};
 
 fn text(value: impl Into<String>, size: f32, palette: ThemePalette) -> egui::RichText {
     egui::RichText::new(value)
@@ -150,7 +152,18 @@ fn render_header(ui: &mut egui::Ui, app: &mut OrchestratorApp, palette: ThemePal
             .map(|label| catalog_text_width(ui, label, 14.0, "poppins_medium") + 32.0)
             .sum::<f32>(),
     );
-    let inline = ui.available_width() >= tabs_width + 232.0;
+    let filter_caption = if app.catalog_screen_state.selected_types.is_empty() {
+        "Filter".to_string()
+    } else {
+        format!("Filter ({})", app.catalog_screen_state.selected_types.len())
+    };
+    let filter_width = catalog_text_width(ui, &filter_caption, 14.0, "poppins_medium") + 32.0;
+    let inline = ui.available_width()
+        >= ui
+            .spacing()
+            .item_spacing
+            .x
+            .mul_add(2.0, tabs_width + 140.0 + filter_width);
     let height = redesign_btn_height(ui, false).max(36.0);
     ui.horizontal(|ui| {
         ui.allocate_ui_with_layout(
@@ -182,13 +195,29 @@ fn render_header(ui: &mut egui::Ui, app: &mut OrchestratorApp, palette: ThemePal
             },
         );
         if inline {
-            render_search(ui, &mut app.catalog_screen_state.query, palette);
+            render_search_filters(
+                ui,
+                &mut app.catalog_screen_state,
+                palette,
+                &filter_caption,
+                filter_width,
+            );
         }
     });
     if !inline {
-        render_search(ui, &mut app.catalog_screen_state.query, palette);
+        render_search_filters(
+            ui,
+            &mut app.catalog_screen_state,
+            palette,
+            &filter_caption,
+            filter_width,
+        );
     }
     ui.add_space(12.0);
+    render_load_error(ui, app, palette);
+}
+
+fn render_load_error(ui: &mut egui::Ui, app: &mut OrchestratorApp, palette: ThemePalette) {
     if let Some(error) = app.catalog_screen_state.error.clone() {
         ui.horizontal_wrapped(|ui| {
             ui.label(text(error, 12.0, palette).color(redesign_error(palette)));
@@ -207,6 +236,124 @@ fn render_header(ui: &mut egui::Ui, app: &mut OrchestratorApp, palette: ThemePal
             }
         });
     }
+}
+
+fn render_search_filters(
+    ui: &mut egui::Ui,
+    state: &mut CatalogScreenState,
+    palette: ThemePalette,
+    caption: &str,
+    filter_width: f32,
+) {
+    ui.allocate_ui_with_layout(
+        egui::vec2(
+            ui.available_width(),
+            redesign_btn_height(ui, false).max(36.0),
+        ),
+        egui::Layout::left_to_right(egui::Align::Center),
+        |ui| {
+            let search_width =
+                (ui.available_width() - filter_width - ui.spacing().item_spacing.x).max(0.0);
+            ui.allocate_ui_with_layout(
+                egui::vec2(search_width, 36.0),
+                egui::Layout::left_to_right(egui::Align::Center),
+                |ui| render_search(ui, &mut state.query, palette),
+            );
+            let response = redesign_btn(
+                ui,
+                palette,
+                caption,
+                BtnOpts {
+                    primary: true,
+                    ..Default::default()
+                },
+            );
+            render_category_filter(ui, state, palette, &response);
+        },
+    );
+}
+
+fn render_category_filter(
+    ui: &egui::Ui,
+    state: &mut CatalogScreenState,
+    palette: ThemePalette,
+    response: &egui::Response,
+) {
+    let popup_id = egui::Id::new("catalog_category_filter_popup");
+    if response.clicked() {
+        ui.memory_mut(|memory| memory.toggle_popup(popup_id));
+    }
+    let screen = ui.ctx().screen_rect().shrink(4.0);
+    let geometry = (response.rect, screen);
+    let previous = ui.ctx().data_mut(|data| {
+        let previous = data.get_temp::<(egui::Rect, egui::Rect)>(popup_id.with("geometry"));
+        data.insert_temp(popup_id.with("geometry"), geometry);
+        previous
+    });
+    if previous.is_some_and(|previous| previous != geometry)
+        && ui.memory(|memory| memory.is_popup_open(popup_id))
+    {
+        ui.ctx()
+            .request_discard("Catalog filter popup anchor changed");
+    }
+    let margin = egui::Frame::popup(ui.style()).total_margin().sum();
+    let below = (screen.bottom() - response.rect.bottom()).max(0.0);
+    let above = (response.rect.top() - screen.top()).max(0.0);
+    let side = if below >= 400.0 || below >= above {
+        egui::AboveOrBelow::Below
+    } else {
+        egui::AboveOrBelow::Above
+    };
+    let height = (match side {
+        egui::AboveOrBelow::Below => below,
+        egui::AboveOrBelow::Above => above,
+    } - margin.y)
+        .clamp(0.0, 400.0);
+    let width = (screen.width() - margin.x).clamp(0.0, 280.0);
+    egui::popup::popup_above_or_below_widget(
+        ui,
+        popup_id,
+        response,
+        side,
+        egui::popup::PopupCloseBehavior::CloseOnClickOutside,
+        |ui| {
+            ui.set_width(width);
+            let clear_height = redesign_btn_height(ui, false);
+            let list_height = (height - clear_height - ui.spacing().item_spacing.y).max(0.0);
+            egui::ScrollArea::vertical()
+                .id_salt("catalog_category_filter_rows")
+                .max_height(list_height)
+                .auto_shrink([false, true])
+                .show(ui, |ui| {
+                    for (key, label) in &state.category_options {
+                        let mut selected = state.selected_types.contains(key);
+                        if ui
+                            .checkbox(&mut selected, text(label, 14.0, palette))
+                            .changed()
+                        {
+                            if selected {
+                                state.selected_types.insert(key.clone());
+                            } else {
+                                state.selected_types.remove(key);
+                            }
+                        }
+                    }
+                });
+            if redesign_btn(
+                ui,
+                palette,
+                "Clear filters",
+                BtnOpts {
+                    block: true,
+                    ..Default::default()
+                },
+            )
+            .clicked()
+            {
+                state.selected_types.clear();
+            }
+        },
+    );
 }
 
 fn render_search(ui: &mut egui::Ui, query: &mut String, palette: ThemePalette) {
@@ -330,7 +477,7 @@ fn render_table(
                     if app.catalog_screen_state.rows.is_empty() {
                         "No configured download sources are available."
                     } else {
-                        "No matching mods. Clear the search or choose All."
+                        "No matching mods. Clear the search or filters, or choose All."
                     },
                     14.0,
                     palette,

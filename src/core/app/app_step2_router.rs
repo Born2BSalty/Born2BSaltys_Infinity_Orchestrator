@@ -759,7 +759,7 @@ fn use_known_source(
 
     let full_text = format!(
         "{}\n\n{}\n",
-        mod_downloads::template_mod_header(&current.tp2, &current.name),
+        mod_downloads::mod_header_with_categories(&current.tp2, &current.name, &current.categories),
         mod_downloads::complete_source_block(&new_source)
     );
     let target_path = match save_to {
@@ -1725,6 +1725,7 @@ mod tests {
             github: Some("owner/widget".to_string()),
             tag: Some("v1.0".to_string()),
             source_default: true,
+            categories: vec!["NPC Adventures".to_string()],
             aliases: vec!["widget-alt".to_string()],
             subdir_require: Some("core".to_string()),
             config_files: vec!["config.ini".to_string()],
@@ -1735,7 +1736,11 @@ mod tests {
             }),
             ..crate::app::mod_downloads::ModDownloadSource::default()
         };
-        let header = crate::app::mod_downloads::template_mod_header("widget", "Widget");
+        let header = crate::app::mod_downloads::mod_header_with_categories(
+            "widget",
+            "Widget",
+            &current.categories,
+        );
         let block = crate::app::mod_downloads::complete_source_block(&current);
         std::fs::write(
             crate::app::mod_downloads::mod_downloads_user_path(),
@@ -1776,6 +1781,11 @@ mod tests {
         );
         let written =
             std::fs::read_to_string(crate::app::mod_downloads::mod_downloads_user_path()).unwrap();
+        let parsed: toml::Value = toml::from_str(&written).unwrap();
+        assert_eq!(
+            parsed["mods"][0]["categories"][0].as_str(),
+            Some("NPC Adventures")
+        );
         assert!(written.contains("someone/widget-fork"));
         assert!(written.contains("branch = \"dev\""));
         assert!(

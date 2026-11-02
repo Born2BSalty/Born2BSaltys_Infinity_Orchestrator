@@ -2177,7 +2177,7 @@ fn assert_catalog_search_and_filters(shapes: &[egui::Shape], width: u16, content
         })
         .unwrap_or_else(|| panic!("{width}: missing full-height native search border"));
     assert!(
-        search.left() >= title.left() && (search.right() - content.right()).abs() < 1.0,
+        search.left() >= title.left() && search.right() < content.right(),
         "{width}: search border {search:?} does not align to right page edge"
     );
     assert!((title.left() - content.left()).abs() < 1.0);
@@ -3141,7 +3141,10 @@ fn catalog_search_grows_with_live_resize_and_preserves_query() {
         ];
         let tabs = labels.map(|label| catalog_painted_text(&harness, label));
         let content = harness.state().content_rect;
-        assert!((search.right() - content.right()).abs() < 1.0);
+        let filter = catalog_painted_text(&harness, "Filter");
+        assert!(filter.right() <= content.right());
+        assert!(filter.left() > search.right());
+        assert!((filter.center().y - search.center().y).abs() < 2.0);
         assert_eq!(
             harness.state().app.catalog_screen_state.query,
             "resize query"
@@ -3155,7 +3158,7 @@ fn catalog_search_grows_with_live_resize_and_preserves_query() {
             inline.push((search, tabs));
         } else {
             assert!((search.left() - content.left()).abs() < 1.0);
-            assert!((search.width() - content.width()).abs() < 1.0);
+            assert!(search.width() > content.width() - 140.0);
             assert!(tabs.iter().all(|tab| tab.bottom() < search.top()));
         }
         println!("SEARCH_RESIZE {width}: search={search:?} tabs={tabs:?} content={content:?}");
@@ -4182,4 +4185,892 @@ fn catalog_popup_live_resize_complete_rows_and_last_selection() {
             .source_id,
         "choice-23"
     );
+}
+
+fn catalog_categories_text(categories: &str) -> String {
+    format!(
+        "[[mods]]\nname = \"Fixture Adventure\"\ntp2 = \"fixture\"\n{categories}\n\
+         [[mods.sources]]\nid = \"main\"\ndefault = true\nlabel = \"Maintainer\"\n\
+         type = \"github\"\nrepo = \"Fixture/Adventure\"\nbranch = \"stable\"\n\
+         [[mods.sources]]\nid = \"mirror\"\nlabel = \"Mirror\"\ntype = \"url\"\n\
+         url = \"https://example.invalid/adventure.zip\"\n"
+    )
+}
+
+fn catalog_categories_matches(sources: Vec<ModDownloadSource>, query: &str) -> usize {
+    let mut state = CatalogScreenState::default();
+    state.replace_sources(sources, None);
+    state.query = query.to_string();
+    state.visible_rows().len()
+}
+
+#[test]
+fn catalog_categories_search_is_case_insensitive_grouped_and_kind_filtered() {
+    let text = catalog_categories_text(
+        "categories = [\"Unusual Encounters\", \"NPC's \\\"Journeys\\\"\"]",
+    );
+    let mut state = CatalogScreenState::default();
+    state.replace_from_texts(&text, "");
+    assert!(state.error.is_none(), "{:?}", state.error);
+    assert_eq!(state.rows.len(), 1);
+    assert_eq!(state.rows[0].sources.len(), 2);
+    state.query = "  uNuSuAl EnC  ".to_string();
+    assert_eq!(state.visible_rows(), vec![0]);
+    assert_eq!(state.kind_count(CatalogKind::All), 1);
+    for kind in [CatalogKind::GitHub, CatalogKind::DirectArchive] {
+        state.kind = kind;
+        assert_eq!(state.visible_rows(), vec![0]);
+    }
+    state.kind = CatalogKind::WeaselMods;
+    assert_eq!(state.visible_rows().len(), 0);
+    state.kind = CatalogKind::All;
+    state.query = "npc's \"journeys\"".to_string();
+    assert_eq!(state.visible_rows(), vec![0]);
+}
+
+#[test]
+fn catalog_categories_legacy_empty_and_tp2_identity_remain_compatible() {
+    for categories in [
+        "",
+        "categories = []",
+        "categories = [\"Unusual Encounters\"]",
+    ] {
+        let load = mod_downloads::load_mod_download_sources_from_texts(
+            &catalog_categories_text(categories),
+            "",
+            "",
+        );
+        assert!(load.error.is_none(), "{:?}", load.error);
+        assert_eq!(load.find_sources("setup-fixture.tp2").len(), 2);
+        assert_eq!(load.find_sources("Unusual Encounters").len(), 0);
+        assert_eq!(load.default_source("fixture").unwrap().source_id, "main");
+        for query in [
+            "fixture adventure",
+            "fixture",
+            "maintainer",
+            "mirror",
+            "fixture/adventure",
+        ] {
+            assert_eq!(catalog_categories_matches(load.sources.clone(), query), 1);
+        }
+        if categories != "categories = [\"Unusual Encounters\"]" {
+            assert_eq!(catalog_categories_matches(load.sources, "unusual"), 0);
+        }
+    }
+}
+
+#[test]
+fn catalog_categories_tiers_inherit_replace_and_clear_every_sibling() {
+    let defaults = catalog_categories_text("categories = [\"Lower Category\"]");
+    let replacement = "[[mods]]\ntp2 = \"SETUP-FIXTURE.TP2\"\n[[mods.sources]]\nid = \"main\"\ntype = \"github\"\nrepo = \"Personal/Adventure\"\ntag = \"v2\"\n";
+    for (user_metadata, modlist, expected, rejected) in [
+        ("", "", "lower category", "upper category"),
+        (
+            "categories = [\"Upper Category\"]",
+            "",
+            "upper category",
+            "lower category",
+        ),
+        (
+            "categories = [\"Upper Category\"]",
+            "[[mods]]\ntp2 = \"fixture\"\ncategories = [\"Final Category\"]",
+            "final category",
+            "upper category",
+        ),
+        ("categories = []", "", "", "lower category"),
+        (
+            "",
+            "[[mods]]\ntp2 = \"fixture\"\ncategories = []",
+            "",
+            "lower category",
+        ),
+    ] {
+        let user = replacement.replace(
+            "[[mods.sources]]",
+            &format!("{user_metadata}\n[[mods.sources]]"),
+        );
+        let load = mod_downloads::load_mod_download_sources_from_texts(&defaults, &user, modlist);
+        assert!(load.error.is_none(), "{:?}", load.error);
+        assert_eq!(load.sources.len(), 2);
+        let main = load
+            .sources
+            .iter()
+            .find(|source| source.source_id == "main")
+            .unwrap();
+        assert_eq!(main.tag.as_deref(), Some("v2"));
+        assert!(main.branch.is_none());
+        for source in load.sources {
+            if !expected.is_empty() {
+                assert_eq!(
+                    catalog_categories_matches(vec![source.clone()], expected),
+                    1,
+                    "{user_metadata} {modlist} {}",
+                    source.source_id
+                );
+            }
+            assert_eq!(catalog_categories_matches(vec![source], rejected), 0);
+        }
+    }
+}
+
+#[test]
+fn catalog_categories_metadata_only_parent_and_added_source_inherit() {
+    let defaults = catalog_categories_text("categories = [\"Lower Category\"]");
+    let user = "[[mods]]\ntp2 = \"fixture\"\ncategories = [\"Upper Category\"]";
+    let modlist = "[[mods]]\ntp2 = \"fixture\"\n[[mods.sources]]\nid = \"third\"\ntype = \"url\"\nurl = \"https://example.invalid/third.zip\"";
+    let load = mod_downloads::load_mod_download_sources_from_texts(&defaults, user, modlist);
+    assert!(load.error.is_none(), "{:?}", load.error);
+    assert_eq!(load.sources.len(), 3);
+    for source in load.sources {
+        assert_eq!(
+            catalog_categories_matches(vec![source.clone()], "upper category"),
+            1,
+            "{}",
+            source.source_id
+        );
+        assert_eq!(
+            catalog_categories_matches(vec![source], "lower category"),
+            0
+        );
+    }
+}
+
+#[test]
+fn catalog_categories_invalid_metadata_is_rejected() {
+    for categories in [
+        "categories = \"text\"",
+        "categories = [1]",
+        "categories = [\"text\", false]",
+    ] {
+        let load = mod_downloads::load_mod_download_sources_from_texts(
+            &catalog_categories_text(categories),
+            "",
+            "",
+        );
+        assert!(load.error.is_some(), "accepted {categories}");
+    }
+}
+
+#[test]
+fn catalog_categories_form_roundtrip_keeps_parent_metadata_out_of_source_block() {
+    let text =
+        catalog_categories_text("categories = [\"NPC's \\\"Journeys\\\"\", \"Quest, story\"]");
+    let load = mod_downloads::load_mod_download_sources_from_texts(&text, "", "");
+    assert!(load.error.is_none(), "{:?}", load.error);
+    for source in load.sources {
+        let mut form = source_form::from_source(
+            &source,
+            SourceFormIdentity::default(),
+            ModSourceEditDestination::GlobalDefault,
+            "catalog:categories",
+        );
+        form.tag = "v3".to_string();
+        let saved = source_form::source_form_save_text(&form);
+        let parsed: toml::Value = toml::from_str(&saved).unwrap();
+        let parent = &parsed["mods"][0];
+        assert_eq!(
+            parent.get("categories"),
+            Some(&toml::Value::Array(vec![
+                toml::Value::String("NPC's \"Journeys\"".to_string()),
+                toml::Value::String("Quest, story".to_string())
+            ]))
+        );
+        assert!(parent["sources"][0].get("categories").is_none());
+        assert!(!mod_downloads::complete_source_block(&source).contains("categories"));
+        let roundtrip = mod_downloads::load_mod_download_sources_from_texts(&saved, "", "");
+        assert!(roundtrip.error.is_none(), "{:?}", roundtrip.error);
+        assert_eq!(
+            catalog_categories_matches(roundtrip.sources, "npc's \"journeys\""),
+            1
+        );
+    }
+}
+
+#[test]
+fn catalog_categories_save_preserves_destination_siblings_and_explicit_clear() {
+    let _lock = mod_downloads::AMBIENT_TEST_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let root = FixtureRoot::new();
+    for categories in ["categories = [\"Destination Category\"]", "categories = []"] {
+        let path = root.join("mod_downloads_user.toml");
+        let original = catalog_categories_text(categories);
+        std::fs::write(&path, &original).unwrap();
+        let incoming = catalog_categories_text("categories = [\"Placeholder Category\"]");
+        mod_downloads::save_user_mod_download_source_block(
+            "fixture",
+            "Fixture Adventure",
+            "main",
+            false,
+            &incoming,
+            Some(&path),
+        )
+        .unwrap();
+        let saved = std::fs::read_to_string(&path).unwrap();
+        let before: toml::Value = toml::from_str(&original).unwrap();
+        let after: toml::Value = toml::from_str(&saved).unwrap();
+        assert_eq!(
+            after["mods"][0].get("categories"),
+            before["mods"][0].get("categories")
+        );
+        let load = mod_downloads::load_mod_download_sources_from_texts(&saved, "", "");
+        assert!(load.error.is_none(), "{:?}", load.error);
+        assert_eq!(load.sources.len(), 2);
+        assert!(
+            load.sources
+                .iter()
+                .any(|source| source.source_id == "mirror")
+        );
+    }
+}
+
+#[test]
+fn catalog_categories_effective_lists_and_template_are_exact() {
+    let expected = vec!["NPC's \"Journeys\"".to_string(), "Quest, story".to_string()];
+    let defaults =
+        catalog_categories_text("categories = [\"NPC's \\\"Journeys\\\"\", \"Quest, story\"]");
+    for (user, wanted) in [
+        ("", expected),
+        ("[[mods]]\ntp2 = \"fixture\"\ncategories = []", Vec::new()),
+    ] {
+        let loaded = mod_downloads::load_mod_download_sources_from_texts(&defaults, user, "");
+        assert!(loaded.error.is_none());
+        assert_eq!(loaded.sources.len(), 2);
+        for source in loaded.sources {
+            assert_eq!(source.categories, wanted);
+        }
+    }
+    let header: toml::Value =
+        toml::from_str(&mod_downloads::template_mod_header("newmod", "New Mod")).unwrap();
+    assert_eq!(header["mods"][0]["categories"].as_array().unwrap().len(), 0);
+}
+
+#[test]
+fn catalog_categories_save_inherited_override_add_remove_and_unrelated() {
+    let _lock = mod_downloads::AMBIENT_TEST_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let root = FixtureRoot::new();
+    let global = mod_downloads::mod_downloads_user_path();
+    std::fs::create_dir_all(global.parent().unwrap()).unwrap();
+    let defaults = catalog_categories_text("categories = [\"Inherited Category\"]");
+    std::fs::write(&global, &defaults).unwrap();
+    let target = root.join("override.toml");
+    let unrelated = "[[mods]]\nname = \"Other\"\ntp2 = \"other\"\ncategories = [\"Other Category\"]\n[[mods.sources]]\nid = \"main\"\ntype = \"url\"\nurl = \"https://example.invalid/other.zip\"\n";
+    std::fs::write(&target, unrelated).unwrap();
+    let loaded = mod_downloads::load_mod_download_sources_from_texts(&defaults, "", "");
+    let mut source = loaded.default_source("fixture").unwrap();
+    source.tag = Some("v9".to_string());
+    source.branch = None;
+    let block = mod_downloads::complete_source_block(&source);
+    mod_downloads::save_user_mod_download_source_block(
+        "fixture",
+        "Fixture Adventure",
+        "main",
+        false,
+        &block,
+        Some(&target),
+    )
+    .unwrap();
+    let saved = std::fs::read_to_string(&target).unwrap();
+    let parsed: toml::Value = toml::from_str(&saved).unwrap();
+    let original: toml::Value = toml::from_str(unrelated).unwrap();
+    assert_eq!(parsed["mods"][0], original["mods"][0]);
+    assert_eq!(
+        parsed["mods"][1]["categories"][0].as_str(),
+        Some("Inherited Category")
+    );
+    source.source_id = "third".to_string();
+    mod_downloads::save_user_mod_download_source_block(
+        "fixture",
+        "Fixture Adventure",
+        "third",
+        true,
+        &mod_downloads::complete_source_block(&source),
+        Some(&target),
+    )
+    .unwrap();
+    mod_downloads::save_user_mod_download_source_block(
+        "fixture",
+        "Fixture Adventure",
+        "main",
+        false,
+        "",
+        Some(&target),
+    )
+    .unwrap();
+    let saved = std::fs::read_to_string(&target).unwrap();
+    let loaded = mod_downloads::load_mod_download_sources_from_texts(&defaults, "", &saved);
+    assert!(loaded.error.is_none(), "{:?}", loaded.error);
+    assert_eq!(loaded.find_sources("fixture").len(), 3);
+    for source in loaded.find_sources("fixture") {
+        assert_eq!(source.categories, vec!["Inherited Category"]);
+    }
+    let parsed: toml::Value = toml::from_str(&saved).unwrap();
+    assert_eq!(parsed["mods"][0], original["mods"][0]);
+    assert_eq!(parsed["mods"][1]["sources"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        parsed["mods"][1]["sources"][0]["id"].as_str(),
+        Some("third")
+    );
+}
+
+#[test]
+fn catalog_categories_migration_preserves_inherit_replace_and_clear() {
+    use crate::app::mod_downloads_migrate::{MigrateResult, MigrateTier, migrate_source_text};
+    let defaults = catalog_categories_text("categories = [\"Inherited Category\"]");
+    for (metadata, expected) in [
+        ("", vec!["Inherited Category"]),
+        ("categories = []", vec![]),
+        ("categories = [\"User Category\"]", vec!["User Category"]),
+    ] {
+        let user = format!(
+            "[[mods]]\nname = \"Fixture Adventure\"\ntp2 = \"fixture\"\n{metadata}\n[[mods.sources]]\nid = \"main\"\nbranch = \"custom\"\n"
+        );
+        let MigrateResult::Rewritten(migrated) =
+            migrate_source_text(&user, &defaults, "", MigrateTier::User)
+        else {
+            panic!("expected a migration rewrite");
+        };
+        let loaded = mod_downloads::load_mod_download_sources_from_texts(&defaults, &migrated, "");
+        assert!(loaded.error.is_none(), "{:?}", loaded.error);
+        for source in loaded.sources {
+            assert_eq!(source.categories, expected);
+            if source.source_id == "main" {
+                assert_eq!(source.branch.as_deref(), Some("custom"));
+                assert_eq!(source.github.as_deref(), Some("Fixture/Adventure"));
+            }
+        }
+    }
+}
+
+#[test]
+fn catalog_categories_history_preserves_metadata_without_identity_changes() {
+    use crate::app::mod_source_history;
+    let text =
+        catalog_categories_text("categories = [\"NPC's \\\"Journeys\\\"\", \"Quest, story\"]");
+    let loaded = mod_downloads::load_mod_download_sources_from_texts(&text, "", "");
+    for source in loaded.sources {
+        let normalized = mod_source_history::normalize_source("fixture", &source);
+        assert_eq!(normalized.categories, source.categories);
+        assert_eq!(normalized.source_id, source.source_id);
+        let mut other = source.clone();
+        other.categories = vec!["Different Category".to_string()];
+        assert_eq!(
+            mod_source_history::rule_signature(&source),
+            mod_source_history::rule_signature(&other)
+        );
+        let (bookmarked, _) =
+            mod_source_history::bookmark_block(&source, Some(&source.source_id), Some("v4"))
+                .unwrap();
+        assert_eq!(bookmarked.categories, source.categories);
+        assert!(!mod_downloads::complete_source_block(&bookmarked).contains("categories"));
+    }
+}
+
+#[test]
+fn catalog_categories_metadata_only_lower_tiers_survive_first_source() {
+    let defaults = "[[mods]]\ntp2 = \"fixture\"\ncategories = [\"Default Category\"]";
+    let modlist = "[[mods]]\ntp2 = \"fixture\"\n[[mods.sources]]\nid = \"main\"\ntype = \"url\"\nurl = \"https://example.invalid/first.zip\"";
+    for (user, expected) in [
+        ("", vec!["Default Category"]),
+        (
+            "[[mods]]\ntp2 = \"fixture\"\ncategories = [\"User Category\"]",
+            vec!["User Category"],
+        ),
+        ("[[mods]]\ntp2 = \"fixture\"\ncategories = []", vec![]),
+    ] {
+        let loaded = mod_downloads::load_mod_download_sources_from_texts(defaults, user, modlist);
+        assert!(loaded.error.is_none(), "{:?}", loaded.error);
+        assert_eq!(loaded.sources.len(), 1);
+        assert_eq!(loaded.sources[0].categories, expected);
+    }
+}
+
+#[test]
+fn catalog_categories_duplicate_parent_collapse_keeps_effective_metadata() {
+    let _lock = mod_downloads::AMBIENT_TEST_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let root = FixtureRoot::new();
+    let path = root.join("duplicates.toml");
+    let original = format!(
+        "{}\n[[mods]]\ntp2 = \"fixture\"\ncategories = [\"Effective Category\"]\n",
+        catalog_categories_text("categories = []")
+    );
+    std::fs::write(&path, &original).unwrap();
+    let loaded = mod_downloads::load_mod_download_sources_from_texts(&original, "", "");
+    assert!(loaded.error.is_none(), "{:?}", loaded.error);
+    let mut source = loaded.default_source("fixture").unwrap();
+    assert_eq!(source.categories, vec!["Effective Category"]);
+    source.github = Some("Edited/Adventure".to_string());
+    source.url = "https://github.com/Edited/Adventure".to_string();
+    let form = source_form::from_source(
+        &source,
+        SourceFormIdentity::default(),
+        ModSourceEditDestination::GlobalDefault,
+        "catalog:duplicates",
+    );
+    mod_downloads::save_user_mod_download_source_block(
+        "fixture",
+        "Fixture Adventure",
+        "main",
+        false,
+        &source_form::source_form_save_text(&form),
+        Some(&path),
+    )
+    .unwrap();
+    let saved = std::fs::read_to_string(&path).unwrap();
+    let loaded = mod_downloads::load_mod_download_sources_from_texts(&saved, "", "");
+    assert!(loaded.error.is_none(), "{:?}", loaded.error);
+    assert_eq!(loaded.sources.len(), 2);
+    for source in loaded.sources {
+        assert_eq!(source.categories, vec!["Effective Category"]);
+    }
+}
+
+#[test]
+fn catalog_categories_migration_metadata_only_duplicates_keep_last_declaration() {
+    use crate::app::mod_downloads_migrate::{MigrateResult, MigrateTier, migrate_source_text};
+    for first in ["", "categories = []"] {
+        let text = format!(
+            "[[mods]]\ntp2 = \"fixture\"\n{first}\n[[mods]]\ntp2 = \"fixture\"\ncategories = [\"Effective Category\"]\n"
+        );
+        let MigrateResult::Rewritten(migrated) =
+            migrate_source_text(&text, "", "", MigrateTier::User)
+        else {
+            panic!("expected a migration rewrite");
+        };
+        let parsed: toml::Value = toml::from_str(&migrated).unwrap();
+        let parents = parsed.get("mods").and_then(toml::Value::as_array).unwrap();
+        assert_eq!(parents.len(), 1);
+        assert_eq!(parents[0]["tp2"].as_str(), Some("fixture"));
+        assert_eq!(
+            parents[0]["categories"].as_array().unwrap(),
+            &vec![toml::Value::String("Effective Category".to_string())]
+        );
+        assert!(parents[0].get("sources").is_none());
+    }
+}
+
+fn catalog_type_sources() -> Vec<ModDownloadSource> {
+    let mut sources = fixture_sources();
+    sources[0].categories = vec![" Quests ".to_owned(), "BGEE".to_owned()];
+    sources[1].categories = vec!["NPC".to_owned()];
+    sources[2].categories = vec!["Quests".to_owned()];
+    let mut sibling = sources[0].clone();
+    sibling.source_id = "mirror".to_owned();
+    sibling.source_default = false;
+    sibling.categories = vec!["NPC".to_owned(), "quests".to_owned()];
+    sources.push(sibling);
+    sources
+}
+
+#[test]
+fn catalog_type_options_all_existing_custom_dedup_and_games_searchable() {
+    let types = [
+        "AI",
+        "Animations",
+        "Audio",
+        "Banter",
+        "Campaign",
+        "Classes",
+        "Content Restoration",
+        "Difficulty",
+        "Encounters",
+        "Fixes",
+        "Graphics",
+        "Items",
+        "Kits",
+        "Modding Resources",
+        "Music",
+        "NPC",
+        "NPC Expansion",
+        "Portraits",
+        "Quests",
+        "Romance",
+        "Rules",
+        "Soundsets",
+        "Spells",
+        "Tools",
+        "Total Conversion",
+        "Translations",
+        "Tweaks",
+        "UI",
+        "Worldmap",
+    ];
+    let games = [
+        "BG1", "BG2", "BGEE", "SoD", "BG2EE", "EET", "Tutu", "BGT", "IWD", "IWDEE", "IWD2", "PST",
+        "PSTEE",
+    ];
+    let mut source = github_source();
+    source.categories = types
+        .iter()
+        .chain(games.iter())
+        .map(|s| (*s).to_owned())
+        .collect();
+    source
+        .categories
+        .extend([" quests ".to_owned(), "Future Custom".to_owned()]);
+    let mut state = CatalogScreenState::default();
+    state.replace_sources(vec![source], None);
+    assert_eq!(state.category_options.len(), 30);
+    for category in types.into_iter().chain(["Future Custom"]) {
+        assert!(
+            state
+                .category_options
+                .contains_key(&category.to_lowercase())
+        );
+        assert!(
+            state.rows[0]
+                .category_keys
+                .contains(&category.to_lowercase())
+        );
+    }
+    for game in games {
+        assert!(!state.category_options.contains_key(&game.to_lowercase()));
+        assert!(!state.rows[0].category_keys.contains(&game.to_lowercase()));
+        state.query = game.to_owned();
+        assert_eq!(state.visible_rows(), vec![0]);
+    }
+}
+
+#[test]
+fn catalog_type_or_and_query_kind_refresh_and_selection_contract() {
+    let mut state = CatalogScreenState::default();
+    let sources = catalog_type_sources();
+    state.replace_sources(sources.clone(), None);
+    assert_eq!(state.category_options.len(), 2);
+    assert_eq!(state.visible_rows().len(), 4);
+    state.focus("tdd");
+    state.toggle("tdd");
+    state.choose_source("tdd", "mirror");
+    let picks = state.source_picks.clone();
+    state.selected_types.insert("npc".to_owned());
+    assert_eq!(state.visible_rows().len(), 2);
+    state.selected_types.insert("quests".to_owned());
+    assert_eq!(state.visible_rows().len(), 3);
+    state.query = "darkest".to_owned();
+    state.kind = CatalogKind::GitHub;
+    assert_eq!(state.visible_rows().len(), 1);
+    state.kind = CatalogKind::DirectArchive;
+    assert_eq!(state.visible_rows(), Vec::<usize>::new());
+    assert_eq!(state.kind_count(CatalogKind::All), 4);
+    assert_eq!(state.kind_count(CatalogKind::GitHub), 1);
+    assert_eq!(state.selected_tp2, BTreeSet::from(["tdd".to_owned()]));
+    assert_eq!(state.focused_tp2.as_deref(), Some("tdd"));
+    assert_eq!(state.source_picks, picks);
+    state.query.clear();
+    state.kind = CatalogKind::All;
+    state.replace_sources(sources, None);
+    assert_eq!(state.selected_types.len(), 2);
+    assert_eq!(state.source_picks, picks);
+    state.replace_sources(vec![fixture_sources()[3].clone()], None);
+    assert_eq!(state.selected_types.len(), 2);
+    assert!(state.category_options.is_empty());
+    assert_eq!(state.visible_rows(), Vec::<usize>::new());
+    state.selected_types.clear();
+    assert_eq!(state.visible_rows().len(), 1);
+}
+
+fn catalog_type_capture(harness: &mut Harness<'_, CatalogScene>, name: &str) {
+    if let Some(directory) = std::env::var_os("BIO_TEST_SCREENSHOT_DIR") {
+        let directory = PathBuf::from(directory);
+        assert!(directory.is_absolute());
+        std::fs::create_dir_all(&directory).unwrap();
+        harness
+            .render()
+            .unwrap()
+            .save(directory.join(format!("filter-{name}.png")))
+            .unwrap();
+    }
+}
+
+#[test]
+fn catalog_type_popup_click_clear_escape_outside_and_live_resize() {
+    let _ambient_lock = mod_downloads::AMBIENT_TEST_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let _ambient_guard = AmbientGuard(mod_downloads::active_modlist_dir());
+    for (palette, name) in [(ThemePalette::Dark, "dark"), (ThemePalette::Light, "light")] {
+        let mut harness = catalog_scene(egui::vec2(1570.0, 813.0), palette, "main");
+        harness
+            .state_mut()
+            .app
+            .catalog_screen_state
+            .replace_sources(catalog_type_sources(), None);
+        harness.run();
+        let selected = harness
+            .state()
+            .app
+            .catalog_screen_state
+            .selected_tp2
+            .clone();
+        catalog_type_capture(&mut harness, &format!("closed-{name}"));
+        let filter = catalog_painted_text(&harness, "Filter");
+        catalog_pointer_click(&mut harness, filter.center());
+        assert!(harness.state().popup_open);
+        catalog_type_capture(&mut harness, &format!("open-{name}"));
+        let npc = catalog_painted_text(&harness, "NPC");
+        catalog_pointer_click(&mut harness, npc.center());
+        assert!(harness.state().popup_open);
+        assert_eq!(
+            harness.state().app.catalog_screen_state.selected_types,
+            BTreeSet::from(["npc".to_owned()])
+        );
+        catalog_painted_text(&harness, "Filter (1)");
+        catalog_type_capture(&mut harness, &format!("selected-{name}"));
+        for width in [1280_u16, 1100, 900, 1570] {
+            harness.set_size(egui::vec2(f32::from(width), 813.0));
+            harness.run();
+            assert!(harness.state().popup_open);
+            for label in ["NPC", "Quests", "Clear filters"] {
+                let rect = catalog_painted_text(&harness, label);
+                assert!(
+                    egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(f32::from(width), 813.0)
+                    )
+                    .contains_rect(rect)
+                );
+            }
+            catalog_type_capture(&mut harness, &format!("resize-{width}-{name}"));
+        }
+        let clear = catalog_painted_text(&harness, "Clear filters");
+        catalog_pointer_click(&mut harness, clear.center());
+        assert!(harness.state().popup_open);
+        assert!(
+            harness
+                .state()
+                .app
+                .catalog_screen_state
+                .selected_types
+                .is_empty()
+        );
+        assert_eq!(
+            harness.state().app.catalog_screen_state.selected_tp2,
+            selected
+        );
+        assert_eq!(
+            harness
+                .state()
+                .app
+                .catalog_screen_state
+                .focused_tp2
+                .as_deref(),
+            Some("tdd")
+        );
+        catalog_type_capture(&mut harness, &format!("cleared-{name}"));
+        harness.press_key(egui::Key::Escape);
+        harness.run();
+        assert!(!harness.state().popup_open);
+        let filter = catalog_painted_text(&harness, "Filter");
+        catalog_pointer_click(&mut harness, filter.center());
+        assert!(harness.state().popup_open);
+        let outside = catalog_painted_text(&harness, "Mod catalog");
+        catalog_pointer_click(&mut harness, outside.center());
+        assert!(!harness.state().popup_open);
+    }
+}
+
+fn catalog_type_visible_text(
+    harness: &Harness<'_, CatalogScene>,
+    label: &str,
+) -> Option<egui::Rect> {
+    harness.output().shapes.iter().find_map(|clipped| {
+        let mut shapes = Vec::new();
+        catalog_shapes(&clipped.shape, &mut shapes);
+        shapes.iter().find_map(|shape| {
+            if let egui::Shape::Text(text) = shape
+                && text.galley.text() == label
+            {
+                let rect = egui::Rect::from_min_size(text.pos, text.galley.size());
+                return clipped.clip_rect.contains_rect(rect).then_some(rect);
+            }
+            None
+        })
+    })
+}
+
+#[test]
+fn catalog_type_many_options_scroll_last_checkbox_and_clear_reachable() {
+    let _ambient_lock = mod_downloads::AMBIENT_TEST_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let _ambient_guard = AmbientGuard(mod_downloads::active_modlist_dir());
+    for (palette, name) in [(ThemePalette::Dark, "dark"), (ThemePalette::Light, "light")] {
+        let mut harness = catalog_scene(egui::vec2(900.0, 620.0), palette, "main");
+        let mut source = github_source();
+        source.categories = (0..60).map(|i| format!("Type {i:02}")).collect();
+        harness
+            .state_mut()
+            .app
+            .catalog_screen_state
+            .replace_sources(vec![source], None);
+        harness.run();
+        let filter = catalog_painted_text(&harness, "Filter");
+        catalog_pointer_click(&mut harness, filter.center());
+        assert!(harness.state().popup_open);
+        let first = catalog_type_visible_text(&harness, "Type 00").unwrap();
+        catalog_picker_wheel(&mut harness, first.center(), -5000.0);
+        let last = catalog_type_visible_text(&harness, "Type 59")
+            .expect("final checkbox must be reachable by wheel");
+        catalog_pointer_click(&mut harness, last.center());
+        assert!(harness.state().popup_open);
+        assert!(
+            harness
+                .state()
+                .app
+                .catalog_screen_state
+                .selected_types
+                .contains("type 59")
+        );
+        catalog_type_capture(&mut harness, &format!("last-checkbox-{name}"));
+        let clear = catalog_type_visible_text(&harness, "Clear filters")
+            .expect("Clear filters must remain reachable");
+        catalog_pointer_click(&mut harness, clear.center());
+        assert!(harness.state().popup_open);
+        assert!(
+            harness
+                .state()
+                .app
+                .catalog_screen_state
+                .selected_types
+                .is_empty()
+        );
+    }
+}
+
+fn catalog_full_toolbar_geometry(
+    harness: &Harness<'_, CatalogScene>,
+    width: u16,
+    caption: &str,
+) -> egui::Rect {
+    let search = catalog_toolbar_widget(harness, "Search mods, source labels or TP2\u{2026}");
+    let filter = catalog_toolbar_widget(harness, caption);
+    let content = harness.state().content_rect;
+    let tabs = [
+        "All (",
+        "GitHub (",
+        "Weaselmods (",
+        "Morpheus Mart (",
+        "Direct archives (",
+    ]
+    .map(|label| catalog_painted_text(harness, label));
+    assert!(content.contains_rect(search));
+    assert!(content.contains_rect(filter));
+    assert!(
+        search.width() >= 140.0,
+        "{width}: unusable search {search:?}"
+    );
+    assert!(search.right() < filter.left());
+    assert!((search.center().y - filter.center().y).abs() < 2.0);
+    for pair in tabs.windows(2) {
+        assert!(!pair[0].intersects(pair[1]));
+    }
+    for tab in tabs {
+        assert!(content.contains_rect(tab));
+        if width >= 1280 {
+            assert!(
+                (tab.center().y - search.center().y).abs() < 2.0,
+                "{width}: normal toolbar wrapped: tab={tab:?} search={search:?} filter={filter:?}"
+            );
+            assert!(tab.right() < search.left());
+        } else {
+            assert!(tab.bottom() < search.top());
+        }
+    }
+    println!("FULL_TOOLBAR {width} {caption}: search={search:?} filter={filter:?}");
+    search
+}
+
+fn catalog_full_toolbar_states(harness: &mut Harness<'_, CatalogScene>, theme: &str) {
+    for count in [0, 2, 29] {
+        let state = &mut harness.state_mut().app.catalog_screen_state;
+        state.selected_types = state.category_options.keys().take(count).cloned().collect();
+        harness.run();
+        let caption = if count == 0 {
+            "Filter".to_owned()
+        } else {
+            format!("Filter ({count})")
+        };
+        let normal = catalog_full_toolbar_geometry(harness, 1280, &caption);
+        catalog_type_capture(harness, &format!("full-1280-closed-{count}-{theme}"));
+        let filter = catalog_painted_text(harness, &caption);
+        catalog_pointer_click(harness, filter.center());
+        assert!(harness.state().popup_open);
+        catalog_full_toolbar_geometry(harness, 1280, &caption);
+        catalog_type_capture(harness, &format!("full-1280-open-{count}-{theme}"));
+        for width in [1570_u16, 900, 1280] {
+            harness.set_size(egui::vec2(f32::from(width), 813.0));
+            harness.run();
+            assert!(harness.state().popup_open);
+            let search = catalog_full_toolbar_geometry(harness, width, &caption);
+            if width == 1570 {
+                assert!((search.width() - normal.width() - 290.0).abs() < 1.0);
+            } else if width == 1280 {
+                assert_eq!(search, normal);
+            }
+            catalog_type_capture(harness, &format!("full-{width}-open-{count}-{theme}"));
+        }
+        let clear = catalog_type_visible_text(harness, "Clear filters").unwrap();
+        catalog_picker_wheel(harness, clear.center() - egui::vec2(0.0, 60.0), 5000.0);
+        let first = catalog_type_visible_text(harness, "AI").unwrap();
+        catalog_picker_wheel(harness, first.center(), -5000.0);
+        assert!(catalog_type_visible_text(harness, "Worldmap").is_some());
+        assert!(catalog_type_visible_text(harness, "Clear filters").is_some());
+        catalog_type_capture(harness, &format!("full-1280-bottom-{count}-{theme}"));
+        harness.press_key(egui::Key::Escape);
+        harness.run();
+        assert!(!harness.state().popup_open);
+    }
+}
+
+#[test]
+fn catalog_full_default_normal_1280_toolbar_stays_inline() {
+    let _ambient_lock = mod_downloads::AMBIENT_TEST_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let _ambient_guard = AmbientGuard(mod_downloads::active_modlist_dir());
+    for (palette, theme) in [(ThemePalette::Dark, "dark"), (ThemePalette::Light, "light")] {
+        let mut harness = catalog_scene(egui::vec2(1280.0, 813.0), palette, "main");
+        let state = &mut harness.state_mut().app.catalog_screen_state;
+        state.replace_from_texts(mod_downloads::default_mod_downloads_content(), "");
+        assert_eq!(state.rows.len(), 1268);
+        assert_eq!(
+            state
+                .rows
+                .iter()
+                .map(|row| row.sources.len())
+                .sum::<usize>(),
+            1292
+        );
+        assert_eq!(state.category_options.len(), 29);
+        catalog_full_toolbar_states(&mut harness, theme);
+        harness.state_mut().app.catalog_screen_state.query = "baldur".to_owned();
+        harness.run();
+        assert_eq!(harness.state().app.catalog_screen_state.query, "baldur");
+        let search = catalog_toolbar_widget(&harness, "baldur");
+        assert!(search.contains_rect(catalog_painted_text(&harness, "baldur")));
+    }
+}
+
+fn catalog_toolbar_widget(harness: &Harness<'_, CatalogScene>, label: &str) -> egui::Rect {
+    let anchor = catalog_painted_text(harness, label);
+    let mut shapes = Vec::new();
+    for clipped in &harness.output().shapes {
+        catalog_shapes(&clipped.shape, &mut shapes);
+    }
+    shapes
+        .iter()
+        .find_map(|shape| match shape {
+            egui::Shape::Rect(rect)
+                if rect.rect.contains(anchor.left_center())
+                    && (36.0..=40.0).contains(&rect.rect.height()) =>
+            {
+                Some(rect.rect)
+            }
+            _ => None,
+        })
+        .unwrap_or_else(|| panic!("missing toolbar widget {label}"))
 }

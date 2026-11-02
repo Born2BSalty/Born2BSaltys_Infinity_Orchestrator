@@ -225,7 +225,9 @@ pub(crate) fn source_from_block(tp2: &str, block: &str) -> Option<ModDownloadSou
 
 pub(crate) fn normalize_source(tp2: &str, source: &ModDownloadSource) -> ModDownloadSource {
     let block = mod_downloads::complete_source_block(source);
-    source_from_block(tp2, &block).unwrap_or_else(|| source.clone())
+    let mut normalized = source_from_block(tp2, &block).unwrap_or_else(|| source.clone());
+    normalized.categories.clone_from(&source.categories);
+    normalized
 }
 
 pub(crate) fn bookmark_block(
