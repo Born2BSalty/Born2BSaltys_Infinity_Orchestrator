@@ -10,12 +10,12 @@ fn assert_worker_uses_effective_program(configured: &str) {
     let (observed_tx, observed_rx) = std::sync::mpsc::channel();
     let receiver = spawn_install_preparation_with(
         step1,
-        vec!["Imported".to_string()],
+        std::iter::once(("choice_phrase".to_string(), vec!["Imported".to_string()])).collect(),
         false,
         901,
         move |executable, phrases| {
             observed_tx
-                .send((executable.to_path_buf(), phrases.to_vec()))
+                .send((executable.to_path_buf(), phrases.clone()))
                 .expect("observed executable");
             Err("fixture failure before target preparation".to_string())
         },
@@ -27,7 +27,7 @@ fn assert_worker_uses_effective_program(configured: &str) {
         .recv_timeout(std::time::Duration::from_secs(2))
         .expect("worker result")
         .unwrap_or_else(|error| panic!("phrase-bearing preparation must not block: {error}"));
-    assert_eq!(phrases, ["Imported"]);
+    assert_eq!(phrases["choice_phrase"], ["Imported"]);
     assert_eq!(
         prepared.parser_warning.as_deref(),
         Some("fixture failure before target preparation")
@@ -53,8 +53,7 @@ struct FixtureDirectory(PathBuf);
 impl FixtureDirectory {
     fn new() -> std::io::Result<Self> {
         static NEXT: AtomicU64 = AtomicU64::new(0);
-        let directory = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("target")
+        let directory = std::env::temp_dir()
             .join("parser-sharing-resolution-tests")
             .join(format!(
                 "{}-{}",

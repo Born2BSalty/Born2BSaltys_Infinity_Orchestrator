@@ -19,6 +19,7 @@ pub fn render(
     _modlist_id: &str,
     ctx: &egui::Context,
 ) {
+    enforce_mod_language_rescan_gate(orchestrator);
     let palette = orchestrator.theme_palette;
 
     workspace_header::render(ui, orchestrator, ctx);
@@ -40,6 +41,7 @@ pub fn render(
             });
     });
 
+    enforce_mod_language_rescan_gate(orchestrator);
     let disable_prev = orchestrator.workspace_view.install_complete
         || orchestrator.wizard_state.step5.install_running
         || orchestrator.workspace_step5.install_clicked;
@@ -47,12 +49,13 @@ pub fn render(
     let outcome =
         workspace_nav_bar::render(ui, palette, current, disable_prev, nav_status.as_deref());
 
-    if outcome.next_clicked {
+    if outcome.next_clicked && !orchestrator.mod_language_rescan_required {
         if let Some(next) = current.next() {
             if current == WorkspaceStep::Step3 {
                 request_step3_next(
                     &mut orchestrator.wizard_state,
                     &mut orchestrator.workspace_view,
+                    orchestrator.mod_language_rescan_required,
                 );
                 return;
             }
@@ -74,11 +77,21 @@ pub fn render(
     }
 }
 
+pub(crate) const fn enforce_mod_language_rescan_gate(orchestrator: &mut OrchestratorApp) -> bool {
+    if orchestrator.mod_language_rescan_required {
+        orchestrator.workspace_view.current_step = WorkspaceStep::Step2;
+        return true;
+    }
+    false
+}
+
 pub(crate) fn request_step3_next(
     state: &mut crate::app::state::WizardState,
     view: &mut crate::ui::workspace::state_workspace::WorkspaceViewState,
+    mod_language_rescan_required: bool,
 ) -> bool {
-    if view.current_step != WorkspaceStep::Step3
+    if mod_language_rescan_required
+        || view.current_step != WorkspaceStep::Step3
         || state.step2.is_scanning
         || state.step5.install_running
     {
@@ -101,6 +114,12 @@ pub(crate) fn request_step3_next(
 mod installer_answers_navigation_tests;
 
 fn nav_status_text(orchestrator: &OrchestratorApp, current: WorkspaceStep) -> Option<String> {
+    if orchestrator.mod_language_rescan_required {
+        return Some(
+            "Language changed — use Rescan Mods. Check the mods folder if scanning is unavailable."
+                .to_string(),
+        );
+    }
     if current != WorkspaceStep::Step2 {
         return None;
     }

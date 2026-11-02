@@ -587,6 +587,7 @@ mod tests {
     fn eet_preview(bio_version: &str) -> ModlistSharePreview {
         ModlistSharePreview {
             parser_choice_phrases: Vec::new(),
+            parser_recognition_rules: std::collections::BTreeMap::default(),
             bio_version: bio_version.to_string(),
             game_install: "EET".to_string(),
             game_version: None,

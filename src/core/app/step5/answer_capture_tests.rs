@@ -689,6 +689,7 @@ fn manual_wlb_real_checked_completion_saves_and_exports_actual_manual_answers() 
         .expect("inflate");
     let exported: serde_json::Value = serde_json::from_str(&text).expect("payload");
     let mut expected = original;
+    expected["parser_recognition_rules"] = serde_json::json!({"choice_phrase": ["1) yes"]});
     expected["weidu_logs"]["bgee"] = serde_json::json!(
         "~BARDICWONDERS/SETUP-BARDICWONDERS.TP2~ #0 #1008 // Bardic Wonders: Troubadour Kit // @wlb-inputs: 1\n~BP-BGT-WORLDMAP/SETUP-BP-BGT-WORLDMAP.TP2~ #0 #0 // Worldmap // @wlb-inputs: 2"
     );

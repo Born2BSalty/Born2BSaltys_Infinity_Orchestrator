@@ -38,6 +38,8 @@ pub(super) struct ParserEvent {
     pub text: String,
     #[serde(default, deserialize_with = "vec_or_default")]
     pub options: Vec<ParserOption>,
+    #[serde(default)]
+    pub options_inferred: bool,
     #[serde(default, deserialize_with = "string_or_default")]
     pub source_file: String,
     #[serde(default)]

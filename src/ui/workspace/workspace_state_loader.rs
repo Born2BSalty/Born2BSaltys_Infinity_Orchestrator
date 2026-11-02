@@ -11,31 +11,48 @@ use crate::settings::store::SettingsStore;
 
 const PARENT_PLACEHOLDER_ID: &str = "__PARENT__";
 
+fn restore_parser_rules(
+    workspace: &ModlistWorkspaceState,
+    entry: &ModlistEntry,
+    wizard_state: &mut WizardState,
+) -> Option<String> {
+    let code = workspace
+        .last_share_code
+        .as_deref()
+        .or(entry.latest_share_code.as_deref())
+        .unwrap_or_default();
+    let rules_result = crate::registry::share_export::workspace_recognition_rules(code, workspace);
+    let failure = rules_result.as_ref().err().cloned();
+    if let Ok(rules) = rules_result {
+        wizard_state.parser_choice_phrases =
+            rules.get("choice_phrase").cloned().unwrap_or_default();
+        wizard_state.parser_recognition_rules = rules;
+    } else {
+        wizard_state.parser_recognition_rules = workspace
+            .parser_recognition_rules
+            .clone()
+            .unwrap_or_default();
+        wizard_state.parser_choice_phrases = workspace
+            .parser_choice_phrases
+            .clone()
+            .or_else(|| {
+                wizard_state
+                    .parser_recognition_rules
+                    .get("choice_phrase")
+                    .cloned()
+            })
+            .unwrap_or_default();
+    }
+    failure
+}
+
 pub fn populate_wizard_state_from_workspace(
     workspace: &ModlistWorkspaceState,
     entry: &ModlistEntry,
     settings_store: &SettingsStore,
     wizard_state: &mut WizardState,
 ) -> Option<String> {
-    let phrase_result = workspace.parser_choice_phrases.as_ref().map_or_else(
-        || {
-            workspace
-                .last_share_code
-                .as_deref()
-                .or(entry.latest_share_code.as_deref())
-                .filter(|code| !code.trim().is_empty())
-                .map(crate::app::modlist_share::decode_share_payload)
-                .transpose()
-                .map(|payload| {
-                    payload.map_or_else(Vec::new, |payload| payload.parser_choice_phrases)
-                })
-        },
-        |phrases| {
-            crate::app::mod_installer_parser::validate_phrases(phrases).map(|()| phrases.clone())
-        },
-    );
-    let phrase_failure = phrase_result.as_ref().err().cloned();
-    wizard_state.parser_choice_phrases = phrase_result.unwrap_or_default();
+    let phrase_failure = restore_parser_rules(workspace, entry, wizard_state);
     if wizard_state
         .pending_install_choice_modlist_id
         .as_deref()
@@ -285,12 +302,28 @@ pub fn extract_workspace_state_from_wizard(
         prompt_overrides: prior.prompt_overrides.clone(),
         last_share_code: prior.last_share_code.clone(),
         parser_choice_phrases: Some(wizard_state.parser_choice_phrases.clone()),
+        parser_recognition_rules: Some(workspace_rules_from_wizard(wizard_state)),
         scratch_mods_folder: prior.scratch_mods_folder.clone(),
         dev_scanned_mods_folder: prior.dev_scanned_mods_folder.clone(),
         pending_destination_prep: prior.pending_destination_prep,
         mods_source: prior.mods_source,
         last_rescanned_mods_source: prior.last_rescanned_mods_source,
     }
+}
+
+fn workspace_rules_from_wizard(
+    wizard: &WizardState,
+) -> crate::app::mod_installer_parser::ParserRecognitionRules {
+    let mut rules = wizard.parser_recognition_rules.clone();
+    if !wizard.parser_choice_phrases.is_empty() {
+        let phrases = rules.entry("choice_phrase".to_string()).or_default();
+        for phrase in &wizard.parser_choice_phrases {
+            if !phrases.contains(phrase) {
+                phrases.push(phrase.clone());
+            }
+        }
+    }
+    rules
 }
 
 pub(crate) fn same_component(a: &ComponentRef, b: &ComponentRef) -> bool {
@@ -1678,6 +1711,7 @@ mod parser_sharing_tests {
         );
         assert_eq!(wizard.parser_choice_phrases, ["Second workspace"]);
         wizard.parser_choice_phrases.clear();
+        wizard.parser_recognition_rules.clear();
         let cleared = extract_workspace_state_from_wizard(&wizard, &first);
         assert_eq!(cleared.parser_choice_phrases, Some(Vec::new()));
         wizard
@@ -1731,5 +1765,125 @@ mod parser_sharing_tests {
             assert_eq!(wizard.parser_choice_phrases, [] as [String; 0]);
         }
         std::fs::remove_dir_all(root).expect("fixture cleanup");
+    }
+}
+
+#[cfg(test)]
+mod parser_rules_workspace_tests {
+    use super::*;
+
+    fn map() -> crate::app::mod_installer_parser::ParserRecognitionRules {
+        [
+            (
+                "choice_words".to_string(),
+                vec!["auswählen".to_string(), "elige".to_string()],
+            ),
+            (
+                "choice_phrase".to_string(),
+                vec!["would you like".to_string()],
+            ),
+            ("finished".to_string(), vec!["fertig".to_string()]),
+        ]
+        .into_iter()
+        .collect()
+    }
+
+    #[test]
+    fn parser_rules_actual_store_reopen_and_workspace_switch_preserve_map_and_explicit_clear() {
+        let root =
+            std::env::temp_dir().join(format!("bio-parser-rules-workspace-{}", std::process::id()));
+        let store = crate::registry::store_workspace::WorkspaceStore::new_with_path(
+            root.join("workspace.json"),
+        );
+        let settings = SettingsStore::new_with_path(root.join("settings.json"));
+        let mut wizard = WizardState {
+            parser_recognition_rules: map(),
+            parser_choice_phrases: vec!["legacy addition".to_string()],
+            ..Default::default()
+        };
+        let workspace =
+            extract_workspace_state_from_wizard(&wizard, &ModlistWorkspaceState::default());
+        store.save(&workspace).unwrap();
+        let reopened = store.load().unwrap();
+        let entry = ModlistEntry {
+            id: "parser-rules-store".to_string(),
+            game: Game::BGEE,
+            ..Default::default()
+        };
+        wizard.parser_recognition_rules.clear();
+        wizard.parser_choice_phrases.clear();
+        wizard.parser_recognition_rules.clear();
+        populate_wizard_state_from_workspace(&reopened, &entry, &settings, &mut wizard);
+        assert_eq!(
+            wizard.parser_recognition_rules["choice_words"],
+            ["auswählen", "elige"]
+        );
+        assert_eq!(
+            wizard.parser_recognition_rules["choice_phrase"],
+            ["would you like", "legacy addition"]
+        );
+        wizard.parser_recognition_rules.clear();
+        wizard.parser_choice_phrases.clear();
+        wizard.parser_recognition_rules.clear();
+        let cleared = extract_workspace_state_from_wizard(&wizard, &reopened);
+        assert_eq!(
+            cleared.parser_recognition_rules,
+            Some(crate::app::mod_installer_parser::ParserRecognitionRules::new())
+        );
+        store.save(&cleared).unwrap();
+        let cleared = store.load().unwrap();
+        wizard.parser_recognition_rules = map();
+        wizard.parser_choice_phrases = vec!["other list".to_string()];
+        populate_wizard_state_from_workspace(&cleared, &entry, &settings, &mut wizard);
+        assert!(wizard.parser_recognition_rules.is_empty());
+        assert_eq!(wizard.parser_choice_phrases, [] as [String; 0]);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn parser_rules_invalid_stored_map_is_warned_and_retained_for_review_not_silently_cleared() {
+        let root = std::env::temp_dir().join(format!(
+            "bio-parser-rules-invalid-store-{}",
+            std::process::id()
+        ));
+        let settings = SettingsStore::new_with_path(root.join("settings.json"));
+        let store = crate::registry::store_workspace::WorkspaceStore::new_with_path(
+            root.join("workspace.json"),
+        );
+        for (key, value) in [("unknown_field", "opaque"), ("choice_words", " ")] {
+            let raw = std::iter::once((key.to_string(), vec![value.to_string()])).collect();
+            let workspace = ModlistWorkspaceState {
+                parser_recognition_rules: Some(raw),
+                parser_choice_phrases: Some(vec!["legacy retained".to_string()]),
+                ..Default::default()
+            };
+            let entry = ModlistEntry {
+                game: Game::BGEE,
+                ..Default::default()
+            };
+            let mut wizard = WizardState::default();
+            let warning =
+                populate_wizard_state_from_workspace(&workspace, &entry, &settings, &mut wizard);
+            assert!(warning.is_some());
+            assert_eq!(wizard.parser_recognition_rules[key], [value]);
+            let extracted = extract_workspace_state_from_wizard(&wizard, &workspace);
+            assert_eq!(
+                extracted.parser_recognition_rules.as_ref().unwrap()[key],
+                [value]
+            );
+            store.save(&extracted).unwrap();
+            let reopened = store.load().unwrap();
+            assert_eq!(
+                reopened.parser_recognition_rules.as_ref().unwrap()[key],
+                [value]
+            );
+            assert!(
+                crate::app::mod_installer_parser::validate_recognition_rules(
+                    reopened.parser_recognition_rules.as_ref().unwrap()
+                )
+                .is_err()
+            );
+        }
+        std::fs::remove_dir_all(root).unwrap();
     }
 }

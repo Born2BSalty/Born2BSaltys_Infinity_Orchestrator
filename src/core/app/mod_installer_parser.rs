@@ -11,6 +11,27 @@ mod layout;
 #[path = "mod_installer_parser/process.rs"]
 mod process;
 
+mod recognition;
+
+pub(crate) type ParserRecognitionRules = std::collections::BTreeMap<String, Vec<String>>;
+
+pub(crate) fn validate_recognition_rules(rules: &ParserRecognitionRules) -> Result<(), String> {
+    recognition::validate_recognition_rules(rules)
+}
+
+pub(crate) fn union_recognition_rules(
+    groups: &[&ParserRecognitionRules],
+) -> Result<ParserRecognitionRules, String> {
+    recognition::union_recognition_rules(groups)
+}
+
+pub(crate) fn recognition_rules_with_legacy(
+    rules: &ParserRecognitionRules,
+    phrases: &[String],
+) -> Result<ParserRecognitionRules, String> {
+    recognition::recognition_rules_with_legacy(rules, phrases)
+}
+
 const MAX_BYTES: u64 = 2 * 1024 * 1024;
 static RESERVED: AtomicBool = AtomicBool::new(false);
 static NEXT_FILE: AtomicU64 = AtomicU64::new(0);
@@ -26,6 +47,7 @@ pub(crate) trait ParserInitializer: Send + Sync {
 
 pub(crate) struct ParserPreparation {
     pub(crate) phrases: Vec<String>,
+    pub(crate) recognition_rules: ParserRecognitionRules,
     pub(crate) version: VersionOutput,
     pub(crate) backup_path: Option<PathBuf>,
 }
@@ -81,6 +103,7 @@ pub(crate) fn validate_phrases(phrases: &[String]) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(test)]
 pub(crate) fn union_phrases(groups: &[&[String]]) -> Result<Vec<String>, String> {
     let mut seen = HashSet::new();
     let mut result = Vec::new();
@@ -117,6 +140,7 @@ fn parse(bytes: &[u8]) -> Result<toml::Value, String> {
     toml::from_str(text).map_err(|_| "Parser contains malformed TOML".to_string())
 }
 
+#[cfg(test)]
 fn phrases(document: &toml::Value) -> Result<Vec<String>, String> {
     let array = document
         .get("choice_phrase")
@@ -139,7 +163,7 @@ fn validate_document(document: &toml::Value) -> Result<(), String> {
     document
         .as_table()
         .ok_or_else(|| "Parser root must be a table".to_string())?;
-    phrases(document)?;
+    recognition::from_document(document)?;
     if let Some(metadata) = document.get("metadata") {
         let table = metadata
             .as_table()
@@ -154,8 +178,37 @@ fn validate_document(document: &toml::Value) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(test)]
 pub(crate) fn capture_choice_phrases_at(path: &Path) -> Result<Vec<String>, String> {
     read_bytes(path)?.map_or_else(|| Ok(Vec::new()), |bytes| phrases(&parse(&bytes)?))
+}
+
+pub(crate) fn capture_recognition_rules_at(path: &Path) -> Result<ParserRecognitionRules, String> {
+    read_bytes(path)?.map_or_else(
+        || Ok(ParserRecognitionRules::new()),
+        |bytes| recognition::from_document(&parse(&bytes)?),
+    )
+}
+
+pub(crate) fn capture_local_recognition_rules() -> Result<ParserRecognitionRules, String> {
+    #[cfg(test)]
+    if TEST_CAPTURE_PATH.with(|path| path.borrow().is_none()) {
+        return Ok(ParserRecognitionRules::new());
+    }
+    let _lease = acquire(false)?;
+    #[cfg(test)]
+    {
+        TEST_CAPTURE_PATH.with(|path| {
+            path.borrow().as_deref().map_or_else(
+                || Ok(ParserRecognitionRules::new()),
+                capture_recognition_rules_at,
+            )
+        })
+    }
+    #[cfg(not(test))]
+    {
+        capture_recognition_rules_at(&resolve_parser_path()?)
+    }
 }
 
 pub(crate) fn resolve_parser_path() -> Result<PathBuf, String> {
@@ -187,6 +240,7 @@ pub(crate) fn with_parser_path_for_test<T>(path: &Path, action: impl FnOnce() ->
     action()
 }
 
+#[cfg(test)]
 pub(crate) fn capture_local_choice_phrases() -> Result<Vec<String>, String> {
     #[cfg(test)]
     if TEST_CAPTURE_PATH.with(|path| path.borrow().is_none()) {
@@ -227,31 +281,48 @@ fn overlay(base: &mut toml::Value, original: &toml::Value) -> Result<(), String>
     Ok(())
 }
 
+#[cfg(test)]
 pub(crate) fn merge_parser_documents(
     original: Option<&toml::Value>,
     initialized: &toml::Value,
     imported: &[String],
 ) -> Result<toml::Value, String> {
+    let rules = recognition_rules_with_legacy(&ParserRecognitionRules::new(), imported)?;
+    merge_parser_documents_with_rules(original, initialized, &rules)
+}
+
+pub(crate) fn merge_parser_documents_with_rules(
+    original: Option<&toml::Value>,
+    initialized: &toml::Value,
+    imported: &ParserRecognitionRules,
+) -> Result<toml::Value, String> {
     validate_document(initialized)?;
-    validate_phrases(imported)?;
+    validate_recognition_rules(imported)?;
     let current_version = initialized
         .get("metadata")
         .and_then(|value| value.get("mod_installer_version"))
         .and_then(toml::Value::as_str)
         .ok_or_else(|| "Initialized parser has no version metadata".to_string())?
         .to_string();
-    let initial_phrases = phrases(initialized)?;
+    let initial_rules = recognition::from_document(initialized)?;
     let mut merged = initialized.clone();
-    let original_phrases = if let Some(original) = original {
+    let original_rules = if let Some(original) = original {
         validate_document(original)?;
         overlay(&mut merged, original)?;
-        phrases(original)?
+        recognition::from_document(original)?
     } else {
-        Vec::new()
+        ParserRecognitionRules::new()
     };
-    let combined = union_phrases(&[&initial_phrases, &original_phrases, imported])?;
-    merged["choice_phrase"] =
-        toml::Value::Array(combined.into_iter().map(toml::Value::String).collect());
+    let combined = union_recognition_rules(&[&initial_rules, &original_rules, imported])?;
+    for (key, values) in combined {
+        merged
+            .as_table_mut()
+            .ok_or_else(|| "Parser root must be a table".to_string())?
+            .insert(
+                key,
+                toml::Value::Array(values.into_iter().map(toml::Value::String).collect()),
+            );
+    }
     merged["metadata"]["mod_installer_version"] = toml::Value::String(current_version);
     validate_document(&merged)?;
     Ok(merged)
@@ -605,7 +676,7 @@ impl<'a> Transaction<'a> {
     fn finish(
         &mut self,
         version: VersionOutput,
-        imported: &[String],
+        imported: &ParserRecognitionRules,
     ) -> Result<ParserPreparation, String> {
         let owned = self
             .owned
@@ -624,8 +695,11 @@ impl<'a> Transaction<'a> {
         if stored_version != Some(version.version.as_str()) {
             return Err("Initialized parser version does not match executable".to_string());
         }
-        let merged =
-            merge_parser_documents(self.original_document.as_ref(), &initialized, imported)?;
+        let merged = merge_parser_documents_with_rules(
+            self.original_document.as_ref(),
+            &initialized,
+            imported,
+        )?;
         if snapshot(self.path)? != *owned {
             return Err("Concurrent parser change detected".to_string());
         }
@@ -670,7 +744,10 @@ impl<'a> Transaction<'a> {
         }
         let changed = self.original.bytes.is_some() && verified.bytes != self.original.bytes;
         let preparation = ParserPreparation {
-            phrases: phrases(&verified_document)?,
+            phrases: recognition::from_document(&verified_document)?
+                .remove("choice_phrase")
+                .unwrap_or_default(),
+            recognition_rules: recognition::from_document(&verified_document)?,
             version,
             backup_path: changed.then(|| self.backup_path.clone()),
         };
@@ -733,6 +810,7 @@ impl<'a> Transaction<'a> {
     }
 }
 
+#[cfg(test)]
 pub(crate) fn prepare_parser_at(
     path: &Path,
     executable: &Path,
@@ -742,6 +820,7 @@ pub(crate) fn prepare_parser_at(
     prepare_parser_at_with(path, executable, imported, initializer, &|_| Ok(()))
 }
 
+#[cfg(test)]
 fn prepare_parser_at_with(
     path: &Path,
     executable: &Path,
@@ -749,7 +828,27 @@ fn prepare_parser_at_with(
     initializer: &dyn ParserInitializer,
     hook: OperationHook<'_>,
 ) -> Result<PreparedParser, String> {
-    validate_phrases(imported)?;
+    let rules = recognition_rules_with_legacy(&ParserRecognitionRules::new(), imported)?;
+    prepare_parser_with_rules_at_with(path, executable, &rules, initializer, hook)
+}
+
+pub(crate) fn prepare_parser_with_rules_at(
+    path: &Path,
+    executable: &Path,
+    imported: &ParserRecognitionRules,
+    initializer: &dyn ParserInitializer,
+) -> Result<PreparedParser, String> {
+    prepare_parser_with_rules_at_with(path, executable, imported, initializer, &|_| Ok(()))
+}
+
+fn prepare_parser_with_rules_at_with(
+    path: &Path,
+    executable: &Path,
+    imported: &ParserRecognitionRules,
+    initializer: &dyn ParserInitializer,
+    hook: OperationHook<'_>,
+) -> Result<PreparedParser, String> {
+    validate_recognition_rules(imported)?;
     let lease = acquire(true)?;
     let mut transaction = Transaction::begin(path, hook)?;
     let version = initializer.run_version(executable);
@@ -768,11 +867,11 @@ fn prepare_parser_at_with(
     }
 }
 
-pub(crate) fn prepare_local_parser(
+pub(crate) fn prepare_local_parser_with_rules(
     executable: &Path,
-    imported: &[String],
+    imported: &ParserRecognitionRules,
 ) -> Result<PreparedParser, String> {
-    prepare_parser_at(
+    prepare_parser_with_rules_at(
         &resolve_parser_path()?,
         executable,
         imported,

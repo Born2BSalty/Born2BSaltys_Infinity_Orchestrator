@@ -225,15 +225,17 @@ impl HiddenFileParser<'_> {
     }
 
     fn parse(&mut self, path: &Path) -> Vec<PromptSummaryEvent> {
-        let Ok(json) = lapdu_parser_rust::parse_path_to_json(path, self.preferred_lang) else {
+        let tra = self.tra.get_or_insert_with(|| {
+            tra_map_for_tp2(self.tp2_path, self.tp2_text, self.preferred_lang)
+        });
+        let Ok(json) =
+            lapdu_parser_rust::parse_path_to_json_with_tra(path, self.preferred_lang, tra)
+        else {
             return Vec::new();
         };
         let Ok(mut output) = serde_json::from_str::<ParserOutput>(&json) else {
             return Vec::new();
         };
-        let tra = self.tra.get_or_insert_with(|| {
-            tra_map_for_tp2(self.tp2_path, self.tp2_text, self.preferred_lang)
-        });
         translate_output(&mut output, tra);
         let built = build_prompt_summary_index(&output, self.preferred_game);
         let mut bound: Vec<(String, Vec<PromptSummaryEvent>)> =
@@ -466,7 +468,6 @@ fn path_key(path: &Path) -> String {
 fn source_key(source_file: &str) -> String {
     path_key(Path::new(&source_file.replace('\\', "/")))
 }
-
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;

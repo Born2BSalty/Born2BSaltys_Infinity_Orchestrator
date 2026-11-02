@@ -1,4 +1,5 @@
 mod generated;
+mod prompt_resolution;
 
 use antlr4rust::common_token_stream::CommonTokenStream;
 use antlr4rust::Parser;
@@ -66,6 +67,7 @@ struct PromptEvent {
     path_id: String,
     text: String,
     options: Vec<PromptOption>,
+    options_inferred: bool,
     source_file: String,
     line: Option<u32>,
     branch_path: Vec<String>,
@@ -325,6 +327,14 @@ pub fn run() -> Result<(), String> {
 }
 
 pub fn parse_path_to_json(root_path: &Path, preferred_lang: Option<&str>) -> Result<String, String> {
+    parse_path_to_json_with_tra(root_path, preferred_lang, &HashMap::new())
+}
+
+pub fn parse_path_to_json_with_tra(
+    root_path: &Path,
+    preferred_lang: Option<&str>,
+    inherited_tra: &HashMap<String, String>,
+) -> Result<String, String> {
     let root_display = root_path.to_string_lossy().to_string();
     let mod_root = root_path
         .parent()
@@ -354,7 +364,11 @@ pub fn parse_path_to_json(root_path: &Path, preferred_lang: Option<&str>) -> Res
     let mut events: Vec<PromptEvent> = Vec::new();
     let mut warnings: Vec<ParserDiagnostic> = Vec::new();
     let mut tra_language_used: Option<String> = None;
-    let root_tra_lookup = load_tra_map_for_source(&root_display, preferred_lang);
+    let mut root_tra_lookup = load_tra_map_for_source(&root_display, preferred_lang);
+    for (key, value) in inherited_tra {
+        root_tra_lookup.map.entry(key.clone()).or_insert_with(|| value.clone());
+    }
+    let resolver = prompt_resolution::Resolver::new(&targets);
     if tra_language_used.is_none() && root_tra_lookup.language_used.is_some() {
         tra_language_used = root_tra_lookup.language_used.clone();
     }
@@ -375,6 +389,7 @@ pub fn parse_path_to_json(root_path: &Path, preferred_lang: Option<&str>) -> Res
                 component_hints,
                 action_function_defs,
                 &action_function_component_owners,
+                &resolver,
             ),
             Err(err) => warnings.push(ParserDiagnostic {
                 code: "PARSE_FILE_FAILED".to_string(),
@@ -618,7 +633,9 @@ fn append_events_from_visitor(
     include_component_hints: Option<&HashSet<String>>,
     action_function_definitions: Option<&Vec<ActionFunctionDefinition>>,
     action_function_component_owners: &HashMap<String, HashSet<String>>,
+    resolver: &prompt_resolution::Resolver,
 ) {
+    let context = &PromptContext { resolver, path: Path::new(source_file) };
     let mut quick_menu_search_from_line = 0usize;
     let mut match_prompt_search_from_line = 0usize;
     let mut readln_search_from_line = 0usize;
@@ -637,7 +654,7 @@ fn append_events_from_visitor(
     }
 
     for (qm_idx, quick_menu) in visitor.quick_menus.iter().enumerate() {
-        let (question, line) = derive_keyword_prompt(
+        let (question, line) = derive_keyword_prompt(context, 
             &source_lines,
             &tra_map,
             "QUICK_MENU",
@@ -659,7 +676,7 @@ fn append_events_from_visitor(
 
         // Fallback to parsed PRINT options nearby if QUICK_MENU entry labels are weak/missing.
         if options.is_empty() {
-            let print_context = collect_previous_print_texts(
+            let print_context = collect_previous_print_texts(context, 
                 &source_lines,
                 &tra_map,
                 line.map(|v| v as usize).unwrap_or(1).saturating_sub(1),
@@ -694,6 +711,7 @@ fn append_events_from_visitor(
                 question
             },
             options,
+            options_inferred: false,
             source_file: source_file.to_string(),
             line,
             branch_path,
@@ -707,7 +725,7 @@ fn append_events_from_visitor(
     }
 
     for (idx, match_prompt) in visitor.match_prompts.iter().enumerate() {
-        let (friendly_text, mut options, line, options_from_prints) = derive_match_prompt(
+        let (friendly_text, mut options, line, options_from_prints) = derive_match_prompt(context, 
             &source_lines,
             &tra_map,
             &match_prompt.match_value,
@@ -757,6 +775,7 @@ fn append_events_from_visitor(
                 friendly_text
             },
             options,
+            options_inferred: false,
             source_file: source_file.to_string(),
             line,
             branch_path,
@@ -772,7 +791,7 @@ fn append_events_from_visitor(
     for component in &visitor.components {
         for (idx, action) in component.action_readln_instances.iter().enumerate() {
             let var_name = extract_readln_var(action);
-            let (friendly_text, options, line) = derive_readln_prompt(
+            let (friendly_text, options, line, options_inferred) = derive_readln_prompt(context, 
                 &source_lines,
                 &tra_map,
                 &var_name,
@@ -827,6 +846,7 @@ fn append_events_from_visitor(
                 path_id,
                 text: final_text,
                 options,
+                options_inferred,
                 source_file: source_file.to_string(),
                 line,
                 branch_path,
@@ -844,7 +864,7 @@ fn append_events_from_visitor(
     // e.g. in included helper libraries that still drive real installer questions.
     for (idx, action) in visitor.global_action_readln_instances.iter().enumerate() {
         let var_name = extract_readln_var(action);
-        let (friendly_text, options, line) = derive_readln_prompt(
+        let (friendly_text, options, line, options_inferred) = derive_readln_prompt(context, 
             &source_lines,
             &tra_map,
             &var_name,
@@ -918,6 +938,7 @@ fn append_events_from_visitor(
                 path_id,
                 text: final_text.clone(),
                 options: options.clone(),
+                options_inferred,
                 source_file: source_file.to_string(),
                 line,
                 branch_path,
@@ -975,6 +996,7 @@ fn append_events_from_visitor(
             path_id,
             text: prompt.text,
             options: prompt.options,
+            options_inferred: false,
             source_file: source_file.to_string(),
             line: prompt.line,
             branch_path,
@@ -1376,6 +1398,7 @@ fn extract_game_values(rest: &str) -> Vec<String> {
 }
 
 fn derive_keyword_prompt(
+    context: &PromptContext<'_>,
     source_lines: &[&str],
     tra_map: &HashMap<String, String>,
     keyword: &str,
@@ -1388,7 +1411,7 @@ fn derive_keyword_prompt(
     };
     *search_from_line = idx.saturating_add(1);
 
-    let print_context = collect_previous_print_texts(source_lines, tra_map, idx, 30);
+    let print_context = collect_previous_print_texts(context, source_lines, tra_map, idx, 30);
     let (_, options_idx) = select_options_from_prints(&print_context);
     let question = select_question_text(&print_context, options_idx).unwrap_or_default();
     (question, Some((idx + 1) as u32))
@@ -1408,6 +1431,7 @@ fn find_keyword_line_index(
 }
 
 fn derive_match_prompt(
+    context: &PromptContext<'_>,
     source_lines: &[&str],
     tra_map: &HashMap<String, String>,
     match_value: &str,
@@ -1421,7 +1445,7 @@ fn derive_match_prompt(
     };
     *search_from_line = action_idx.saturating_add(1);
 
-    let print_context = collect_previous_print_texts(source_lines, tra_map, action_idx, 30);
+    let print_context = collect_previous_print_texts(context, source_lines, tra_map, action_idx, 30);
     let (mut options, options_idx) = select_options_from_prints(&print_context);
     let question = select_question_text(&print_context, options_idx).unwrap_or_default();
     let options_from_prints = !options.is_empty();
@@ -1825,38 +1849,31 @@ fn resolve_include_path(raw: &str, current_file: &Path, mod_root: &Path) -> Opti
 }
 
 fn derive_readln_prompt(
+    context: &PromptContext<'_>,
     source_lines: &[&str],
     tra_map: &HashMap<String, String>,
     var_name: &str,
     search_from_line: &mut usize,
-) -> (String, Vec<PromptOption>, Option<u32>) {
+) -> (String, Vec<PromptOption>, Option<u32>, bool) {
     let action_idx = find_readln_line_index(source_lines, var_name, *search_from_line)
         .or_else(|| find_readln_line_index(source_lines, var_name, 0));
 
     let Some(action_idx) = action_idx else {
-        return (String::new(), Vec::new(), None);
+        return (String::new(), Vec::new(), None, false);
     };
     *search_from_line = action_idx.saturating_add(1);
 
     let anchor = find_outer_sprint_for_var(source_lines, var_name, action_idx).unwrap_or(action_idx);
     let start = anchor.saturating_sub(20);
-    let print_context = collect_previous_print_texts_in_range(
+    let print_context = collect_previous_print_texts_in_range(context, 
         source_lines,
         tra_map,
         start,
         action_idx,
     );
     let (mut options, options_idx) = select_options_from_prints(&print_context);
-    let mut question = select_question_text(&print_context, options_idx);
-    if let Some(q) = question.clone() {
-        question = Some(resolve_placeholder_question(
-            source_lines,
-            tra_map,
-            action_idx,
-            &q,
-            0,
-        ));
-    }
+    let question = select_question_text(&print_context, options_idx);
+    let options_inferred = options.is_empty();
 
     if options.is_empty() {
         options = infer_options_from_action_if(source_lines, tra_map, action_idx, var_name, 50);
@@ -1870,7 +1887,7 @@ fn derive_readln_prompt(
         options = infer_yes_no_options(source_lines, action_idx, var_name, question.as_deref());
     }
 
-    (question.unwrap_or_default(), options, Some((action_idx + 1) as u32))
+    (question.unwrap_or_default(), options, Some((action_idx + 1) as u32), options_inferred)
 }
 
 fn find_outer_sprint_for_var(source_lines: &[&str], var_name: &str, before_idx: usize) -> Option<usize> {
@@ -1910,16 +1927,18 @@ fn find_readln_line_index(source_lines: &[&str], var_name: &str, start: usize) -
 }
 
 fn collect_previous_print_texts(
+    context: &PromptContext<'_>,
     source_lines: &[&str],
     tra_map: &HashMap<String, String>,
     action_idx: usize,
     max_lines_back: usize,
 ) -> Vec<String> {
     let start = action_idx.saturating_sub(max_lines_back);
-    collect_previous_print_texts_in_range(source_lines, tra_map, start, action_idx)
+    collect_previous_print_texts_in_range(context, source_lines, tra_map, start, action_idx)
 }
 
 fn collect_previous_print_texts_in_range(
+    context: &PromptContext<'_>,
     source_lines: &[&str],
     tra_map: &HashMap<String, String>,
     start: usize,
@@ -1933,7 +1952,7 @@ fn collect_previous_print_texts_in_range(
             i += 1;
             continue;
         }
-        if let Some((text, consumed)) = parse_print_text_block(source_lines, i, action_idx, tra_map) {
+        if let Some((text, consumed)) = parse_print_text_block(context, source_lines, i, action_idx, tra_map) {
             if !text.trim().is_empty() {
                 out.push(text);
             }
@@ -2016,7 +2035,23 @@ fn parse_print_atom(trimmed_line: &str) -> Option<String> {
     rest.split_whitespace().next().map(|s| s.to_string())
 }
 
+struct PromptContext<'a> {
+    resolver: &'a prompt_resolution::Resolver,
+    path: &'a Path,
+}
+
+impl PromptContext<'_> {
+    fn resolve(&self, line: usize, text: &str, comment: Option<&str>, tra: &HashMap<String, String>) -> String {
+        match self.resolver.resolve(self.path, line, text, tra) {
+            prompt_resolution::Resolution::Text(value) => value,
+            prompt_resolution::Resolution::Ambiguous => text.to_string(),
+            prompt_resolution::Resolution::Missing => fallback_comment_if_placeholder(text, comment),
+        }
+    }
+}
+
 fn parse_print_text_block(
+    context: &PromptContext<'_>,
     source_lines: &[&str],
     idx: usize,
     stop_before: usize,
@@ -2034,14 +2069,14 @@ fn parse_print_text_block(
     if rest.starts_with('@') {
         let atom = parse_print_atom(line)?;
         let resolved = resolve_atom_text(&atom, tra_map);
-        let text = fallback_comment_if_placeholder(&sanitize_wrapped_text(&resolved), inline_comment.as_deref());
+        let text = context.resolve(idx, &sanitize_wrapped_text(&resolved), inline_comment.as_deref(), tra_map);
         return Some((text, 1));
     }
 
     let Some(delim) = rest.chars().next().filter(|c| *c == '~' || *c == '"') else {
         let atom = parse_print_atom(line)?;
         let resolved = resolve_atom_text(&atom, tra_map);
-        let text = fallback_comment_if_placeholder(&sanitize_wrapped_text(&resolved), inline_comment.as_deref());
+        let text = context.resolve(idx, &sanitize_wrapped_text(&resolved), inline_comment.as_deref(), tra_map);
         return Some((text, 1));
     };
 
@@ -2064,13 +2099,13 @@ fn parse_print_text_block(
         consumed += 1;
     }
 
-    let final_text = fallback_comment_if_placeholder(text.trim(), inline_comment.as_deref());
+    let final_text = context.resolve(idx, text.trim(), inline_comment.as_deref(), tra_map);
     Some((final_text, consumed))
 }
 
 fn fallback_comment_if_placeholder(text: &str, comment: Option<&str>) -> String {
     let cleaned = text.trim();
-    let unresolved = (cleaned.starts_with('%') && cleaned.ends_with('%')) || cleaned.contains('%');
+    let unresolved = extract_percent_placeholder(cleaned).is_some();
     if unresolved {
         if let Some(c) = comment {
             let c = c.trim();
@@ -2127,146 +2162,16 @@ fn select_question_text(texts: &[String], options_idx: Option<usize>) -> Option<
     None
 }
 
-fn resolve_placeholder_question(
-    source_lines: &[&str],
-    tra_map: &HashMap<String, String>,
-    action_idx: usize,
-    question: &str,
-    depth: usize,
-) -> String {
-    if depth >= 4 {
-        return question.to_string();
-    }
-    let Some(var_name) = extract_percent_placeholder(question) else {
-        return question.to_string();
-    };
-    let Some(raw_assigned) = find_latest_outer_assignment(source_lines, action_idx, &var_name) else {
-        return question.to_string();
-    };
-    let resolved = resolve_atom_text(&raw_assigned, tra_map);
-    if resolved.trim().is_empty() || resolved == question {
-        return question.to_string();
-    }
-    resolve_placeholder_question(source_lines, tra_map, action_idx, &resolved, depth + 1)
-}
-
 fn extract_percent_placeholder(text: &str) -> Option<String> {
     let t = text.trim();
     if !(t.starts_with('%') && t.ends_with('%') && t.len() >= 3) {
         return None;
     }
     let inner = &t[1..t.len() - 1];
-    if inner.is_empty() || inner.chars().any(|c| c.is_whitespace()) {
+    if inner.is_empty() || inner.chars().any(|c| c.is_whitespace() || c == '%') {
         return None;
     }
     Some(inner.to_ascii_lowercase())
-}
-
-fn find_latest_outer_assignment(source_lines: &[&str], before_idx: usize, var_name: &str) -> Option<String> {
-    for i in (0..before_idx).rev() {
-        let line = strip_inline_comment(source_lines[i]).trim();
-        if let Some((lhs, rhs)) = parse_outer_assignment(line) {
-            if lhs == var_name {
-                return Some(rhs);
-            }
-        }
-        if let Some((lhs, rhs)) = parse_plain_assignment(line) {
-            if lhs == var_name {
-                return Some(rhs);
-            }
-        }
-    }
-    None
-}
-
-fn parse_outer_assignment(line: &str) -> Option<(String, String)> {
-    let upper = line.to_ascii_uppercase();
-    for cmd in ["OUTER_SPRINT", "OUTER_TEXT_SPRINT", "OUTER_SNPRINT", "OUTER_SET"] {
-        if !upper.starts_with(cmd) {
-            continue;
-        }
-        let rest = line[cmd.len()..].trim_start();
-        let (lhs_raw, after_lhs) = take_first_token(rest)?;
-        let lhs = normalize_var_name(&lhs_raw);
-        if lhs.is_empty() {
-            return None;
-        }
-        let expr = if cmd == "OUTER_SET" {
-            let (_, rhs) = after_lhs.split_once('=')?;
-            rhs.trim_start()
-        } else {
-            after_lhs.trim_start()
-        };
-        let rhs = extract_leading_atom(expr)?;
-        return Some((lhs, rhs));
-    }
-    None
-}
-
-fn parse_plain_assignment(line: &str) -> Option<(String, String)> {
-    let (lhs_raw, rhs_raw) = line.split_once('=')?;
-    let lhs = normalize_var_name(lhs_raw);
-    if lhs.is_empty() {
-        return None;
-    }
-    let rhs = extract_leading_atom(rhs_raw.trim_start())?;
-    Some((lhs, rhs))
-}
-
-fn take_first_token(input: &str) -> Option<(String, &str)> {
-    let s = input.trim_start();
-    if s.is_empty() {
-        return None;
-    }
-    if let Some(after) = s.strip_prefix('~') {
-        let end = after.find('~')?;
-        let token = after[..end].to_string();
-        let rest = &after[end + 1..];
-        return Some((token, rest));
-    }
-    if let Some(after) = s.strip_prefix('"') {
-        let end = after.find('"')?;
-        let token = after[..end].to_string();
-        let rest = &after[end + 1..];
-        return Some((token, rest));
-    }
-    let end = s.find(char::is_whitespace).unwrap_or(s.len());
-    let token = s[..end].to_string();
-    let rest = &s[end..];
-    Some((token, rest))
-}
-
-fn extract_leading_atom(input: &str) -> Option<String> {
-    let s = input.trim_start();
-    if s.is_empty() {
-        return None;
-    }
-    if let Some(after) = s.strip_prefix('@') {
-        let digits: String = after.chars().take_while(|c| c.is_ascii_digit()).collect();
-        if !digits.is_empty() {
-            return Some(format!("@{digits}"));
-        }
-    }
-    if let Some(after) = s.strip_prefix('~') {
-        let end = after.find('~')?;
-        return Some(format!("~{}~", &after[..end]));
-    }
-    if let Some(after) = s.strip_prefix('"') {
-        let end = after.find('"')?;
-        return Some(format!("\"{}\"", &after[..end]));
-    }
-    if let Some(after) = s.strip_prefix('%') {
-        let end = after.find('%')?;
-        return Some(format!("%{}%", &after[..end]));
-    }
-    s.split_whitespace().next().map(|v| v.to_string())
-}
-
-fn normalize_var_name(raw: &str) -> String {
-    sanitize_wrapped_text(raw)
-        .trim_matches('%')
-        .trim()
-        .to_ascii_lowercase()
 }
 
 fn extract_question_from_options_block(text: &str) -> Option<String> {

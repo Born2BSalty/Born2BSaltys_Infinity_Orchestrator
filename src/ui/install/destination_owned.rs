@@ -6,7 +6,7 @@ use eframe::egui;
 use crate::registry::destination_claim::{ClaimRefusal, DestinationClaim};
 use crate::registry::model::ModlistRegistry;
 use crate::ui::install::destination_not_empty::{
-    WARN_BORDER, WARN_INK, paint_warning_triangle, warn_fill,
+    WARN_BORDER, WARN_INK, paint_warning_triangle, warn_fill, warning_inks,
 };
 use crate::ui::shared::redesign_tokens::{
     REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_error,
@@ -20,7 +20,7 @@ pub(crate) fn render(
 ) {
     match claim {
         DestinationClaim::Free | DestinationClaim::Adopt(_) => {}
-        DestinationClaim::Replace(ids) => render_exact_warning(ui, ids, registry),
+        DestinationClaim::Replace(ids) => render_exact_warning(ui, palette, ids, registry),
         DestinationClaim::Refused(ClaimRefusal::InsideAnother(id)) => {
             render_inside_block(ui, palette, id, registry);
         }
@@ -40,11 +40,11 @@ struct BannerStyle {
     ink: egui::Color32,
 }
 
-fn warning_style() -> BannerStyle {
+fn warning_style(palette: ThemePalette) -> BannerStyle {
     BannerStyle {
         border: WARN_BORDER,
         fill: warn_fill(),
-        ink: WARN_INK,
+        ink: warning_inks(palette).0,
     }
 }
 
@@ -85,24 +85,35 @@ fn header_row(ui: &mut egui::Ui, title: &str, ink: egui::Color32) {
 }
 
 fn body_label(ui: &mut egui::Ui, text: impl Into<String>) {
+    body_label_with_ink(
+        ui,
+        text,
+        egui::Color32::from_rgba_unmultiplied(0xff, 0xff, 0xff, 0xcc),
+    );
+}
+
+fn body_label_with_ink(ui: &mut egui::Ui, text: impl Into<String>, ink: egui::Color32) {
     ui.label(
         egui::RichText::new(text)
             .size(13.0)
             .family(egui::FontFamily::Name("poppins_light".into()))
-            .color(egui::Color32::from_rgba_unmultiplied(
-                0xff, 0xff, 0xff, 0xcc,
-            )),
+            .color(ink),
     );
 }
 
-fn render_exact_warning(ui: &mut egui::Ui, ids: &[String], registry: &ModlistRegistry) {
+fn render_exact_warning(
+    ui: &mut egui::Ui,
+    palette: ThemePalette,
+    ids: &[String],
+    registry: &ModlistRegistry,
+) {
     ui.add_space(12.0);
     let title = if ids.len() == 1 {
         "Folder claimed by another modlist"
     } else {
         "Folder claimed by other modlists"
     };
-    let style = warning_style();
+    let style = warning_style(palette);
     banner_frame(style).show(ui, |ui| {
         ui.set_width(ui.available_width());
         header_row(ui, title, style.ink);
@@ -111,7 +122,11 @@ fn render_exact_warning(ui: &mut egui::Ui, ids: &[String], registry: &ModlistReg
             let name = registry
                 .find(id)
                 .map_or_else(|| id.as_str(), |e| e.name.as_str());
-            body_label(ui, format!("\"{name}\" will be removed from your list"));
+            body_label_with_ink(
+                ui,
+                format!("\"{name}\" will be removed from your list"),
+                warning_inks(palette).1,
+            );
         }
     });
 }

@@ -361,6 +361,7 @@ fn preview(
 ) -> crate::app::modlist_share::ModlistSharePreview {
     crate::app::modlist_share::ModlistSharePreview {
         parser_choice_phrases: Vec::new(),
+        parser_recognition_rules: std::collections::BTreeMap::default(),
         bio_version: String::new(),
         game_install: game.to_string(),
         game_version: None,

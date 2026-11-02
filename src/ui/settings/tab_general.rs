@@ -3,7 +3,14 @@
 
 use eframe::egui;
 
-use crate::settings::redesign_fields::{ThemeChoice, UiLanguage};
+#[cfg(test)]
+#[path = "tab_general_tests.rs"]
+mod tests;
+
+use crate::settings::installation_language::{
+    INSTALLATION_LANGUAGES, installation_language_label, normalize_installation_locale,
+};
+use crate::settings::redesign_fields::ThemeChoice;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::settings::widgets::{name_row, segmented_toggle, toggle_row};
 use crate::ui::shared::redesign_tokens::{
@@ -89,37 +96,51 @@ fn render_language_row(
     palette: ThemePalette,
     orchestrator: &mut OrchestratorApp,
 ) {
+    let available = orchestrator.mod_installation_language_change_available();
     settings_row(
         ui,
         palette,
-        "Language",
-        "language used across the BIO app",
+        "Mod installation language",
+        "controls component scans and mod installation",
         |ui| {
-            let current_lang = orchestrator.redesign_settings.language;
-            let mut new_lang = current_lang;
-            egui::ComboBox::from_id_salt("settings_general_language")
-                .selected_text(
-                    egui::RichText::new(current_lang.label())
-                        .size(12.0)
-                        .family(egui::FontFamily::Name("poppins_medium".into()))
-                        .color(redesign_text_primary(palette)),
-                )
-                .show_ui(ui, |ui| {
-                    for option in UiLanguage::all() {
-                        ui.selectable_value(&mut new_lang, *option, option.label());
-                    }
-                });
-            if new_lang != current_lang {
-                orchestrator.redesign_settings.language = new_lang;
-            }
-            ui.add_space(8.0);
-            ui.label(
-                egui::RichText::new("(coming soon)")
-                    .size(11.0)
-                    .family(egui::FontFamily::Proportional)
-                    .color(redesign_text_faint(palette)),
-            );
+            let current = orchestrator.wizard_state.step1.language.clone();
+            let mut selected = normalize_installation_locale(&current);
+            ui.add_enabled_ui(available, |ui| {
+                if matches!(palette, ThemePalette::Light) {
+                    let widgets = &mut ui.visuals_mut().widgets;
+                    widgets.open.bg_fill = widgets.inactive.bg_fill;
+                    widgets.open.weak_bg_fill = widgets.inactive.weak_bg_fill;
+                }
+                egui::ComboBox::from_id_salt("settings_general_language")
+                    .selected_text(
+                        egui::RichText::new(installation_language_label(&current))
+                            .size(12.0)
+                            .family(egui::FontFamily::Name("poppins_medium".into())),
+                    )
+                    .show_ui(ui, |ui| {
+                        for (locale, label) in INSTALLATION_LANGUAGES {
+                            if ui.selectable_label(selected == *locale, *label).clicked() {
+                                selected = (*locale).to_string();
+                                orchestrator.select_mod_installation_language(locale);
+                            }
+                        }
+                    });
+            });
         },
+    );
+    ui.add_space(8.0);
+    let hint = if available {
+        "Existing lists: use Rescan Mods after a change. Unavailable mod languages fall back to English or another available language."
+    } else {
+        "Available after installation finishes"
+    };
+    ui.add(
+        egui::Label::new(
+            egui::RichText::new(hint)
+                .size(11.0)
+                .color(redesign_text_faint(palette)),
+        )
+        .wrap(),
     );
 }
 

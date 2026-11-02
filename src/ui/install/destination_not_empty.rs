@@ -6,7 +6,7 @@ use eframe::egui;
 use crate::ui::install::state_install::DestChoice;
 use crate::ui::orchestrator::widgets::{BtnOpts, redesign_btn};
 use crate::ui::shared::redesign_tokens::{
-    REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette,
+    REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_text_primary,
 };
 
 pub(crate) const WARN_BORDER: egui::Color32 = egui::Color32::from_rgb(0xed, 0xc5, 0x47);
@@ -14,6 +14,19 @@ pub(crate) const WARN_INK: egui::Color32 = egui::Color32::from_rgb(0xff, 0xff, 0
 #[must_use]
 pub(crate) fn warn_fill() -> egui::Color32 {
     egui::Color32::from_rgba_unmultiplied(0xED, 0xC5, 0x47, 46)
+}
+
+pub(crate) fn warning_inks(palette: ThemePalette) -> (egui::Color32, egui::Color32) {
+    match palette {
+        ThemePalette::Light => {
+            let ink = redesign_text_primary(palette);
+            (ink, ink)
+        }
+        ThemePalette::Dark => (
+            WARN_INK,
+            egui::Color32::from_rgba_unmultiplied(0xff, 0xff, 0xff, 0xCC),
+        ),
+    }
 }
 
 pub fn render(
@@ -24,6 +37,7 @@ pub fn render(
     ui.add_space(12.0);
 
     let mut picked: Option<DestChoice> = None;
+    let (ink, body_ink) = warning_inks(palette);
 
     let frame = egui::Frame::default()
         .fill(warn_fill())
@@ -43,12 +57,12 @@ pub fn render(
             ui.spacing_mut().item_spacing.x = 10.0;
             let (icon_rect, _) =
                 ui.allocate_exact_size(egui::vec2(15.0, 15.0), egui::Sense::hover());
-            paint_warning_triangle(ui.painter(), icon_rect.center(), WARN_INK);
+            paint_warning_triangle(ui.painter(), icon_rect.center(), ink);
             ui.label(
                 egui::RichText::new("Target directory not empty")
                     .size(13.0)
                     .family(egui::FontFamily::Name("poppins_medium".into()))
-                    .color(WARN_INK),
+                    .color(ink),
             );
         });
 
@@ -58,9 +72,7 @@ pub fn render(
             egui::RichText::new("How would you like to proceed?")
                 .size(14.0)
                 .family(egui::FontFamily::Name("poppins_light".into()))
-                .color(egui::Color32::from_rgba_unmultiplied(
-                    0xff, 0xff, 0xff, 0xCC,
-                )),
+                .color(body_ink),
         );
 
         ui.add_space(10.0);

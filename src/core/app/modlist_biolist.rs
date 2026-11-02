@@ -47,6 +47,18 @@ pub fn build_biolist(code: &str) -> Result<Vec<u8>, String> {
     )?;
     write_entry(&mut writer, "reference/README.txt", README_TEXT.as_bytes())?;
     write_reference_modlist(&mut writer, &payload)?;
+    if !payload.parser_recognition_rules.is_empty() {
+        let rules = crate::app::mod_installer_parser::recognition_rules_with_legacy(
+            &payload.parser_recognition_rules,
+            &payload.parser_choice_phrases,
+        )?;
+        let text = toml::to_string_pretty(&rules).map_err(|err| err.to_string())?;
+        write_entry(
+            &mut writer,
+            "reference/parser-recognition.toml",
+            text.as_bytes(),
+        )?;
+    }
 
     if let Some(text) = non_empty(first_slot_weidu_text(&payload.weidu_logs)) {
         let entry_name = format!(
@@ -608,5 +620,28 @@ mod tests {
         );
         assert_eq!(suggested_file_name("   "), "modlist.biolist");
         assert_eq!(suggested_file_name(""), "modlist.biolist");
+    }
+
+    #[test]
+    fn parser_rules_biolist_authoritative_code_and_readable_reference_roundtrip() {
+        let mut payload: serde_json::Value =
+            serde_json::from_str(&minimal_bgee_only_payload_json()).unwrap();
+        let rules = serde_json::json!({"choice_words":["choose","auswählen","elige"],"choice_phrase":["would you like","möchten Sie","¿desea continuar?"],"finished":["instalado"]});
+        payload["parser_recognition_rules"] = rules.clone();
+        let code =
+            crate::app::modlist_share::encode_share_payload_text(&payload.to_string()).unwrap();
+        let bytes = build_biolist(&code).unwrap();
+        assert_eq!(read_share_code_from_bytes(&bytes).unwrap(), code);
+        let reference = entry_text(&bytes, "reference/parser-recognition.toml");
+        let parsed: toml::Value = toml::from_str(&reference).unwrap();
+        assert_eq!(serde_json::to_value(parsed).unwrap(), rules);
+        let legacy =
+            crate::app::modlist_share::encode_share_payload_text(&minimal_bgee_only_payload_json())
+                .unwrap();
+        assert!(
+            !entry_names(&build_biolist(&legacy).unwrap())
+                .iter()
+                .any(|name| name == "reference/parser-recognition.toml")
+        );
     }
 }

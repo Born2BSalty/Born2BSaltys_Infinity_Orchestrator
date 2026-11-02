@@ -178,6 +178,12 @@ fn clipped_pane(ui: &mut egui::Ui, rect: egui::Rect, add: impl FnOnce(&mut egui:
 }
 
 fn handle_start_install(orchestrator: &mut OrchestratorApp, modlist_id: &str) -> bool {
+    if orchestrator.mod_language_rescan_required {
+        orchestrator.wizard_state.step2.scan_status =
+            "Language changed — rescan mods before installing".to_string();
+        return false;
+    }
+
     orchestrator.workspace_step5.install_clicked = true;
 
     if let Some(running) = install_concurrency::install_in_progress(orchestrator)
@@ -207,6 +213,12 @@ fn handle_start_install(orchestrator: &mut OrchestratorApp, modlist_id: &str) ->
 }
 
 fn start_workspace_install(orchestrator: &mut OrchestratorApp, modlist_id: &str) -> bool {
+    if orchestrator.mod_language_rescan_required {
+        orchestrator.wizard_state.step2.scan_status =
+            "Language changed — rescan mods before installing".to_string();
+        return false;
+    }
+
     let variant = InstallButtonVariant::from_step5(&orchestrator.wizard_state, false);
     let workflow = orchestrator
         .registry

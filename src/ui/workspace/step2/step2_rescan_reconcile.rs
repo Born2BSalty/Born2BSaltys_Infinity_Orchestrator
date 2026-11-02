@@ -94,6 +94,21 @@ pub fn reconcile_on_scan_complete(orchestrator: &mut OrchestratorApp) -> bool {
         return false;
     }
     reconcile_completed_scan(orchestrator);
+    if orchestrator
+        .wizard_state
+        .step2
+        .last_scan_report
+        .as_ref()
+        .is_some_and(|report| {
+            crate::settings::installation_language::normalize_installation_locale(
+                &report.preferred_locale,
+            ) == crate::settings::installation_language::normalize_installation_locale(
+                &orchestrator.wizard_state.step1.language,
+            )
+        })
+    {
+        orchestrator.mod_language_rescan_required = false;
+    }
     true
 }
 

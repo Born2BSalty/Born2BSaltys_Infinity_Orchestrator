@@ -1550,6 +1550,10 @@ fn seed_active_wizard(wizard: &mut crate::app::state::WizardState) {
             tp_file: "wizard-fixture".to_string(),
             component_id: "100".to_string(),
             language: 0,
+            install_language: "english".to_string(),
+            answer_language: "english".to_string(),
+            book_sets: crate::app::answer_sets::AnswerSets::default(),
+            parked: std::collections::BTreeMap::default(),
             original_line: "~wizard-fixture.tp2~ #0 #100".to_string(),
             title: "Existing answer".to_string(),
             questions: "Choose value".to_string(),
@@ -1557,10 +1561,6 @@ fn seed_active_wizard(wizard: &mut crate::app::state::WizardState) {
                 text: "preserved-answer".to_string(),
                 blank_enter: false,
             }],
-            install_language: "english".to_string(),
-            answer_language: "english".to_string(),
-            book_sets: crate::app::answer_sets::AnswerSets::default(),
-            parked: std::collections::BTreeMap::new(),
         }],
         ..InstallerAnswersEditor::default()
     });

@@ -393,28 +393,33 @@ fn rebake_share_code_after_save_draft(
             else {
                 return Err(err);
             };
-            let local = crate::app::mod_installer_parser::capture_local_choice_phrases()
+            let local = crate::app::mod_installer_parser::capture_local_recognition_rules()
                 .unwrap_or_else(|err| {
                     tracing::warn!(
                         target = "orchestrator",
-                        "save draft: share code for {id} keeps no local parser phrases ({err})"
+                        "save draft: share code for {id} keeps no local parser recognition rules ({err})"
                     );
-                    Vec::new()
+                    crate::app::mod_installer_parser::ParserRecognitionRules::new()
                 });
-            let phrases = crate::app::modlist_share::union_valid_phrases(&[
+            let imported = crate::app::mod_installer_parser::recognition_rules_with_legacy(
+                &orchestrator.wizard_state.parser_recognition_rules,
                 &orchestrator.wizard_state.parser_choice_phrases,
-                &local,
-            ]);
+            )?;
+            let prior = orchestrator
+                .workspace_state
+                .get(id)
+                .cloned()
+                .unwrap_or_default();
+            let imported =
+                share_export::active_workspace_recognition_rules(code, &prior, &imported)?;
+            let rules =
+                crate::app::mod_installer_parser::union_recognition_rules(&[&imported, &local])?;
             let workspace = workspace_state_loader::extract_workspace_state_from_wizard(
                 &orchestrator.wizard_state,
-                &orchestrator
-                    .workspace_state
-                    .get(id)
-                    .cloned()
-                    .unwrap_or_default(),
+                &prior,
             );
             let overlaid = share_export::overlay_workspace_wlb(code, &workspace)?;
-            let enriched = share_export::enrich_share_code_with_phrases(&overlaid, &phrases)?;
+            let enriched = share_export::replace_share_code_recognition_rules(&overlaid, &rules)?;
             share_export::set_packed_identity(&enriched, &meta)?
         }
     };
@@ -423,6 +428,14 @@ fn rebake_share_code_after_save_draft(
         .get(id)
         .cloned()
         .unwrap_or_default();
+    let payload = crate::app::modlist_share::decode_share_payload(&code)?;
+    let rules = crate::app::mod_installer_parser::recognition_rules_with_legacy(
+        &payload.parser_recognition_rules,
+        &payload.parser_choice_phrases,
+    )?;
+    let phrases = rules.get("choice_phrase").cloned().unwrap_or_default();
+    workspace.parser_recognition_rules = Some(rules.clone());
+    workspace.parser_choice_phrases = Some(phrases.clone());
     workspace.last_share_code = Some(code.clone());
     let store = orchestrator
         .workspace_stores
@@ -438,6 +451,8 @@ fn rebake_share_code_after_save_draft(
     orchestrator
         .workspace_state
         .insert(id.to_string(), workspace);
+    orchestrator.wizard_state.parser_recognition_rules = rules;
+    orchestrator.wizard_state.parser_choice_phrases = phrases;
     if let Some(entry) = orchestrator.registry.find_mut(id) {
         entry.set_latest_share_code(code);
         orchestrator

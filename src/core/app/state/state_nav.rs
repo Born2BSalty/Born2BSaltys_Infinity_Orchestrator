@@ -92,6 +92,8 @@ impl WizardState {
             modlist_import_preview_installed_refs: String::new(),
             modlist_import_preview_mod_configs: String::new(),
             parser_choice_phrases: Vec::new(),
+            parser_recognition_rules: crate::app::mod_installer_parser::ParserRecognitionRules::new(
+            ),
             shared_answers: crate::app::answer_sets::AnswerBook::default(),
             modlist_share_name: None,
             modlist_share_author: None,
@@ -137,6 +139,7 @@ impl WizardState {
         self.modlist_import_preview_mod_configs.clear();
         self.clear_modlist_share_provenance();
         self.parser_choice_phrases.clear();
+        self.parser_recognition_rules.clear();
         self.shared_answers.clear();
         self.modlist_auto_build_active = false;
         self.modlist_auto_build_waiting_for_install = false;

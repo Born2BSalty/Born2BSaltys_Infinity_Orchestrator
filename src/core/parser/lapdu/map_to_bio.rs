@@ -143,7 +143,17 @@ fn event_summary_line(event: &ParserEvent) -> String {
     }
 
     let mut out = text.to_string();
-    if !event.options.is_empty() {
+    let inline_choices = event.options_inferred
+        && !event.options.is_empty()
+        && event.options.iter().all(|option| {
+            let key = option.value.trim();
+            key.len() == 1
+                && key.as_bytes()[0].is_ascii_alphabetic()
+                && text
+                    .to_ascii_lowercase()
+                    .contains(&format!("[{}]", key.to_ascii_lowercase()))
+        });
+    if !event.options.is_empty() && !inline_choices {
         let mut options = Vec::<String>::new();
         for o in &event.options {
             let value = o.value.trim();
@@ -241,7 +251,6 @@ fn diagnostic_preview(output: &ParserOutput) -> Option<String> {
         Some(format!("{code}: {msg}"))
     }
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -300,5 +309,98 @@ mod tests {
         assert_eq!(index.mod_summary.as_deref(), Some("Install language?"));
         assert_eq!(index.by_component_id_events["10"].len(), 1);
         assert!(!index.by_component_id.contains_key("0"));
+    }
+
+    fn prompt_display_option(value: &str, label: &str) -> super::super::model::ParserOption {
+        super::super::model::ParserOption {
+            value: value.to_string(),
+            label: label.to_string(),
+            component_ids: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn prompt_display_generated_letter_labels_do_not_rewrite_original_question() {
+        let original = "Ist dies korrekt? [Y]Ja oder [N]ein";
+        let mut event = readln("readln:setup.tp2:@0:1", original);
+        event.options_inferred = true;
+        event.options = vec![
+            prompt_display_option("y", "YJa oder"),
+            prompt_display_option("n", "Nein"),
+        ];
+        let index = build_prompt_summary_index(&output(vec![event]), None);
+        assert_eq!(index.by_component_id["0"], original);
+        assert_eq!(index.by_component_id_events["0"][0].text, original);
+    }
+
+    #[test]
+    fn prompt_display_authored_separate_letter_menu_rows_are_preserved() {
+        let original = "Ist dies korrekt? [Y]Ja oder [N]ein";
+        let mut event = readln("readln:setup.tp2:@0:1", original);
+        event.options = vec![
+            prompt_display_option("y", "Ja, mit den gewaelten Optionen"),
+            prompt_display_option("n", "Nein, Auswahl wiederholen"),
+        ];
+        let index = build_prompt_summary_index(&output(vec![event]), None);
+        let text = &index.by_component_id["0"];
+        assert!(text.contains(original));
+        assert!(text.contains("- y = Ja, mit den gewaelten Optionen"));
+        assert!(text.contains("- n = Nein, Auswahl wiederholen"));
+    }
+
+    #[test]
+    fn prompt_display_numeric_menu_rows_are_never_hidden_as_generated_letters() {
+        let mut event = readln("readln:setup.tp2:@0:1", "Waehle [1] oder [2]");
+        event.options_inferred = true;
+        event.options = vec![
+            prompt_display_option("1", "Erstes Portrait"),
+            prompt_display_option("2", "Zweites Portrait"),
+        ];
+        let index = build_prompt_summary_index(&output(vec![event]), None);
+        assert!(index.by_component_id["0"].contains("- 1 = Erstes Portrait"));
+        assert!(index.by_component_id["0"].contains("- 2 = Zweites Portrait"));
+    }
+
+    #[test]
+    fn prompt_display_partial_inline_keys_do_not_hide_other_available_choices() {
+        let mut event = readln("readln:setup.tp2:@0:1", "Fortsetzen [Y]Ja?");
+        event.options_inferred = true;
+        event.options = vec![
+            prompt_display_option("y", "Ja"),
+            prompt_display_option("n", "Nein"),
+        ];
+        let index = build_prompt_summary_index(&output(vec![event]), None);
+        assert!(index.by_component_id["0"].contains("- n = Nein"));
+    }
+
+    #[test]
+    fn prompt_display_midword_hotkeys_remain_exactly_authored() {
+        let original = "Anwenden([A]nwenden, Wiede[R]holen, Abbre[C]hen)?";
+        let mut event = readln("readln:setup.tp2:@0:1", original);
+        event.options_inferred = true;
+        event.options = vec![
+            prompt_display_option("a", "Accept"),
+            prompt_display_option("r", "Retry"),
+            prompt_display_option("c", "Cancel"),
+        ];
+        let index = build_prompt_summary_index(&output(vec![event]), None);
+        assert_eq!(index.by_component_id["0"], original);
+    }
+
+    #[test]
+    fn prompt_display_old_json_without_provenance_keeps_authored_options() {
+        let parsed: ParserOutput = serde_json::from_value(serde_json::json!({
+            "schema_version":2,
+            "events":[{
+                "kind":"readln",
+                "node_id":"readln:setup.tp2:@0:1",
+                "text":"Continue [Y]es?",
+                "options":[{"value":"y","label":"Yes, keep selected portrait"}]
+            }]
+        }))
+        .unwrap();
+        assert!(!parsed.events[0].options_inferred);
+        let index = build_prompt_summary_index(&parsed, None);
+        assert!(index.by_component_id["0"].contains("- y = Yes, keep selected portrait"));
     }
 }

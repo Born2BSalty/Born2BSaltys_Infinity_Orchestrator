@@ -12,7 +12,10 @@ use super::log_files::{
 };
 use crate::app::compat_step3_rules;
 use crate::app::game_authority::{self, GameSlot};
-use crate::app::mod_installer_parser::{PreparedParser, prepare_local_parser};
+use crate::app::mod_installer_parser::{
+    ParserRecognitionRules, PreparedParser, prepare_local_parser_with_rules,
+    recognition_rules_with_legacy,
+};
 use crate::app::state::{Step1State, WizardState};
 use crate::app::step5::basic_install_report;
 use crate::app::step5::command_config::build_install_command_config;
@@ -32,6 +35,7 @@ pub struct PendingInstallStart {
     pub(crate) run_token: u64,
     step1: Step1State,
     phrases: Vec<String>,
+    recognition_rules: ParserRecognitionRules,
     diagnostics_run_id: Option<String>,
     executable_identity: Option<(PathBuf, u64, Option<SystemTime>)>,
 }
@@ -118,10 +122,15 @@ impl PendingInstallStart {
             run_token: NEXT_ATTEMPT.fetch_add(1, Ordering::Relaxed),
             step1: state.step1.clone(),
             phrases: state.parser_choice_phrases.clone(),
+            recognition_rules: state.parser_recognition_rules.clone(),
             diagnostics_run_id: state.step5.diagnostics_run_id.clone(),
             executable_identity,
         }
     }
+    pub(crate) fn preparation_rules(&self) -> Result<ParserRecognitionRules, String> {
+        recognition_rules_with_legacy(&self.recognition_rules, &self.phrases)
+    }
+
     pub(crate) fn preparation_step1(&self) -> Step1State {
         let mut step1 = self.step1.clone();
         step1.mod_installer_binary.clone_from(&self.program);
@@ -134,6 +143,7 @@ impl PendingInstallStart {
             && self.executable_identity == executable_identity(&state.step1.mod_installer_binary)
             && self.step1 == state.step1
             && self.phrases == state.parser_choice_phrases
+            && self.recognition_rules == state.parser_recognition_rules
             && self.diagnostics_run_id == state.step5.diagnostics_run_id
     }
 }
@@ -229,6 +239,17 @@ pub fn prepare_start_request(
     state.step5.resolved_bg2_game_dir.clear();
     state.step5.resolved_game_dir.clear();
 
+    if let Err(error) = recognition_rules_with_legacy(
+        &state.parser_recognition_rules,
+        &state.parser_choice_phrases,
+    ) {
+        let reason = format!("Invalid installer parser recognition rules: {error}");
+        state.step5.last_status_text.clone_from(&reason);
+        term.append_marker(&reason);
+        basic_install_report::update(state, "blocked", Some(term));
+        return None;
+    }
+
     if let Some(reason) = step3_install_block_reason(state) {
         state.step5.last_status_text.clone_from(&reason);
         term.append_marker(&reason);
@@ -281,35 +302,35 @@ pub fn prepare_start_request(
 
 pub(crate) fn spawn_install_preparation(
     step1: Step1State,
-    phrases: Vec<String>,
+    rules: ParserRecognitionRules,
     needs_target_prep: bool,
     run_token: u64,
 ) -> Receiver<Result<InstallPreparation, String>> {
     spawn_install_preparation_with(
         step1,
-        phrases,
+        rules,
         needs_target_prep,
         run_token,
-        prepare_local_parser,
+        prepare_local_parser_with_rules,
     )
 }
 
 fn spawn_install_preparation_with<F>(
     step1: Step1State,
-    phrases: Vec<String>,
+    rules: ParserRecognitionRules,
     needs_target_prep: bool,
     run_token: u64,
     prepare: F,
 ) -> Receiver<Result<InstallPreparation, String>>
 where
-    F: FnOnce(&Path, &[String]) -> Result<PreparedParser, String> + Send + 'static,
+    F: FnOnce(&Path, &ParserRecognitionRules) -> Result<PreparedParser, String> + Send + 'static,
 {
     let (tx, rx) = channel();
     let _ = thread::Builder::new()
         .name("bio-install-preparation".to_string())
         .spawn(move || {
             let program = resolve_mod_installer_binary(&step1.mod_installer_binary);
-            let parser_result = prepare(Path::new(&program), &phrases);
+            let parser_result = prepare(Path::new(&program), &rules);
             let result =
                 complete_install_preparation(&step1, needs_target_prep, run_token, parser_result);
             let _ = tx.send(result);
@@ -682,7 +703,7 @@ mod parser_sharing_tests {
         };
         let receiver = spawn_install_preparation_with(
             step1,
-            vec!["Imported".to_string()],
+            std::iter::once(("choice_phrase".to_string(), vec!["Imported".to_string()])).collect(),
             false,
             73,
             |executable, phrases| {
@@ -692,7 +713,7 @@ mod parser_sharing_tests {
                     "fixture-not-real"
                 };
                 assert_eq!(executable, Path::new(expected));
-                assert_eq!(phrases, ["Imported"]);
+                assert_eq!(phrases["choice_phrase"], ["Imported"]);
                 Err("injected failure before cleanup".to_string())
             },
         );
@@ -712,3 +733,78 @@ mod parser_sharing_tests {
 #[cfg(test)]
 #[path = "install_flow_parser_tests.rs"]
 mod parser_sharing_resolution_tests;
+
+#[cfg(test)]
+mod parser_rules_runtime_tests {
+    use super::*;
+
+    fn rules() -> crate::app::mod_installer_parser::ParserRecognitionRules {
+        [
+            (
+                "choice_words".to_string(),
+                vec!["auswählen".to_string(), "elige".to_string()],
+            ),
+            ("finished".to_string(), vec!["fertig".to_string()]),
+        ]
+        .into_iter()
+        .collect()
+    }
+
+    #[test]
+    fn parser_rules_pending_request_binds_every_nonphrase_category() {
+        let mut state = WizardState::default();
+        state.step5.prep_running = true;
+        state.step1.mod_installer_binary.clear();
+        state.parser_recognition_rules = rules();
+        state.parser_choice_phrases = vec!["legacy snapshot".to_string()];
+        let pending = parser_sharing_pending_for_test(&state);
+        assert!(pending.matches(&state));
+        let snapshot = pending.preparation_rules().unwrap();
+        assert_eq!(snapshot["choice_words"], ["auswählen", "elige"]);
+        assert_eq!(snapshot["choice_phrase"], ["legacy snapshot"]);
+        for key in [
+            "in_progress_words",
+            "useful_status_words",
+            "choice_words",
+            "completed_with_warnings",
+            "failed_with_error",
+            "finished",
+        ] {
+            let mut changed = state.clone();
+            changed
+                .parser_recognition_rules
+                .insert(key.to_string(), vec!["different".to_string()]);
+            assert!(!pending.matches(&changed), "{key}");
+            assert_eq!(pending.preparation_rules().unwrap(), snapshot);
+        }
+    }
+
+    #[test]
+    fn parser_rules_actual_preparation_worker_receives_complete_frozen_map() {
+        let snapshot = rules();
+        let expected = snapshot.clone();
+        let receiver = spawn_install_preparation_with(
+            Step1State {
+                mod_installer_binary: "fixture-not-real.exe".to_string(),
+                ..Default::default()
+            },
+            snapshot,
+            false,
+            481,
+            move |_, actual| {
+                assert_eq!(actual, &expected);
+                Err("fixture rule merge failed".to_string())
+            },
+        );
+        let completed = receiver
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .unwrap()
+            .unwrap();
+        assert_eq!(completed.run_token, 481);
+        assert!(completed.parser.is_none());
+        assert_eq!(
+            completed.parser_warning.as_deref(),
+            Some("fixture rule merge failed")
+        );
+    }
+}

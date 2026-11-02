@@ -14,6 +14,7 @@ use tracing::warn;
 use crate::app::answer_sets::{AnswerBook, AnswerKey, AnswerSets, install_language};
 use crate::app::game_authority::{self, GameSlot};
 use crate::app::language_names::UNTAGGED_LANGUAGE;
+use crate::app::mod_installer_parser::{self, ParserRecognitionRules};
 use crate::app::share_answers::{ShareAnswers, slot_for_key};
 use crate::app::state::WizardState;
 use crate::app::step5::diagnostics::build_weidu_export_lines;
@@ -58,6 +59,7 @@ pub(crate) enum ExportLogSource {
 #[derive(Debug, Clone, Default)]
 pub(crate) struct ShareExportSources {
     pub(crate) parser_choice_phrases: Vec<String>,
+    pub(crate) parser_recognition_rules: ParserRecognitionRules,
     pub(crate) mod_downloads_user: Option<String>,
     pub(crate) mod_installed_refs: Option<String>,
     pub(crate) unresolved_mods: Vec<String>,
@@ -79,11 +81,15 @@ fn build_and_export_share_code(
     state: &WizardState,
     log_source: ExportLogSource,
 ) -> Result<String, String> {
-    let parser_choice_phrases = crate::app::mod_installer_parser::capture_local_choice_phrases()
+    let parser_recognition_rules = mod_installer_parser::capture_local_recognition_rules()
         .unwrap_or_else(|err| {
-            warn!("Share code exported without local parser phrases: {err}");
-            Vec::new()
+            warn!("Share code exported without local parser recognition rules: {err}");
+            ParserRecognitionRules::new()
         });
+    let parser_choice_phrases = parser_recognition_rules
+        .get("choice_phrase")
+        .cloned()
+        .unwrap_or_default();
     crate::app::mod_downloads::ensure_mod_downloads_files().map_err(|err| err.to_string())?;
 
     let include = checked_mod_tp2s(state);
@@ -106,6 +112,7 @@ fn build_and_export_share_code(
         state,
         &ShareExportSources {
             parser_choice_phrases,
+            parser_recognition_rules,
             mod_downloads_user: resolved.toml,
             mod_installed_refs,
             unresolved_mods: resolved.unresolved,
@@ -138,8 +145,17 @@ pub(crate) fn export_modlist_share_code_with(
     state: &WizardState,
     sources: &ShareExportSources,
 ) -> Result<String, String> {
-    let phrases =
+    let legacy =
         union_valid_phrases(&[&state.parser_choice_phrases, &sources.parser_choice_phrases]);
+    let state_rules = mod_installer_parser::recognition_rules_with_legacy(
+        &state.parser_recognition_rules,
+        &legacy,
+    )?;
+    let rules = mod_installer_parser::union_recognition_rules(&[
+        &state_rules,
+        &sources.parser_recognition_rules,
+    ])?;
+    let phrases = rules.get("choice_phrase").cloned().unwrap_or_default();
     let weidu_logs = export_weidu_logs(state, sources.log_source)?;
     let first_slot_export_text = weidu_logs.bgee.as_deref().or(weidu_logs.iwdee.as_deref());
     if relevant_weidu_text_is_empty(state, first_slot_export_text, weidu_logs.bg2ee.as_deref()) {
@@ -177,6 +193,9 @@ pub(crate) fn export_modlist_share_code_with(
     if !phrases.is_empty() {
         payload["parser_choice_phrases"] = json!(phrases);
     }
+    if !rules.is_empty() {
+        payload["parser_recognition_rules"] = json!(rules);
+    }
     move_first_slot_log_to_iwdee_key(&mut payload, weidu_logs.iwdee.as_deref());
     insert_unresolved_mods(&mut payload, &sources.unresolved_mods);
     insert_export_provenance(&mut payload, state);
@@ -184,11 +203,13 @@ pub(crate) fn export_modlist_share_code_with(
     insert_answer_languages(&mut payload, state);
     let payload_text = serde_json::to_string(&payload).map_err(|err| err.to_string())?;
     let code = encode_share_payload_text(&payload_text)?;
-    let workspace =
+    let mut workspace =
         crate::ui::workspace::workspace_state_loader::extract_workspace_state_from_wizard(
             state,
             &crate::registry::workspace_model::ModlistWorkspaceState::default(),
         );
+    workspace.parser_recognition_rules = Some(rules);
+    workspace.parser_choice_phrases = Some(phrases);
     crate::registry::share_export::overlay_workspace_wlb(&code, &workspace)
 }
 
@@ -320,6 +341,7 @@ fn insert_export_provenance(payload: &mut serde_json::Value, state: &WizardState
 #[derive(Debug, Clone)]
 pub(crate) struct ModlistSharePreview {
     pub(crate) parser_choice_phrases: Vec<String>,
+    pub(crate) parser_recognition_rules: ParserRecognitionRules,
     pub(crate) bio_version: String,
     pub(crate) game_install: String,
     pub(crate) game_version: Option<String>,
@@ -397,7 +419,10 @@ pub(crate) fn import_modlist_share_code(
     state.reset_workflow_keep_step1();
     state
         .parser_choice_phrases
-        .clone_from(&payload.parser_choice_phrases);
+        .clone_from(&preview.parser_choice_phrases);
+    state
+        .parser_recognition_rules
+        .clone_from(&preview.parser_recognition_rules);
     state.shared_answers = shared_answers;
     state.step2.selected_source_ids =
         crate::app::app_step2_update_source_refs::load_installed_source_ids();
@@ -438,6 +463,8 @@ fn warn_on_unresolved_mods(preview: &ModlistSharePreview) {
 pub(crate) struct ModlistSharePayload {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub(crate) parser_choice_phrases: Vec<String>,
+    #[serde(default)]
+    pub(crate) parser_recognition_rules: ParserRecognitionRules,
     pub(crate) format_version: u64,
     #[serde(default)]
     pub(crate) bio_version: String,
@@ -527,7 +554,10 @@ pub(crate) fn decode_share_payload(code: &str) -> Result<ModlistSharePayload, St
     let bytes = zlib_decompress(&bytes)?;
     let payload: ModlistSharePayload =
         serde_json::from_slice(&bytes).map_err(|err| err.to_string())?;
-    crate::app::mod_installer_parser::validate_phrases(&payload.parser_choice_phrases)?;
+    mod_installer_parser::recognition_rules_with_legacy(
+        &payload.parser_recognition_rules,
+        &payload.parser_choice_phrases,
+    )?;
     if payload.format_version != 1 {
         return Err(format!(
             "Unsupported modlist share format version: {}",
@@ -563,8 +593,13 @@ fn share_preview(payload: &ModlistSharePayload) -> Result<ModlistSharePreview, S
         })
         .collect::<Vec<_>>()
         .join("\n");
+    let rules = mod_installer_parser::recognition_rules_with_legacy(
+        &payload.parser_recognition_rules,
+        &payload.parser_choice_phrases,
+    )?;
     Ok(ModlistSharePreview {
-        parser_choice_phrases: payload.parser_choice_phrases.clone(),
+        parser_choice_phrases: rules.get("choice_phrase").cloned().unwrap_or_default(),
+        parser_recognition_rules: rules,
         bio_version: payload.bio_version.clone(),
         game_install: payload.game_install.clone(),
         game_version: payload

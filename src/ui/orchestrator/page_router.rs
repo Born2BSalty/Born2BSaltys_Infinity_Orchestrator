@@ -138,6 +138,7 @@ fn render_workspace(
             .cloned()
             .unwrap_or_default();
 
+        let installation_language = orchestrator.wizard_state.step1.language.clone();
         if let Some(reason) = workspace_state_loader::populate_wizard_state_from_workspace(
             &workspace,
             &entry,
@@ -149,6 +150,8 @@ fn render_workspace(
                 entry.name
             ));
         }
+
+        orchestrator.wizard_state.step1.language = installation_language;
 
         orchestrator.workspace_view.modlist_id = id.to_string();
         orchestrator
@@ -423,7 +426,7 @@ const fn should_reset_completed_install_route(
     pending_post_install_reset && !step5_attempt_in_progress(wizard_state, has_pending_step5_start)
 }
 
-const fn step5_attempt_in_progress(
+pub(crate) const fn step5_attempt_in_progress(
     wizard_state: &crate::app::state::WizardState,
     has_pending_step5_start: bool,
 ) -> bool {

@@ -28,21 +28,35 @@ impl OrchestratorApp {
     }
 
     pub(crate) fn code_for_share(&mut self, id: &str) -> Result<Option<String>, String> {
-        let local = mod_installer_parser::capture_local_choice_phrases().unwrap_or_else(|err| {
+        let local = mod_installer_parser::capture_local_recognition_rules().unwrap_or_else(|err| {
             warn!(
                 target = "orchestrator",
-                "Share for {id} uses no local parser phrases: {err}"
+                "Share for {id} uses no local parser recognition rules: {err}"
             );
-            Vec::new()
+            mod_installer_parser::ParserRecognitionRules::new()
         });
-        self.code_for_share_with_phrases(id, &local)
+        self.code_for_share_with_rules(id, &local)
     }
 
+    #[cfg(test)]
     pub(crate) fn code_for_share_with_phrases(
         &mut self,
         id: &str,
         local: &[String],
     ) -> Result<Option<String>, String> {
+        let rules = mod_installer_parser::recognition_rules_with_legacy(
+            &mod_installer_parser::ParserRecognitionRules::new(),
+            local,
+        )?;
+        self.code_for_share_with_rules(id, &rules)
+    }
+
+    pub(crate) fn code_for_share_with_rules(
+        &mut self,
+        id: &str,
+        local: &mod_installer_parser::ParserRecognitionRules,
+    ) -> Result<Option<String>, String> {
+        mod_installer_parser::validate_recognition_rules(local)?;
         let Some(mut candidate) = self.registry.find(id).cloned() else {
             return Ok(None);
         };
@@ -53,15 +67,19 @@ impl OrchestratorApp {
         else {
             return Ok(None);
         };
-        let (workspace, is_active) = self.workspace_for_share(id);
-        let mut code = merge_workspace_into_code(&original_code, workspace.as_ref(), local)
-            .unwrap_or_else(|err| {
-                warn!(
-                    target = "orchestrator",
-                    "Share for {id} uses the stored code unchanged: {err}"
-                );
-                original_code.clone()
-            });
+        if let Err(err) = crate::app::modlist_share::decode_share_payload(&original_code) {
+            let workspace = self
+                .workspace_state
+                .get(id)
+                .cloned()
+                .or_else(|| WorkspaceStore::new_for_id(id).load().ok())
+                .unwrap_or_default();
+            share_export::workspace_recognition_rules("", &workspace)?;
+            warn!(target = "orchestrator", "Share keeps stored code: {err}");
+            return Ok(Some(original_code));
+        }
+        let (workspace, is_active) = self.workspace_for_share(id, &original_code, local)?;
+        let mut code = merge_workspace_into_code(&original_code, workspace.as_ref(), local)?;
         let typed = self.share_name_buffer.trim().to_string();
         let save_name =
             user_name_is_valid(&typed) && self.redesign_settings.user_name.trim().is_empty();
@@ -104,10 +122,15 @@ impl OrchestratorApp {
     fn workspace_for_share(
         &mut self,
         id: &str,
-    ) -> (
-        Option<crate::registry::workspace_model::ModlistWorkspaceState>,
-        bool,
-    ) {
+        code: &str,
+        local: &mod_installer_parser::ParserRecognitionRules,
+    ) -> Result<
+        (
+            Option<crate::registry::workspace_model::ModlistWorkspaceState>,
+            bool,
+        ),
+        String,
+    > {
         let mut workspace = self
             .workspace_state
             .get(id)
@@ -119,6 +142,20 @@ impl OrchestratorApp {
             .as_deref()
             .or(self.active_install_modlist_id.as_deref());
         let is_active = active_id == Some(id);
+        let selected_rules = if is_active {
+            let current = mod_installer_parser::recognition_rules_with_legacy(
+                &self.wizard_state.parser_recognition_rules,
+                &self.wizard_state.parser_choice_phrases,
+            )?;
+            share_export::active_workspace_recognition_rules(
+                code,
+                &workspace.clone().unwrap_or_default(),
+                &current,
+            )?
+        } else {
+            share_export::workspace_recognition_rules(code, &workspace.clone().unwrap_or_default())?
+        };
+        mod_installer_parser::union_recognition_rules(&[&selected_rules, local])?;
         if is_active {
             crate::ui::workspace::workspace_state_loader::sync_step3_from_step2_if_changed(
                 &mut self.wizard_state,
@@ -129,8 +166,17 @@ impl OrchestratorApp {
                     &workspace.unwrap_or_default(),
                 ),
             );
+            if let Some(workspace) = workspace.as_mut() {
+                workspace.parser_choice_phrases = Some(
+                    selected_rules
+                        .get("choice_phrase")
+                        .cloned()
+                        .unwrap_or_default(),
+                );
+                workspace.parser_recognition_rules = Some(selected_rules);
+            }
         }
-        (workspace, is_active)
+        Ok((workspace, is_active))
     }
 
     fn persist_shared_workspace(
@@ -140,6 +186,14 @@ impl OrchestratorApp {
         code: &str,
         is_active: bool,
     ) -> Result<(), String> {
+        let payload = crate::app::modlist_share::decode_share_payload(code)?;
+        let rules = mod_installer_parser::recognition_rules_with_legacy(
+            &payload.parser_recognition_rules,
+            &payload.parser_choice_phrases,
+        )?;
+        let phrases = rules.get("choice_phrase").cloned().unwrap_or_default();
+        workspace.parser_recognition_rules = Some(rules.clone());
+        workspace.parser_choice_phrases = Some(phrases.clone());
         workspace.last_share_code = Some(code.to_string());
         let store = self
             .workspace_stores
@@ -155,6 +209,10 @@ impl OrchestratorApp {
         if self.workspace_state.contains_key(id) || is_active {
             self.workspace_state.insert(id.to_string(), workspace);
         }
+        if is_active {
+            self.wizard_state.parser_recognition_rules = rules;
+            self.wizard_state.parser_choice_phrases = phrases;
+        }
         Ok(())
     }
 }
@@ -162,23 +220,35 @@ impl OrchestratorApp {
 fn merge_workspace_into_code(
     original_code: &str,
     workspace: Option<&crate::registry::workspace_model::ModlistWorkspaceState>,
-    local: &[String],
+    local: &mod_installer_parser::ParserRecognitionRules,
 ) -> Result<String, String> {
-    let workspace_phrases = workspace
-        .and_then(|state| state.parser_choice_phrases.as_deref())
-        .unwrap_or(&[]);
-    let embedded =
-        crate::app::modlist_share::preview_modlist_share_code(original_code)?.parser_choice_phrases;
-    let phrases = mod_installer_parser::union_phrases(&[&embedded, workspace_phrases, local])?;
-    let code = if phrases == embedded {
-        original_code.to_string()
+    let selected = share_export::workspace_recognition_rules(
+        original_code,
+        &workspace.cloned().unwrap_or_default(),
+    )?;
+    let rules = mod_installer_parser::union_recognition_rules(&[&selected, local])?;
+    let overlaid = workspace
+        .map_or_else(
+            || Ok(original_code.to_string()),
+            |workspace| share_export::overlay_workspace_wlb(original_code, workspace),
+        )
+        .unwrap_or_else(|err| {
+            warn!(
+                target = "orchestrator",
+                "Share keeps stored component selections: {err}"
+            );
+            original_code.to_string()
+        });
+    let payload = crate::app::modlist_share::decode_share_payload(&overlaid)?;
+    let embedded = mod_installer_parser::recognition_rules_with_legacy(
+        &payload.parser_recognition_rules,
+        &payload.parser_choice_phrases,
+    )?;
+    if rules == embedded {
+        Ok(overlaid)
     } else {
-        share_export::enrich_share_code_with_phrases(original_code, &phrases)?
-    };
-    let Some(workspace) = workspace else {
-        return Ok(code);
-    };
-    share_export::overlay_workspace_wlb(&code, workspace)
+        share_export::replace_share_code_recognition_rules(&overlaid, &rules)
+    }
 }
 
 #[cfg(test)]
@@ -515,6 +585,136 @@ mod tests {
         assert_eq!(
             std::fs::read_to_string(&file).expect("import code file"),
             code
+        );
+    }
+
+    #[test]
+    fn parser_rules_home_share_uses_selected_stored_map_and_capture_without_active_wizard_leak() {
+        let mut app = app_with_entry("parser-rules-home", "RULEHOME0001", None);
+        let root = app.isolated_test_config_root.as_ref().unwrap().clone();
+        std::fs::create_dir_all(&root).unwrap();
+        let parser = root.join("parser.toml");
+        std::fs::write(&parser, "choice_phrase = ['local phrase']\nchoice_words = ['local word']\nfinished = ['local complete']\n").unwrap();
+        let selected = [
+            (
+                "choice_words".to_string(),
+                vec!["selected word".to_string()],
+            ),
+            (
+                "finished".to_string(),
+                vec!["selected complete".to_string()],
+            ),
+        ]
+        .into_iter()
+        .collect();
+        isolated_store(&app, "RULEHOME0001")
+            .save(&ModlistWorkspaceState {
+                parser_recognition_rules: Some(selected),
+                ..Default::default()
+            })
+            .unwrap();
+        app.wizard_state.parser_recognition_rules = std::iter::once((
+            "choice_words".to_string(),
+            vec!["unrelated active wizard".to_string()],
+        ))
+        .collect();
+        let code = fixture_capture(&mut app, "RULEHOME0001", &parser)
+            .unwrap()
+            .unwrap();
+        let preview = preview_modlist_share_code(&code).unwrap();
+        assert_eq!(
+            preview.parser_recognition_rules["choice_words"],
+            ["selected word", "local word"]
+        );
+        assert_eq!(
+            preview.parser_recognition_rules["finished"],
+            ["selected complete", "local complete"]
+        );
+        assert_eq!(preview.parser_choice_phrases, ["local phrase"]);
+        let stored = isolated_store(&app, "RULEHOME0001").load().unwrap();
+        let recovered =
+            crate::registry::share_export::workspace_recognition_rules(&code, &stored).unwrap();
+        assert_eq!(recovered, preview.parser_recognition_rules);
+        assert_eq!(
+            stored.parser_recognition_rules.as_ref().unwrap()["choice_words"],
+            ["selected word", "local word"]
+        );
+        let cleared = ModlistWorkspaceState {
+            parser_recognition_rules: Some(
+                crate::app::mod_installer_parser::ParserRecognitionRules::new(),
+            ),
+            parser_choice_phrases: Some(vec!["stale mirror".to_string()]),
+            ..Default::default()
+        };
+        app.workspace_state
+            .insert("RULEHOME0001".to_string(), cleared);
+        let code = app
+            .code_for_share_with_rules(
+                "RULEHOME0001",
+                &crate::app::mod_installer_parser::ParserRecognitionRules::new(),
+            )
+            .unwrap()
+            .unwrap();
+        let preview = preview_modlist_share_code(&code).unwrap();
+        assert!(preview.parser_recognition_rules.is_empty());
+        assert_eq!(preview.parser_choice_phrases, [] as [String; 0]);
+    }
+
+    #[test]
+    fn parser_rules_home_share_rejects_invalid_capture_before_mutating_selected_code() {
+        let mut app = app_with_entry("parser-rules-home-invalid", "RULEHOME0002", Some("@owner"));
+        let before = app
+            .registry
+            .find("RULEHOME0002")
+            .unwrap()
+            .latest_share_code
+            .clone();
+        let invalid =
+            std::iter::once(("bell_character".to_string(), vec!["!".to_string()])).collect();
+        assert!(
+            app.code_for_share_with_rules("RULEHOME0002", &invalid)
+                .is_err()
+        );
+        assert_eq!(
+            app.registry.find("RULEHOME0002").unwrap().latest_share_code,
+            before
+        );
+    }
+
+    #[test]
+    fn parser_rules_home_share_rejects_invalid_selected_workspace_without_rewriting_disk() {
+        let mut app = app_with_entry(
+            "parser-rules-invalid-selected",
+            "RULEHOME0003",
+            Some("@owner"),
+        );
+        let invalid = ModlistWorkspaceState {
+            parser_recognition_rules: Some(
+                std::iter::once(("unknown_field".to_string(), vec!["keep raw".to_string()]))
+                    .collect(),
+            ),
+            ..Default::default()
+        };
+        let store = isolated_store(&app, "RULEHOME0003");
+        store.save(&invalid).unwrap();
+        let before_disk = std::fs::read(store.path()).unwrap();
+        let before_code = app
+            .registry
+            .find("RULEHOME0003")
+            .unwrap()
+            .latest_share_code
+            .clone();
+        assert!(
+            app.code_for_share_with_rules(
+                "RULEHOME0003",
+                &crate::app::mod_installer_parser::ParserRecognitionRules::new()
+            )
+            .is_err()
+        );
+        assert_eq!(std::fs::read(store.path()).unwrap(), before_disk);
+        assert_eq!(
+            app.registry.find("RULEHOME0003").unwrap().latest_share_code,
+            before_code
         );
     }
 }

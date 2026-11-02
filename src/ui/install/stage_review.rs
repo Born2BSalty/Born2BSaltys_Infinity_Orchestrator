@@ -320,6 +320,7 @@ fn render_all_source_notices(
     if let Some(issue) = answer_language_warning(state) {
         render_warning_frame(
             ui,
+            palette,
             &answer_language_warning_title(issue),
             &answer_language_warning_body(issue),
             "",
@@ -449,20 +450,28 @@ pub(crate) fn answer_language_warning_body(issue: &AnswerLanguageIssue) -> Strin
 
 pub(crate) fn render_source_warning(
     ui: &mut egui::Ui,
+    palette: ThemePalette,
     issue: &str,
     action: SourceWarningAction,
     remedy: SourceRemedy,
 ) {
     render_warning_frame(
         ui,
+        palette,
         source_warning_title(remedy),
         issue,
         source_warning_action_text(action, remedy),
     );
 }
 
-fn render_warning_frame(ui: &mut egui::Ui, title: &str, issue: &str, action_text: &str) {
-    let body_color = egui::Color32::from_rgba_unmultiplied(0xff, 0xff, 0xff, 0xCC);
+fn render_warning_frame(
+    ui: &mut egui::Ui,
+    palette: ThemePalette,
+    title: &str,
+    issue: &str,
+    action_text: &str,
+) {
+    let (ink, body_color) = destination_not_empty::warning_inks(palette);
     egui::Frame::default()
         .fill(destination_not_empty::warn_fill())
         .stroke(egui::Stroke::new(
@@ -487,13 +496,13 @@ fn render_warning_frame(ui: &mut egui::Ui, title: &str, issue: &str, action_text
                     destination_not_empty::paint_warning_triangle(
                         ui.painter(),
                         icon_rect.center(),
-                        destination_not_empty::WARN_INK,
+                        ink,
                     );
                     ui.label(
                         egui::RichText::new(title)
                             .size(13.0)
                             .family(egui::FontFamily::Name("poppins_medium".into()))
-                            .color(destination_not_empty::WARN_INK),
+                            .color(ink),
                     );
                 });
                 ui.add_space(4.0);
@@ -525,6 +534,93 @@ fn render_warning_frame(ui: &mut egui::Ui, title: &str, issue: &str, action_text
         });
 }
 
+#[cfg(test)]
+mod combination_warning_snapshots {
+    use super::*;
+    use crate::registry::model::ModlistEntry;
+    use egui_kittest::{Harness, kittest::Queryable};
+
+    #[test]
+    fn combination_current_warning_and_folder_snapshots_light_dark_normal_narrow() {
+        for (palette, theme) in [(ThemePalette::Light, "light"), (ThemePalette::Dark, "dark")] {
+            for width in [420.0, 1100.0] {
+                let mut harness = Harness::builder()
+                    .with_size(egui::vec2(width, 760.0))
+                    .with_max_steps(12)
+                    .build_state(
+                        move |ctx, fonts_ready| {
+                            if !*fonts_ready {
+                                crate::ui::shared::redesign_fonts::install_redesign_fonts(ctx);
+                                *fonts_ready = true;
+                                ctx.request_repaint();
+                                return;
+                            }
+                            ctx.set_visuals(crate::ui::shared::redesign_visuals::build_for(
+                                palette,
+                            ));
+                            egui::CentralPanel::default().show(ctx, |ui| {
+                                let issue = AnswerLanguageIssue {
+                                    language: "polish".to_string(),
+                                    components: 3,
+                                    answers: 7,
+                                };
+                                render_warning_frame(
+                                    ui,
+                                    palette,
+                                    &answer_language_warning_title(&issue),
+                                    &answer_language_warning_body(&issue),
+                                    "",
+                                );
+                                let _ = destination_not_empty::render(ui, palette, None);
+                                let registry = ModlistRegistry {
+                                    entries: vec![ModlistEntry {
+                                        id: "OWNER".to_string(),
+                                        name: "Existing list".to_string(),
+                                        ..Default::default()
+                                    }],
+                                    ..Default::default()
+                                };
+                                crate::ui::install::destination_owned::render(
+                                    ui,
+                                    palette,
+                                    &DestinationClaim::Replace(vec!["OWNER".to_string()]),
+                                    &registry,
+                                );
+                            });
+                        },
+                        false,
+                    );
+                harness.run_steps(3);
+                harness.get_by_label("Installer answers are not in Polish");
+                harness.get_by_label("This list's installer answers were set in another language. Installing in Polish will pause at up to 3 components to ask for about 7 answers. Choose Review and modify to set your own answers first.");
+                harness.get_by_label("Target directory not empty");
+                harness.get_by_label("Folder claimed by another modlist");
+                if let Some(output) = std::env::var_os("BIO_WARNING_SCREENSHOT_DIR") {
+                    let output = std::path::PathBuf::from(output);
+                    std::fs::create_dir_all(&output).unwrap();
+                    harness
+                        .render()
+                        .unwrap()
+                        .save(output.join(format!("warnings-{theme}-{width:.0}.png")))
+                        .unwrap();
+                }
+            }
+        }
+        assert_eq!(
+            destination_not_empty::warning_inks(ThemePalette::Dark).0,
+            egui::Color32::WHITE
+        );
+        assert_eq!(
+            destination_not_empty::warning_inks(ThemePalette::Dark).1,
+            egui::Color32::from_rgba_unmultiplied(255, 255, 255, 204)
+        );
+        assert_eq!(
+            destination_not_empty::warning_inks(ThemePalette::Light).0,
+            crate::ui::shared::redesign_tokens::redesign_text_primary(ThemePalette::Light)
+        );
+    }
+}
+
 pub(crate) fn render_source_notice(
     ui: &mut egui::Ui,
     palette: ThemePalette,
@@ -532,7 +628,7 @@ pub(crate) fn render_source_notice(
     action: SourceWarningAction,
 ) {
     if notice.severity == SourceNoticeSeverity::Warning {
-        render_source_warning(ui, &notice.text, action, notice.remedy);
+        render_source_warning(ui, palette, &notice.text, action, notice.remedy);
         return;
     }
     egui::Frame::default()
@@ -906,6 +1002,7 @@ mod tests {
     fn display_name_prefers_the_typed_name_then_the_code_then_the_fallback() {
         let mut preview = crate::app::modlist_share::ModlistSharePreview {
             parser_choice_phrases: Vec::new(),
+            parser_recognition_rules: std::collections::BTreeMap::default(),
             bio_version: String::new(),
             game_install: "EET".to_string(),
             game_version: None,

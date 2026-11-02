@@ -583,4 +583,82 @@ mod tests {
         ];
         assert_eq!(usable_cached_components(cached).map(|c| c.len()), Some(2));
     }
+
+    #[test]
+    fn current_cache_hit_replaces_old_prompt_fields_with_fresh_german_tra() {
+        let root = TempModsRoot::new();
+        let tp2 = root.write_tp2(
+            "Sample/Sample.tp2",
+            "BACKUP ~Sample/backup~\nAUTHOR ~Fixture~\nLANGUAGE ~Deutsch~ ~de_DE~ ~Sample/lang/de_DE/setup.tra~\nBEGIN @0 DESIGNATED 100\nPRINT @1\nACTION_READLN answer\n",
+        );
+        let tra = root.mods().join("Sample/lang/de_DE/setup.tra");
+        fs::create_dir_all(tra.parent().unwrap()).unwrap();
+        fs::write(
+            &tra,
+            "@0 = ~Komponente~\n@1 = ~Old cached question %bgee_dir%~\n",
+        )
+        .unwrap();
+        let mods_root = root.mods();
+        let old =
+            parser::collect_prompt_summary_index(&tp2, &mods_root, Some("de_DE"), Some("bg2ee"));
+        let mut cached = component("Komponente");
+        cached.prompt_summary = old.by_component_id.get("100").cloned();
+        cached.prompt_events = old.by_component_id_events["100"].clone();
+        cached.mod_prompt_summary = Some("Old cached mod summary".to_string());
+        cached.mod_prompt_events = cached.prompt_events.clone();
+        assert!(
+            cached
+                .prompt_summary
+                .as_ref()
+                .unwrap()
+                .contains("Old cached question")
+        );
+        let cache = Arc::new(Mutex::new(ScanCache {
+            version: crate::app::scan::SCAN_CACHE_VERSION,
+            ..ScanCache::default()
+        }));
+        let missing = root.root.join("never-executed-weidu");
+        let context = Arc::new(crate::app::scan::cache::cache_context(
+            &missing, &missing, &mods_root, "de_DE",
+        ));
+        assert!(context.starts_with("v=8|"));
+        cache_put(&cache, &context, &tp2, vec![cached]);
+        fs::write(&tra, "@0 = ~Komponente~\n@1 = ~BG:EE gefunden in %bgee_dir%. Ist dies korrekt? [Y]Ja oder [N]ein~\n").unwrap();
+        let fresh =
+            parser::collect_prompt_summary_index(&tp2, &mods_root, Some("de_DE"), Some("bg2ee"));
+        assert_eq!(fresh.parser_error_count, 0);
+        let scan_ctx = ScanGroupContext {
+            group_label: "Sample",
+            weidu: &missing,
+            game_dir: &missing,
+            mods_root: &mods_root,
+            cache: &cache,
+            ctx: &context,
+            preferred_locale: "de_DE",
+            game_install: "BG2EE",
+        };
+        let (components, probes) = super::scan_tp2_group(&scan_ctx, &[tp2]).unwrap();
+        assert!(probes[0].used_cache);
+        assert!(probes[0].selected_from_cache);
+        assert_eq!(cache.lock().unwrap().version, 8);
+        assert_eq!(
+            components[0].prompt_summary.as_ref(),
+            fresh.by_component_id.get("100")
+        );
+        assert_eq!(
+            components[0].prompt_events,
+            fresh.by_component_id_events["100"]
+        );
+        assert_eq!(components[0].mod_prompt_events, fresh.mod_events);
+        let summary = components[0].prompt_summary.as_ref().unwrap();
+        assert!(summary.contains("BG:EE gefunden in %bgee_dir%."));
+        assert!(!summary.contains("Old cached"));
+        assert!(
+            components[0]
+                .mod_prompt_summary
+                .as_ref()
+                .unwrap()
+                .contains("BG:EE gefunden in %bgee_dir%.")
+        );
+    }
 }

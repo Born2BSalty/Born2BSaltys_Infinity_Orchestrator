@@ -28,6 +28,7 @@ pub struct WizardState<Flag = bool> {
     pub modlist_import_preview_installed_refs: String,
     pub modlist_import_preview_mod_configs: String,
     pub(crate) parser_choice_phrases: Vec<String>,
+    pub(crate) parser_recognition_rules: crate::app::mod_installer_parser::ParserRecognitionRules,
     pub(crate) shared_answers: crate::app::answer_sets::AnswerBook,
     pub(crate) modlist_share_name: Option<String>,
     pub(crate) modlist_share_author: Option<String>,

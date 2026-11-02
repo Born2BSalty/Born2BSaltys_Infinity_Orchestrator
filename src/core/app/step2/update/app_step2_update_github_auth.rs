@@ -47,12 +47,25 @@ fn load_github_token_from_secure_store() -> Result<Option<String>, String> {
     }
 }
 
+#[cfg(not(test))]
 fn secure_store_entry() -> Result<keyring::Entry, String> {
     keyring::Entry::new(
         GITHUB_SECURE_STORE_SERVICE_NAME,
         GITHUB_SECURE_STORE_ACCOUNT_NAME,
     )
     .map_err(|err| err.to_string())
+}
+
+#[cfg(test)]
+fn secure_store_entry() -> Result<keyring::Entry, String> {
+    keyring::mock::default_credential_builder()
+        .build(
+            None,
+            GITHUB_SECURE_STORE_SERVICE_NAME,
+            GITHUB_SECURE_STORE_ACCOUNT_NAME,
+        )
+        .map(keyring::Entry::new_with_credential)
+        .map_err(|err| err.to_string())
 }
 
 pub(super) fn take_last_load_error() -> Option<String> {
@@ -70,5 +83,36 @@ fn last_load_error() -> &'static Mutex<Option<String>> {
 fn set_last_load_error(error: Option<String>) {
     if let Ok(mut guard) = last_load_error().lock() {
         *guard = error;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::secure_store_entry;
+
+    #[test]
+    fn secure_store_entry_uses_entry_local_mock_credentials() {
+        let entry = secure_store_entry().expect("mock credential entry");
+        assert!(entry.get_credential().is::<keyring::mock::MockCredential>());
+        assert!(matches!(entry.get_password(), Err(keyring::Error::NoEntry)));
+        entry.set_password("mock-token").expect("set mock password");
+        assert_eq!(
+            entry.get_password().expect("get mock password"),
+            "mock-token"
+        );
+
+        let another_entry = secure_store_entry().expect("another mock credential entry");
+        assert!(
+            another_entry
+                .get_credential()
+                .is::<keyring::mock::MockCredential>()
+        );
+        assert!(matches!(
+            another_entry.get_password(),
+            Err(keyring::Error::NoEntry)
+        ));
+
+        entry.delete_credential().expect("delete mock credential");
+        assert!(matches!(entry.get_password(), Err(keyring::Error::NoEntry)));
     }
 }

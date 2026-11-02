@@ -1322,3 +1322,248 @@ fn parser_sharing_rolling_readonly_noop_and_replacement_keep_permissions() {
         );
     }
 }
+
+#[test]
+fn parser_rules_additive_merge_keeps_default_and_local_recognition_words() {
+    let original = document(
+        "choice_phrase = ['lokal']\nchoice_words = ['auswählen']\n[metadata]\nmod_installer_version = '14.0.0'\n",
+    );
+    let initialized = document(
+        "choice_phrase = ['default']\nchoice_words = ['choose']\n[metadata]\nmod_installer_version = '15.0.1'\n",
+    );
+    let merged = merge_parser_documents(Some(&original), &initialized, &[]).expect("merge");
+    assert_eq!(
+        merged["choice_words"],
+        toml::Value::Array(
+            strings(&["choose", "auswählen"])
+                .into_iter()
+                .map(toml::Value::String)
+                .collect()
+        )
+    );
+}
+
+fn parser_rules_samples() -> super::ParserRecognitionRules {
+    [
+        ("in_progress_words", vec!["installing", "installiere"]),
+        ("useful_status_words", vec!["copied", "copiado"]),
+        ("choice_words", vec!["choose", "auswählen", "elige"]),
+        (
+            "choice_phrase",
+            vec!["would you like", "möchten Sie", "¿desea continuar?"],
+        ),
+        ("completed_with_warnings", vec!["warning", "advertencia"]),
+        ("failed_with_error", vec!["failed", "fehlgeschlagen"]),
+        ("finished", vec!["installed", "instalado"]),
+    ]
+    .into_iter()
+    .map(|(key, values)| (key.to_string(), strings(&values)))
+    .collect()
+}
+
+#[test]
+fn parser_rules_capture_reads_all_seven_arrays_without_translating_or_copying_scalars() {
+    let fixture = Fixture::new();
+    let path = fixture.parser();
+    assert!(
+        super::capture_recognition_rules_at(&path)
+            .unwrap()
+            .is_empty()
+    );
+    assert!(!path.exists());
+    let expected = parser_rules_samples();
+    let mut text = toml::to_string(&expected).unwrap();
+    text.push_str("bell_character = '!'\neet_auto_fill = true\n[metadata]\nmod_installer_version = '15.0.1'\n");
+    std::fs::write(&path, &text).unwrap();
+    assert_eq!(
+        super::capture_recognition_rules_at(&path).unwrap(),
+        expected
+    );
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), text);
+    std::fs::write(&path, "choice_words = ['auswählen']\n").unwrap();
+    assert_eq!(
+        super::capture_recognition_rules_at(&path).unwrap()["choice_words"],
+        ["auswählen"]
+    );
+    assert!(capture_choice_phrases_at(&path).is_err());
+}
+
+#[test]
+fn parser_rules_capture_rejects_malformed_present_arrays_and_utf8_without_mutation() {
+    let fixture = Fixture::new();
+    let path = fixture.parser();
+    for invalid in [
+        "choice_words = 'choose'",
+        "finished = [1]",
+        "choice_phrase = [' ']",
+        "in_progress_words = false",
+        "choice_phrase = [",
+    ] {
+        std::fs::write(&path, invalid).unwrap();
+        assert!(
+            super::capture_recognition_rules_at(&path).is_err(),
+            "{invalid}"
+        );
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), invalid);
+    }
+    std::fs::write(&path, [0xff, 0xfe]).unwrap();
+    assert!(super::capture_recognition_rules_at(&path).is_err());
+    assert_eq!(std::fs::read(&path).unwrap(), [0xff, 0xfe]);
+}
+
+#[test]
+fn parser_rules_validation_rejects_unknown_fields_and_aggregate_excess() {
+    let unknown = std::iter::once(("bell_character".to_string(), strings(&["!"]))).collect();
+    assert!(super::validate_recognition_rules(&unknown).is_err());
+    for invalid in [
+        strings(&[" "]),
+        strings(&[&"é".repeat(4097)]),
+        (0..4097).map(|index| index.to_string()).collect(),
+    ] {
+        let rules = std::iter::once(("choice_words".to_string(), invalid)).collect();
+        assert!(super::validate_recognition_rules(&rules).is_err());
+    }
+    let values = (0..40)
+        .map(|index| format!("{index:04}{}", "x".repeat(8188)))
+        .collect::<Vec<_>>();
+    let first = std::iter::once(("choice_phrase".to_string(), values.clone())).collect();
+    let second = std::iter::once(("choice_words".to_string(), values)).collect();
+    assert!(super::validate_recognition_rules(&first).is_ok());
+    assert!(super::validate_recognition_rules(&second).is_ok());
+    assert!(super::union_recognition_rules(&[&first, &second]).is_err());
+}
+
+#[test]
+fn parser_rules_merge_is_field_specific_additive_and_preserves_local_control_settings() {
+    let initialized_rules = parser_rules_samples();
+    let mut original_rules = initialized_rules.clone();
+    let mut imported = initialized_rules.clone();
+    for (key, values) in &mut original_rules {
+        values.push(format!("local-{key}-世界"));
+    }
+    for (key, values) in &mut imported {
+        values.push(format!("imported-{key}-español"));
+    }
+    let mut initialized = document(&toml::to_string(&initialized_rules).unwrap());
+    initialized.as_table_mut().unwrap().insert(
+        "bell_character".to_string(),
+        toml::Value::String("\u{7}".to_string()),
+    );
+    initialized
+        .as_table_mut()
+        .unwrap()
+        .insert("eet_auto_fill".to_string(), toml::Value::Boolean(true));
+    initialized.as_table_mut().unwrap().insert(
+        "metadata".to_string(),
+        document("mod_installer_version = '15.0.1'\nnew_key = true"),
+    );
+    let mut original = document(&toml::to_string(&original_rules).unwrap());
+    original.as_table_mut().unwrap().insert(
+        "bell_character".to_string(),
+        toml::Value::String("!".to_string()),
+    );
+    original
+        .as_table_mut()
+        .unwrap()
+        .insert("eet_auto_fill".to_string(), toml::Value::Boolean(false));
+    original.as_table_mut().unwrap().insert(
+        "metadata".to_string(),
+        document("mod_installer_version = '14.0.0'\nuser_note = 'keep'"),
+    );
+    original
+        .as_table_mut()
+        .unwrap()
+        .insert("custom".to_string(), document("value = 'untouched'"));
+    let merged =
+        super::merge_parser_documents_with_rules(Some(&original), &initialized, &imported).unwrap();
+    for (key, initial) in &initialized_rules {
+        let expected = union_phrases(&[initial, &original_rules[key], &imported[key]]).unwrap();
+        assert_eq!(
+            merged[key]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|value| value.as_str().unwrap().to_string())
+                .collect::<Vec<_>>(),
+            expected
+        );
+    }
+    assert_eq!(merged["bell_character"], original["bell_character"]);
+    assert_eq!(merged["eet_auto_fill"], original["eet_auto_fill"]);
+    assert_eq!(merged["custom"], original["custom"]);
+    assert_eq!(
+        merged["metadata"]["mod_installer_version"].as_str(),
+        Some("15.0.1")
+    );
+    assert_eq!(merged["metadata"]["user_note"].as_str(), Some("keep"));
+    assert_eq!(merged["metadata"]["new_key"].as_bool(), Some(true));
+}
+
+#[test]
+fn parser_rules_real_preparation_merges_all_arrays_preserving_layout_and_backup() {
+    for newline in ["\n", "\r\n"] {
+        let fixture = Fixture::new();
+        let path = fixture.parser();
+        let original = "# custom parser 世界\nchoice_phrase = [ 'lokal' ] # retain phrase layout\nchoice_words = [ 'auswählen' ] # retain word layout\nfinished = ['fertig']\nbell_character = '!'\neet_auto_fill = false\n[metadata]\nmod_installer_version = '14.0.0'\n[custom]\nvalue = 'keep'\n".replace('\n', newline);
+        std::fs::write(&path, &original).unwrap();
+        let rules = parser_rules_samples();
+        let initializer = Initializer {
+            path: path.clone(),
+            document: format!(
+                "{}\n[metadata]\nmod_installer_version = '15.0.1'\n",
+                toml::to_string(&rules).unwrap()
+            ),
+            calls: AtomicUsize::new(0),
+            fail_after_write: false,
+        };
+        let prepared = super::prepare_parser_with_rules_at(
+            &path,
+            Path::new("fixture-mod-installer"),
+            &rules,
+            &initializer,
+        )
+        .unwrap();
+        assert_eq!(initializer.calls.load(Ordering::Relaxed), 1);
+        let merged_text = std::fs::read_to_string(&path).unwrap();
+        assert!(merged_text.contains("# custom parser 世界"));
+        assert!(merged_text.contains("# retain word layout"));
+        assert!(!merged_text.replace(newline, "").contains('\n'));
+        let merged = document(&merged_text);
+        for (key, values) in &rules {
+            let actual = merged[key].as_array().unwrap();
+            for value in values {
+                assert!(
+                    actual.contains(&toml::Value::String(value.clone())),
+                    "{key} {value}"
+                );
+            }
+        }
+        assert_eq!(merged["bell_character"].as_str(), Some("!"));
+        assert_eq!(merged["custom"]["value"].as_str(), Some("keep"));
+        assert_eq!(
+            std::fs::read_to_string(prepared.preparation.backup_path.as_ref().unwrap()).unwrap(),
+            original
+        );
+        drop(prepared);
+    }
+}
+
+#[test]
+fn parser_rules_invalid_import_fails_before_initializer_and_does_not_change_parser() {
+    let fixture = Fixture::new();
+    let path = fixture.parser();
+    std::fs::write(&path, ORIGINAL).unwrap();
+    let initializer = Initializer {
+        path: path.clone(),
+        document: CURRENT.to_string(),
+        calls: AtomicUsize::new(0),
+        fail_after_write: false,
+    };
+    let invalid = std::iter::once(("metadata".to_string(), strings(&["bad"]))).collect();
+    assert!(
+        super::prepare_parser_with_rules_at(&path, Path::new("fixture"), &invalid, &initializer)
+            .is_err()
+    );
+    assert_eq!(initializer.calls.load(Ordering::Relaxed), 0);
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), ORIGINAL);
+}
