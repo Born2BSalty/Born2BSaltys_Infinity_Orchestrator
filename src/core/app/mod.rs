@@ -129,6 +129,7 @@ pub mod scan;
 pub mod selected_details;
 pub mod selection_jump;
 pub mod selection_refs;
+pub mod share_answers;
 pub mod source_check;
 #[path = "step2/update/source_form.rs"]
 pub mod source_form;
@@ -166,5 +167,7 @@ pub mod wlb_inputs;
 
 #[cfg(test)]
 mod language_names_tests;
+#[cfg(test)]
+mod share_answers_tests;
 #[cfg(test)]
 mod wlb_inputs_tests;

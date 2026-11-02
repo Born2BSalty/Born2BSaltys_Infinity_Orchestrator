@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
-use crate::app::answer_sets::AnswerBook;
+use crate::app::answer_sets::{AnswerBook, AnswerSets};
 use crate::app::game_authority::GameSlot;
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -25,6 +25,10 @@ pub struct InstallerAnswerTarget {
     pub(crate) title: String,
     pub(crate) questions: String,
     pub(crate) answers: Vec<InstallerAnswerDraft>,
+    pub(crate) install_language: String,
+    pub(crate) answer_language: String,
+    pub(crate) book_sets: AnswerSets,
+    pub(crate) parked: BTreeMap<String, Vec<InstallerAnswerDraft>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]

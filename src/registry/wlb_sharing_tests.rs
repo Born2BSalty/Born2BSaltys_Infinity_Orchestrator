@@ -1,3 +1,4 @@
+use crate::app::answer_sets::AnswerSets;
 use crate::app::modlist_share::{base64url_decode, encode_share_payload_text};
 use crate::registry::share_export::overlay_workspace_wlb;
 use crate::registry::workspace_model::{ComponentRef, ModlistWorkspaceState};
@@ -37,6 +38,11 @@ fn manual_wlb_overlay_changes_only_correct_slot_and_preserves_all_metadata() {
     expected["weidu_logs"]["bgee"] = serde_json::json!(
         "~MOD/MOD.TP2~ #2 #17 // First // @wlb-inputs: bio-json-v1:[\"a,b\",\"\"]\n~OTHER/OTHER.TP2~ #0 #1 // Untouched"
     );
+    expected["answers"] = serde_json::json!({
+        "bgee": { "components": [
+            { "tp2": "mod", "id": 17, "sets": { "english": "bio-json-v1:[\"a,b\",\"\"]" } }
+        ] }
+    });
     assert_eq!(payload(&result), expected);
     assert_eq!(
         overlay_workspace_wlb(&result, &workspace()).expect("idempotent"),
@@ -156,13 +162,149 @@ fn overlay_skips_missing_slot_and_invalid_answers() {
         order_bg2ee: vec![answered("MOD/MOD.TP2", 17, "y")],
         ..Default::default()
     };
+    let result = overlay_workspace_wlb(&original, &workspace).expect("skips are not errors");
+    assert_eq!(bgee_log(&result), "~MOD/MOD.TP2~ #0 #17 // Label\n");
     assert_eq!(
-        overlay_workspace_wlb(&original, &workspace).expect("skips are not errors"),
-        original
+        payload(&result)["answers"],
+        serde_json::json!({
+            "bgee": { "components": [
+                { "tp2": "mod", "id": 17, "sets": { "english": "bio-json-v9:[]" } }
+            ] }
+        })
     );
 }
 
 #[test]
 fn overlay_errs_only_on_an_undecodable_code() {
     assert!(overlay_workspace_wlb("BIO-MODLIST-V1:!!!", &workspace()).is_err());
+}
+
+fn sets(pairs: &[(&str, &str)]) -> AnswerSets {
+    let mut sets = AnswerSets::default();
+    for (language, spec) in pairs {
+        sets.set(language, spec);
+    }
+    sets
+}
+
+fn with_sets(tp2: &str, id: i64, pairs: &[(&str, &str)]) -> ComponentRef {
+    ComponentRef {
+        tp2: tp2.to_string(),
+        id,
+        wlb_inputs: None,
+        answers: AnswerSets::default(),
+    }
+    .with_answer_sets(sets(pairs))
+}
+
+fn polish_code(log: &str) -> String {
+    encode_share_payload_text(
+        &serde_json::json!({
+            "format_version": 1,
+            "game_install": "BGEE",
+            "install_mode": "start_from_scratch",
+            "weidu_logs": { "bgee": log },
+            "answers": { "bgee": { "languages": { "mod": "polish" } } }
+        })
+        .to_string(),
+    )
+    .expect("code")
+}
+
+fn bgee_workspace(item: ComponentRef) -> ModlistWorkspaceState {
+    ModlistWorkspaceState {
+        order_bgee: vec![item],
+        ..Default::default()
+    }
+}
+
+#[test]
+fn overlay_marker_follows_line_language_from_section() {
+    let original = polish_code("~MOD/MOD.TP2~ #1 #17 // Label // @wlb-inputs: old\n");
+    let workspace = bgee_workspace(with_sets(
+        "MOD/MOD.TP2",
+        17,
+        &[("english", "y"), ("polish", "t")],
+    ));
+
+    let result = overlay_workspace_wlb(&original, &workspace).expect("overlay");
+
+    assert_eq!(
+        bgee_log(&result),
+        "~MOD/MOD.TP2~ #1 #17 // Label // @wlb-inputs: t\n"
+    );
+    assert_eq!(
+        payload(&result)["answers"],
+        serde_json::json!({
+            "bgee": {
+                "languages": { "mod": "polish" },
+                "components": [
+                    { "tp2": "mod", "id": 17, "sets": { "english": "y", "polish": "t" } }
+                ]
+            }
+        })
+    );
+    assert_eq!(
+        overlay_workspace_wlb(&result, &workspace).expect("idempotent"),
+        result
+    );
+}
+
+#[test]
+fn overlay_without_section_writes_english_marker_and_adds_section() {
+    let original = code_with_bgee_log("~MOD/MOD.TP2~ #1 #17 // Label\n");
+    let workspace = bgee_workspace(with_sets(
+        "MOD/MOD.TP2",
+        17,
+        &[("english", "y"), ("polish", "t")],
+    ));
+
+    let result = overlay_workspace_wlb(&original, &workspace).expect("overlay");
+
+    assert_eq!(
+        bgee_log(&result),
+        "~MOD/MOD.TP2~ #1 #17 // Label // @wlb-inputs: y\n"
+    );
+    assert_eq!(
+        payload(&result)["answers"],
+        serde_json::json!({
+            "bgee": { "components": [
+                { "tp2": "mod", "id": 17, "sets": { "english": "y", "polish": "t" } }
+            ] }
+        })
+    );
+}
+
+#[test]
+fn overlay_strips_marker_when_line_language_has_no_set() {
+    let original = polish_code("~MOD/MOD.TP2~ #1 #17 // Label // @wlb-inputs: old\r\n");
+    let workspace = bgee_workspace(with_sets("MOD/MOD.TP2", 17, &[("english", "y")]));
+
+    let result = overlay_workspace_wlb(&original, &workspace).expect("overlay");
+
+    assert_eq!(bgee_log(&result), "~MOD/MOD.TP2~ #1 #17 // Label\r\n");
+    assert_eq!(
+        payload(&result)["answers"]["bgee"]["components"],
+        serde_json::json!([{ "tp2": "mod", "id": 17, "sets": { "english": "y" } }])
+    );
+}
+
+#[test]
+fn overlay_never_writes_a_set_with_a_line_break() {
+    let original = polish_code("~MOD/MOD.TP2~ #1 #17 // Label // @wlb-inputs: old\n");
+    let workspace = bgee_workspace(with_sets(
+        "MOD/MOD.TP2",
+        17,
+        &[("english", "y"), ("polish", "a\nb")],
+    ));
+
+    let result = overlay_workspace_wlb(&original, &workspace).expect("overlay");
+
+    assert_eq!(bgee_log(&result), "~MOD/MOD.TP2~ #1 #17 // Label\n");
+    assert_eq!(
+        payload(&result)["answers"]["bgee"]["components"],
+        serde_json::json!([
+            { "tp2": "mod", "id": 17, "sets": { "english": "y", "polish": "a\nb" } }
+        ])
+    );
 }

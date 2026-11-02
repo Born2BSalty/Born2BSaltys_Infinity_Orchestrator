@@ -6,7 +6,7 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::path::PathBuf;
 
 use crate::app::added_mods;
-use crate::app::answer_sets::{AnswerBook, AnswerSide};
+use crate::app::answer_sets::{AnswerBook, AnswerKey, AnswerSide};
 use crate::app::controller::log_apply::{
     LogApplyReport, LogLineOutcome, apply_log_to_mods, log_line_allow_keys, normalize_path_key,
 };
@@ -131,6 +131,7 @@ fn apply_log_to_trees(
             first_languages: &state.step2.bgee_mod_languages,
             second_languages: &state.step2.bg2ee_mod_languages,
             book: &mut state.step3.answer_book,
+            shared: &state.shared_answers,
         }),
     };
     let mode = ApplyMode {
@@ -151,6 +152,7 @@ struct LogAnswers<'a> {
     first_languages: &'a BTreeMap<String, String>,
     second_languages: &'a BTreeMap<String, String>,
     book: &'a mut AnswerBook,
+    shared: &'a AnswerBook,
 }
 
 type MarkersBefore = BTreeMap<(usize, usize), String>;
@@ -183,6 +185,7 @@ impl LogAnswers<'_> {
             GameSlot::First => self.first_languages,
             GameSlot::Second => self.second_languages,
         };
+        let shared = self.shared;
         let mut side = AnswerSide {
             slot,
             languages,
@@ -192,25 +195,44 @@ impl LogAnswers<'_> {
             let LogLineOutcome::Ticked(targets) = &result.outcome else {
                 continue;
             };
-            let Some(log_spec) = log
+            let log_spec = log
                 .components()
                 .get(result.line)
                 .and_then(|installed| installed.wlb_inputs.as_deref())
                 .map(str::trim)
-                .filter(|inputs| !inputs.is_empty())
-            else {
-                continue;
-            };
+                .filter(|inputs| !inputs.is_empty());
             for &(mod_index, component_index) in targets {
-                if let Some(component) = mods
+                let Some(component) = mods
                     .get_mut(mod_index)
                     .and_then(|mod_state| mod_state.components.get_mut(component_index))
+                else {
+                    continue;
+                };
+                let previous = before
+                    .get(&(mod_index, component_index))
+                    .map(String::as_str);
+                if let Some(key) = AnswerKey::for_line(slot, &component.raw_line)
+                    && let Some(sets) = shared.others(&key)
                 {
-                    let previous = before
-                        .get(&(mod_index, component_index))
-                        .map(String::as_str);
-                    side.intake_log_answers(component, log_spec, previous);
+                    let language = languages
+                        .get(&crate::app::mod_downloads::normalize_mod_download_tp2(
+                            &key.tp2,
+                        ))
+                        .map_or(
+                            crate::app::language_names::UNTAGGED_LANGUAGE,
+                            String::as_str,
+                        );
+                    let sets = previous.map_or_else(
+                        || sets.clone(),
+                        |previous| sets.merged(language, Some(previous)),
+                    );
+                    side.intake_component(component, &sets);
+                    continue;
                 }
+                let Some(log_spec) = log_spec else {
+                    continue;
+                };
+                side.intake_log_answers(component, log_spec, previous);
             }
         }
         side.settle(mods);
@@ -585,6 +607,7 @@ pub(crate) fn tick_logged_mods(
             first_languages: &state.step2.bgee_mod_languages,
             second_languages: &state.step2.bg2ee_mod_languages,
             book: &mut state.step3.answer_book,
+            shared: &state.shared_answers,
         }),
     };
     let mode = ApplyMode {
@@ -1526,6 +1549,223 @@ mod tests {
         assert!(component.checked);
         assert_eq!(marker_spec(&component.raw_line), Some("z"));
         assert!(state.step3.answer_book.is_empty());
+    }
+
+    fn answer_sets_of(pairs: &[(&str, &str)]) -> crate::app::answer_sets::AnswerSets {
+        let mut sets = crate::app::answer_sets::AnswerSets::default();
+        for (language, spec) in pairs {
+            sets.set(language, spec);
+        }
+        sets
+    }
+
+    fn x_key() -> AnswerKey {
+        AnswerKey::new(GameSlot::First, "X/SETUP-X.TP2", 1)
+    }
+
+    fn share_code(log: &str, answers: Option<serde_json::Value>) -> String {
+        let mut payload = serde_json::json!({
+            "format_version": 1,
+            "game_install": "BGEE",
+            "install_mode": "start_from_scratch",
+            "weidu_logs": { "bgee": log }
+        });
+        if let Some(answers) = answers {
+            payload["answers"] = answers;
+        }
+        crate::app::modlist_share::encode_share_payload_text(&payload.to_string()).expect("code")
+    }
+
+    fn import_and_apply(
+        ambient: &IsolatedAmbient,
+        code: &str,
+        scanned_line: &str,
+        polish: bool,
+    ) -> WizardState {
+        static IMPORT_COUNTER: AtomicU64 = AtomicU64::new(0);
+        let n = IMPORT_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let folder = ambient.root.path.join(format!("import_{n}"));
+        let mut state = install_state("BGEE");
+        state.step1.bgee_log_folder = folder.to_string_lossy().to_string();
+        crate::app::modlist_share::import_modlist_share_code(&mut state, code).expect("import");
+        let mut mod_state = scanned_mod_with("X", "X/SETUP-X.TP2", &["1"]);
+        mod_state.components[0].raw_line = scanned_line.to_string();
+        state.step2.bgee_mods = vec![mod_state];
+        if polish {
+            state
+                .step2
+                .bgee_mod_languages
+                .insert("x".to_string(), "polish".to_string());
+        }
+        apply_weidu_log_selection_from_path(&mut state, true, Some(folder.join("weidu.log")));
+        state
+    }
+
+    fn polish_section() -> serde_json::Value {
+        serde_json::json!({
+            "bgee": {
+                "languages": { "x": "polish" },
+                "components": [
+                    { "tp2": "x", "id": 1, "sets": { "english": "y", "polish": "t" } }
+                ]
+            }
+        })
+    }
+
+    #[test]
+    fn import_section_wins_over_line_marker() {
+        let _lock = ambient_lock();
+        let ambient = IsolatedAmbient::create();
+        let code = share_code(
+            "~X/SETUP-X.TP2~ #1 #1 // X one // @wlb-inputs: z\n",
+            Some(polish_section()),
+        );
+
+        let state = import_and_apply(&ambient, &code, "~X/SETUP-X.TP2~ #1 #1 // X one", true);
+
+        let component = &state.step2.bgee_mods[0].components[0];
+        assert!(component.checked);
+        assert_eq!(marker_spec(&component.raw_line), Some("t"));
+        assert_eq!(
+            state.step3.answer_book.others(&x_key()),
+            Some(&answer_sets_of(&[("english", "y")]))
+        );
+    }
+
+    #[test]
+    fn import_without_section_counts_marker_as_english() {
+        let _lock = ambient_lock();
+        let ambient = IsolatedAmbient::create();
+        let code = share_code("~X/SETUP-X.TP2~ #0 #1 // X one // @wlb-inputs: y\n", None);
+
+        let polish = import_and_apply(&ambient, &code, "~X/SETUP-X.TP2~ #1 #1 // X one", true);
+        let component = &polish.step2.bgee_mods[0].components[0];
+        assert!(component.checked);
+        assert_eq!(marker_spec(&component.raw_line), None);
+        assert_eq!(
+            polish.step3.answer_book.others(&x_key()),
+            Some(&answer_sets_of(&[("english", "y")]))
+        );
+        assert!(polish.shared_answers.is_empty());
+
+        let english = import_and_apply(&ambient, &code, "~X/SETUP-X.TP2~ #0 #1 // X one", false);
+        let component = &english.step2.bgee_mods[0].components[0];
+        assert_eq!(marker_spec(&component.raw_line), Some("y"));
+        assert!(english.step3.answer_book.is_empty());
+    }
+
+    #[test]
+    fn answer_typed_during_install_survives_the_reapply() {
+        let _lock = ambient_lock();
+        let ambient = IsolatedAmbient::create();
+        for section in [
+            answer_sets_of(&[("english", "y")]),
+            answer_sets_of(&[("english", "y"), ("polish", "u")]),
+        ] {
+            let mut state = install_state("BGEE");
+            state.step2.bgee_mods = vec![scanned_mod_with("X", "X/SETUP-X.TP2", &["1"])];
+            state.step2.bgee_mods[0].components[0].raw_line =
+                "~X/SETUP-X.TP2~ #1 #1 // X one // @wlb-inputs: t".to_string();
+            state
+                .step2
+                .bgee_mod_languages
+                .insert("x".to_string(), "polish".to_string());
+            state.shared_answers.set_others(x_key(), section);
+
+            apply_log_text(
+                &mut state,
+                &ambient.root,
+                true,
+                "~X/SETUP-X.TP2~ #1 #1 // X one\n",
+            );
+
+            let component = &state.step2.bgee_mods[0].components[0];
+            assert!(component.checked);
+            assert_eq!(marker_spec(&component.raw_line), Some("t"));
+            assert_eq!(
+                state.step3.answer_book.others(&x_key()),
+                Some(&answer_sets_of(&[("english", "y")]))
+            );
+        }
+    }
+
+    #[test]
+    fn section_applies_to_a_ticked_line_without_marker() {
+        let _lock = ambient_lock();
+        let ambient = IsolatedAmbient::create();
+        let mut state = install_state("BGEE");
+        state.step2.bgee_mods = vec![scanned_mod_with("X", "X/SETUP-X.TP2", &["1"])];
+        state.step2.bgee_mods[0].components[0].raw_line =
+            "~X/SETUP-X.TP2~ #1 #1 // X one".to_string();
+        state
+            .step2
+            .bgee_mod_languages
+            .insert("x".to_string(), "polish".to_string());
+        state.shared_answers.set_others(
+            x_key(),
+            answer_sets_of(&[("english", "y"), ("polish", "t")]),
+        );
+
+        apply_log_text(
+            &mut state,
+            &ambient.root,
+            true,
+            "~X/SETUP-X.TP2~ #0 #1 // X one\n",
+        );
+
+        let component = &state.step2.bgee_mods[0].components[0];
+        assert!(component.checked);
+        assert_eq!(marker_spec(&component.raw_line), Some("t"));
+        assert_eq!(
+            state.step3.answer_book.others(&x_key()),
+            Some(&answer_sets_of(&[("english", "y")]))
+        );
+    }
+
+    #[test]
+    fn round_trip_export_import_keeps_every_set() {
+        let _lock = ambient_lock();
+        let ambient = IsolatedAmbient::create();
+        let mut sender = install_state("BGEE");
+        sender.step3.bgee_items = vec![crate::app::state::Step3ItemState {
+            tp_file: "SETUP-X.TP2".to_string(),
+            component_id: "1".to_string(),
+            mod_name: "X".to_string(),
+            component_label: "X one".to_string(),
+            raw_line: "~X/SETUP-X.TP2~ #1 #1 // X one // @wlb-inputs: t".to_string(),
+            prompt_summary: None,
+            prompt_events: Vec::new(),
+            selected_order: 1,
+            block_id: String::new(),
+            is_parent: false,
+            parent_placeholder: false,
+        }];
+        sender
+            .step2
+            .bgee_mod_languages
+            .insert("x".to_string(), "polish".to_string());
+        sender
+            .step3
+            .answer_book
+            .set_others(x_key(), answer_sets_of(&[("english", "y")]));
+
+        let code = crate::app::modlist_share::export_modlist_share_code(&sender).expect("export");
+
+        let polish = import_and_apply(&ambient, &code, "~X/SETUP-X.TP2~ #1 #1 // X one", true);
+        let component = &polish.step2.bgee_mods[0].components[0];
+        assert_eq!(marker_spec(&component.raw_line), Some("t"));
+        assert_eq!(
+            polish.step3.answer_book.others(&x_key()),
+            Some(&answer_sets_of(&[("english", "y")]))
+        );
+
+        let english = import_and_apply(&ambient, &code, "~X/SETUP-X.TP2~ #0 #1 // X one", false);
+        let component = &english.step2.bgee_mods[0].components[0];
+        assert_eq!(marker_spec(&component.raw_line), Some("y"));
+        assert_eq!(
+            english.step3.answer_book.others(&x_key()),
+            Some(&answer_sets_of(&[("polish", "t")]))
+        );
     }
 
     #[test]

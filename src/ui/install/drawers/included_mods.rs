@@ -527,12 +527,14 @@ fn render_component_row(
                         palette,
                     );
                 });
-                if let Some(inputs) = &row.wlb_inputs {
+                if !row.answer_sets.is_empty() {
                     ui.label(
-                        egui::RichText::new(format!("@wlb-inputs: {inputs}"))
-                            .size(11.0)
-                            .family(egui::FontFamily::Name("poppins_light".into()))
-                            .color(redesign_text_faint(palette)),
+                        egui::RichText::new(crate::app::share_answers::sets_label(
+                            &row.answer_sets,
+                        ))
+                        .size(11.0)
+                        .family(egui::FontFamily::Name("poppins_light".into()))
+                        .color(redesign_text_faint(palette)),
                     );
                 }
             });

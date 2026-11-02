@@ -3,12 +3,15 @@
 
 use std::collections::BTreeMap;
 
+use crate::app::answer_sets::AnswerSets;
 use crate::app::app_step2_update_source_refs::ModSourceRefsFile;
+use crate::app::game_authority::share_log_key;
 use crate::app::mod_downloads::{
     ModDownloadSource, SourceTier, SourceTiers, normalize_mod_download_tp2, source_link_label,
     source_open_url,
 };
 use crate::app::modlist_share::ModlistSharePreview;
+use crate::app::share_answers::ShareAnswers;
 use crate::mods::component::Component;
 use crate::ui::install::preview_counts::distinct_mod_count;
 
@@ -38,7 +41,7 @@ pub(crate) struct ModGroup {
 pub(crate) struct ComponentRow {
     pub(crate) id: String,
     pub(crate) label: String,
-    pub(crate) wlb_inputs: Option<String>,
+    pub(crate) answer_sets: AnswerSets,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -55,9 +58,13 @@ pub(crate) fn build(preview: &ModlistSharePreview, tiers: &SourceTiers) -> Insid
     let installed_refs = installed_refs_map(&preview.installed_refs_text);
     let sections = section_texts(preview)
         .into_iter()
-        .map(|(game, text)| GameSection {
-            game,
-            mods: parse_section(text, tiers, &installed_refs),
+        .map(|(game, text)| {
+            let answers = SectionAnswers {
+                share: &preview.answers,
+                slot_key: share_log_key(&game),
+            };
+            let mods = parse_section(text, tiers, &installed_refs, &answers);
+            GameSection { game, mods }
         })
         .collect();
 
@@ -124,10 +131,29 @@ pub(crate) fn filter_section(section: &GameSection, query_lower: &str) -> Vec<(u
         .collect()
 }
 
+struct SectionAnswers<'a> {
+    share: &'a ShareAnswers,
+    slot_key: &'a str,
+}
+
+impl SectionAnswers<'_> {
+    fn row_sets(&self, component: &Component) -> AnswerSets {
+        component
+            .component
+            .trim()
+            .parse::<i64>()
+            .ok()
+            .and_then(|id| self.share.component(self.slot_key, &component.tp_file, id))
+            .cloned()
+            .unwrap_or_else(|| AnswerSets::from_legacy(component.wlb_inputs.as_deref()))
+    }
+}
+
 fn parse_section(
     text: &str,
     tiers: &SourceTiers,
     installed_refs: &BTreeMap<String, String>,
+    answers: &SectionAnswers<'_>,
 ) -> Vec<ModGroup> {
     let mut groups: Vec<ModGroup> = Vec::new();
     for line in text.lines() {
@@ -141,7 +167,7 @@ fn parse_section(
         let row = ComponentRow {
             id: component.component.clone(),
             label: component_label(&component),
-            wlb_inputs: component.wlb_inputs.clone(),
+            answer_sets: answers.row_sets(&component),
         };
         let folder = if component.name.is_empty() {
             component.tp_file.clone()
@@ -267,6 +293,7 @@ mod tests {
             description: None,
             forked_from: Vec::new(),
             unresolved_mods: Vec::new(),
+            answers: ShareAnswers::default(),
         }
     }
 
@@ -276,6 +303,19 @@ mod tests {
 
     fn empty_refs() -> BTreeMap<String, String> {
         BTreeMap::new()
+    }
+
+    fn parse(
+        text: &str,
+        tiers: &SourceTiers,
+        installed_refs: &BTreeMap<String, String>,
+    ) -> Vec<ModGroup> {
+        let share = ShareAnswers::default();
+        let answers = SectionAnswers {
+            share: &share,
+            slot_key: "bgee",
+        };
+        parse_section(text, tiers, installed_refs, &answers)
     }
 
     #[test]
@@ -343,7 +383,7 @@ mod tests {
 ~A\\A.TP2~ #0 #1 // A comp two: v1
 ~B\\B.TP2~ #0 #0 // B comp one: v1
 ~A\\A.TP2~ #0 #2 // A comp three: v1";
-        let groups = parse_section(text, &empty_tiers(), &empty_refs());
+        let groups = parse(text, &empty_tiers(), &empty_refs());
 
         assert_eq!(groups.len(), 3);
         assert_eq!(groups[0].folder, "A");
@@ -359,7 +399,7 @@ mod tests {
         let text = "\
 ~SETUP-D0QUESTPACK.TP2~ #0 #5 // Additional Shadow Thieves Content: v3.5
 ~SETUP-D0QUESTPACK.TP2~ #0 #6 // Alternative Harper/Xzar Plot: v3.5";
-        let groups = parse_section(text, &empty_tiers(), &empty_refs());
+        let groups = parse(text, &empty_tiers(), &empty_refs());
 
         assert_eq!(groups.len(), 1);
         assert_eq!(groups[0].folder, "SETUP-D0QUESTPACK.TP2");
@@ -370,7 +410,7 @@ mod tests {
     #[test]
     fn component_label_joins_the_subcomponent_with_an_arrow() {
         let text = "~EET/EET.TP2~ #0 #0 // EET core (resource importation)->Default: v14.0";
-        let groups = parse_section(text, &empty_tiers(), &empty_refs());
+        let groups = parse(text, &empty_tiers(), &empty_refs());
 
         assert_eq!(
             groups[0].components[0].label,
@@ -381,11 +421,53 @@ mod tests {
     #[test]
     fn wlb_inputs_ride_on_the_component_row() {
         let text = r"~EET\EET.TP2~ #0 #0 // EET core: v14.0 // @wlb-inputs: y,D:\test1";
-        let groups = parse_section(text, &empty_tiers(), &empty_refs());
+        let groups = parse(text, &empty_tiers(), &empty_refs());
 
         assert_eq!(
-            groups[0].components[0].wlb_inputs.as_deref(),
-            Some("y,D:\\test1")
+            groups[0].components[0].answer_sets,
+            AnswerSets::from_legacy(Some("y,D:\\test1"))
+        );
+    }
+
+    #[test]
+    fn preview_rows_show_every_language() {
+        let json = serde_json::json!({
+            "format_version": 1,
+            "game_install": "EET",
+            "install_mode": "start_from_scratch",
+            "weidu_logs": {
+                "bgee": "~A\\A.TP2~ #0 #5 // A five: v1 // @wlb-inputs: t\n~A\\A.TP2~ #0 #6 // A six: v1 // @wlb-inputs: y",
+                "bg2ee": "~A\\A.TP2~ #0 #5 // A five: v1 // @wlb-inputs: n"
+            },
+            "answers": {
+                "bgee": {
+                    "languages": { "a": "polish" },
+                    "components": [
+                        { "tp2": "a", "id": 5, "sets": { "english": "y,1", "polish": "t,1" } }
+                    ]
+                }
+            }
+        });
+        let code = crate::app::modlist_share::encode_share_payload_text(&json.to_string())
+            .expect("encode");
+        let preview =
+            crate::app::modlist_share::preview_modlist_share_code(&code).expect("preview");
+
+        let model = build(&preview, &empty_tiers());
+
+        let first = &model.sections[0].mods[0].components;
+        assert_eq!(
+            crate::app::share_answers::sets_label(&first[0].answer_sets),
+            "English: y,1 · Polish: t,1"
+        );
+        assert_eq!(
+            crate::app::share_answers::sets_label(&first[1].answer_sets),
+            "English: y"
+        );
+        let second = &model.sections[1].mods[0].components;
+        assert_eq!(
+            crate::app::share_answers::sets_label(&second[0].answer_sets),
+            "English: n"
         );
     }
 
@@ -397,7 +479,7 @@ mod tests {
 ~A\\A.TP2~ #0 #0 // A comp one: v1
 
 // trailing comment";
-        let groups = parse_section(text, &empty_tiers(), &empty_refs());
+        let groups = parse(text, &empty_tiers(), &empty_refs());
 
         assert_eq!(groups.len(), 1);
         assert_eq!(groups[0].components.len(), 1);
@@ -418,7 +500,7 @@ mod tests {
         let row = ComponentRow {
             id: "5000".to_string(),
             label: "EET End".to_string(),
-            wlb_inputs: None,
+            answer_sets: AnswerSets::default(),
         };
         assert!(component_matches(&row, "eet end"));
         assert!(component_matches(&row, "5000"));
@@ -438,12 +520,12 @@ mod tests {
                         ComponentRow {
                             id: "0".to_string(),
                             label: "Fix one".to_string(),
-                            wlb_inputs: None,
+                            answer_sets: AnswerSets::default(),
                         },
                         ComponentRow {
                             id: "1".to_string(),
                             label: "Other".to_string(),
-                            wlb_inputs: None,
+                            answer_sets: AnswerSets::default(),
                         },
                     ],
                 },
@@ -455,7 +537,7 @@ mod tests {
                     components: vec![ComponentRow {
                         id: "0".to_string(),
                         label: "Fix related".to_string(),
-                        wlb_inputs: None,
+                        answer_sets: AnswerSets::default(),
                     }],
                 },
             ],
@@ -502,7 +584,7 @@ tp2 = "eeex"
         let tiers = source_tiers_from_texts("", "", modlist_toml);
         let text = "~EEEX\\EEEX.TP2~ #0 #0 // EEex: v1.1.0";
 
-        let groups = parse_section(text, &tiers, &empty_refs());
+        let groups = parse(text, &tiers, &empty_refs());
 
         assert_eq!(groups[0].version, "v1.1.0");
     }
@@ -523,7 +605,7 @@ tp2 = "eeex"
         let tiers = source_tiers_from_texts("", "", modlist_toml);
         let text = "~EEEX\\EEEX.TP2~ #0 #0 // EEex";
 
-        let groups = parse_section(text, &tiers, &empty_refs());
+        let groups = parse(text, &tiers, &empty_refs());
 
         assert_eq!(groups[0].version, "v1.2.0");
     }
@@ -544,7 +626,7 @@ tp2 = "cdtweaks"
         let tiers = source_tiers_from_texts("", "", modlist_toml);
         let text = "~CDTWEAKS\\CDTWEAKS.TP2~ #0 #0 // CDTweaks";
 
-        let groups = parse_section(text, &tiers, &empty_refs());
+        let groups = parse(text, &tiers, &empty_refs());
 
         assert_eq!(groups[0].version, "branch: master");
     }
@@ -565,7 +647,7 @@ tp2 = "eeex"
         let tiers = source_tiers_from_texts("", "", modlist_toml);
         let text = "~EEEX\\EEEX.TP2~ #0 #0 // EEex";
 
-        let groups = parse_section(text, &tiers, &empty_refs());
+        let groups = parse(text, &tiers, &empty_refs());
 
         assert_eq!(groups[0].version, "");
     }
@@ -576,7 +658,7 @@ tp2 = "eeex"
 
         let mut refs = empty_refs();
         refs.insert("eeex".to_string(), "v1.2.0".to_string());
-        let groups = parse_section(text, &empty_tiers(), &refs);
+        let groups = parse(text, &empty_tiers(), &refs);
         assert_eq!(groups[0].version, "v1.2.0");
     }
 
@@ -600,7 +682,7 @@ tp2 = "eeex"
     fn group_version_is_empty_without_any_source() {
         let text = "~EEEX\\EEEX.TP2~ #0 #0 // EEex";
 
-        let groups = parse_section(text, &empty_tiers(), &empty_refs());
+        let groups = parse(text, &empty_tiers(), &empty_refs());
 
         assert_eq!(groups[0].version, "");
     }

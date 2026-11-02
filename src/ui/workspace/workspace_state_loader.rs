@@ -81,6 +81,7 @@ pub fn populate_wizard_state_from_workspace(
 
     reset_scanned_step2_set(wizard_state);
     wizard_state.step3.answer_book.clear();
+    wizard_state.shared_answers.clear();
 
     let (mods, side) = tree_with_answers(wizard_state, GameSlot::First);
     apply_order_to_mods(&workspace.order_bgee, mods, side);
@@ -1509,6 +1510,37 @@ mod tests {
             &mut ws,
         );
         assert!(ws.step3.answer_book.is_empty());
+    }
+
+    #[test]
+    fn shared_answers_cleared_by_workspace_open_and_reset() {
+        use crate::app::answer_sets::{AnswerKey, AnswerSets};
+
+        let shared = || {
+            let mut ws = WizardState::default();
+            ws.shared_answers.set_others(
+                AnswerKey::new(GameSlot::First, "MOD/MOD.TP2", 5),
+                AnswerSets::from_legacy(Some("y")),
+            );
+            ws
+        };
+
+        let root = TempRoot::named("bio_loader_shared_answers");
+        let store = SettingsStore::new_with_path(root.0.join("bio_settings.json"));
+        let mut opened = shared();
+        let mut list = entry(Game::BGEE);
+        list.destination_folder = root.path_of("dest");
+        populate_wizard_state_from_workspace(
+            &ModlistWorkspaceState::default(),
+            &list,
+            &store,
+            &mut opened,
+        );
+        assert!(opened.shared_answers.is_empty());
+
+        let mut reset = shared();
+        reset.reset_workflow_keep_step1();
+        assert!(reset.shared_answers.is_empty());
     }
 
     struct TempRoot(std::path::PathBuf);

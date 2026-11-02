@@ -1,4 +1,6 @@
 use super::render;
+use crate::app::answer_sets::{AnswerKey, AnswerSets};
+use crate::app::game_authority::GameSlot;
 use crate::app::state::{
     InstallerAnswerDraft, InstallerAnswerTarget, InstallerAnswersEditor, WizardState,
 };
@@ -28,6 +30,10 @@ fn drawer_fixture() -> WizardState {
                 InstallerAnswerDraft { text: String::new(), blank_enter: true },
                 InstallerAnswerDraft { text: "a".to_string(), blank_enter: false },
             ],
+            install_language: "english".to_string(),
+            answer_language: "english".to_string(),
+            book_sets: AnswerSets::default(),
+            parked: std::collections::BTreeMap::new(),
         }],
         active: 0,
         status: None,
@@ -441,4 +447,111 @@ fn moving_blank_enter_to_first_row_preserves_all_answers_through_real_controls()
     assert!(!target.answers[1].blank_enter);
     assert_eq!(target.answers[1].text, "1");
     assert_eq!(target.answers[2].text, "test");
+}
+
+fn label_painted(harness: &Harness<'_, WizardState>, label: &str) -> bool {
+    harness
+        .output()
+        .shapes
+        .iter()
+        .any(|shape| shape_label(&shape.shape, label).is_some())
+}
+
+fn polish_install_with_english_book(state: &mut WizardState) {
+    state
+        .step2
+        .bgee_mod_languages
+        .insert("a7-multikits".to_string(), "polish".to_string());
+    let english = AnswerSets::from_legacy(Some("y"));
+    state.step3.answer_book.set_others(
+        AnswerKey::new(GameSlot::First, "A7-MULTIKITS/A7-MULTIKITS.TP2", 11),
+        english.clone(),
+    );
+    let target = &mut state.step3.installer_answers.as_mut().unwrap().targets[0];
+    target.install_language = "polish".to_string();
+    target.answer_language = "polish".to_string();
+    target.book_sets = english;
+}
+
+#[test]
+fn language_tabs_render_and_switch_through_real_clicks() {
+    let mut harness = fixture_harness(egui::vec2(1280.0, 820.0));
+    polish_install_with_english_book(harness.state_mut());
+    let line = harness.state().step3.bgee_items[0].raw_line.clone();
+    harness.run();
+    assert!(label_painted(&harness, "Polish"));
+    assert!(label_painted(&harness, "installs"));
+    assert!(label_painted(
+        &harness,
+        "Save closes this window and saves only this tab. With no answers, it clears this language's answers."
+    ));
+    click_label(&mut harness, "English");
+    let target = &harness
+        .state()
+        .step3
+        .installer_answers
+        .as_ref()
+        .unwrap()
+        .targets[0];
+    assert_eq!(target.answer_language, "english");
+    assert_eq!(target.answers.len(), 1);
+    assert_eq!(target.answers[0].text, "y");
+    assert!(label_painted(
+        &harness,
+        "Polish is the language this mod installs in. These English answers are kept for sharing and for installs in English."
+    ));
+    click_label(&mut harness, "y");
+    let modifiers = egui::Modifiers {
+        ctrl: true,
+        command: true,
+        ..egui::Modifiers::NONE
+    };
+    harness.input_mut().events.extend([
+        egui::Event::Key {
+            key: egui::Key::A,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers,
+        },
+        egui::Event::Key {
+            key: egui::Key::A,
+            physical_key: None,
+            pressed: false,
+            repeat: false,
+            modifiers,
+        },
+        egui::Event::Text("n".to_string()),
+    ]);
+    harness.run();
+    click_label(&mut harness, "Save answers");
+    assert_eq!(harness.state().step3.installer_answers, None);
+    assert_eq!(harness.state().step3.bgee_items[0].raw_line, line);
+    assert_eq!(
+        harness.state().step3.answer_book.others(&AnswerKey::new(
+            GameSlot::First,
+            "A7-MULTIKITS/A7-MULTIKITS.TP2",
+            11
+        )),
+        Some(&AnswerSets::from_legacy(Some("n")))
+    );
+    assert_eq!(
+        harness
+            .ctx
+            .data(|data| data.get_temp::<usize>(egui::Id::new("fixture_save_notifications"))),
+        Some(1)
+    );
+}
+
+#[test]
+fn single_language_editor_shows_no_language_tabs() {
+    let mut harness = fixture_harness(egui::vec2(1280.0, 820.0));
+    harness.run();
+    assert!(label_painted(&harness, "Save answers"));
+    assert!(!label_painted(&harness, "installs"));
+    assert!(!label_painted(&harness, "English"));
+    assert!(label_painted(
+        &harness,
+        "Save closes this window. With no answers, it clears this component's saved inputs."
+    ));
 }

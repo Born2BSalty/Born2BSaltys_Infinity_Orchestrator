@@ -443,6 +443,7 @@ mod tests {
             description: description.map(str::to_string),
             forked_from,
             unresolved_mods: Vec::new(),
+            answers: crate::app::share_answers::ShareAnswers::default(),
         }
     }
 

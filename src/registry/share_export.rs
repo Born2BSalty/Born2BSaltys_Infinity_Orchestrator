@@ -10,6 +10,7 @@ use serde_json::Value;
 use tracing::debug;
 
 use crate::app::modlist_share::ForkAncestor;
+use crate::app::share_answers::ShareAnswers;
 use crate::app::state::WizardState;
 use crate::registry::model::ModlistEntry;
 
@@ -165,8 +166,12 @@ fn overlay_workspace_logs(
     } else {
         ("bgee", &workspace.order_bgee)
     };
+    let mut answers = obj
+        .get("answers")
+        .map(ShareAnswers::parse)
+        .unwrap_or_default();
     for (slot, order) in [first, ("bg2ee", &workspace.order_bg2ee)] {
-        if !order.iter().any(|item| item.wlb_inputs.is_some()) {
+        if !order.iter().any(|item| !item.answer_sets().is_empty()) {
             continue;
         }
         let Some(logs) = obj.get_mut("weidu_logs").and_then(Value::as_object_mut) else {
@@ -178,8 +183,16 @@ fn overlay_workspace_logs(
             continue;
         };
         let mut lines: Vec<String> = text.split_inclusive('\n').map(str::to_string).collect();
-        overlay_slot_lines(slot, order, &mut lines);
+        overlay_slot_lines(slot, order, &mut lines, &mut answers);
         logs.insert(slot.to_string(), Value::String(lines.concat()));
+    }
+    match answers.to_value() {
+        Some(section) => {
+            obj.insert("answers".to_string(), section);
+        }
+        None => {
+            obj.remove("answers");
+        }
     }
 }
 
@@ -187,12 +200,14 @@ fn overlay_slot_lines(
     slot: &str,
     order: &[crate::registry::workspace_model::ComponentRef],
     lines: &mut [String],
+    answers: &mut ShareAnswers,
 ) {
     let mut seen = std::collections::HashSet::new();
     for item in order {
-        let Some(spec) = item.wlb_inputs.as_deref() else {
+        let sets = item.answer_sets();
+        if sets.is_empty() {
             continue;
-        };
+        }
         let normalized_tp2 = crate::app::mod_downloads::normalize_mod_download_tp2(&item.tp2);
         if !seen.insert((normalized_tp2.clone(), item.id)) {
             debug!(
@@ -230,13 +245,20 @@ fn overlay_slot_lines(
             },
             |body| (body, "\r\n"),
         );
-        match crate::app::wlb_inputs::replace_marker(body, spec) {
-            Ok(replaced) => lines[*index] = format!("{replaced}{ending}"),
-            Err(err) => debug!(
-                "Skipped {slot} WLB answers for {} #{}: {err}",
-                item.tp2, item.id
-            ),
-        }
+        let language = answers.line_language(slot, &normalized_tp2);
+        let marked = sets.get(language).and_then(|spec| {
+            crate::app::wlb_inputs::replace_marker(body, spec)
+                .map_err(|err| {
+                    debug!(
+                        "Stripped {slot} WLB marker for {} #{}: {err}",
+                        item.tp2, item.id
+                    );
+                })
+                .ok()
+        });
+        let body = marked.unwrap_or_else(|| crate::app::wlb_inputs::strip_marker(body));
+        lines[*index] = format!("{body}{ending}");
+        answers.set_component(slot, &normalized_tp2, item.id, sets);
     }
 }
 

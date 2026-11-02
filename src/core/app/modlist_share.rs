@@ -11,7 +11,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tracing::warn;
 
-use crate::app::game_authority;
+use crate::app::answer_sets::{AnswerBook, AnswerKey, AnswerSets, install_language};
+use crate::app::game_authority::{self, GameSlot};
+use crate::app::language_names::UNTAGGED_LANGUAGE;
+use crate::app::share_answers::{ShareAnswers, slot_for_key};
 use crate::app::state::WizardState;
 use crate::app::step5::diagnostics::build_weidu_export_lines;
 
@@ -178,6 +181,7 @@ pub(crate) fn export_modlist_share_code_with(
     insert_unresolved_mods(&mut payload, &sources.unresolved_mods);
     insert_export_provenance(&mut payload, state);
     insert_game_version(&mut payload, state);
+    insert_answer_languages(&mut payload, state);
     let payload_text = serde_json::to_string(&payload).map_err(|err| err.to_string())?;
     let code = encode_share_payload_text(&payload_text)?;
     let workspace =
@@ -226,6 +230,34 @@ fn insert_game_version(payload: &mut serde_json::Value, state: &WizardState) {
         return;
     };
     obj.insert("game_version".to_string(), json!(version.tag()));
+}
+
+fn insert_answer_languages(payload: &mut serde_json::Value, state: &WizardState) {
+    let first_key =
+        game_authority::share_log_key(game_authority::first_slot_tab(&state.step1.game_install));
+    let mut answers = ShareAnswers::default();
+    for (slot_key, slot, items) in [
+        (first_key, GameSlot::First, &state.step3.bgee_items),
+        ("bg2ee", GameSlot::Second, &state.step3.bg2ee_items),
+    ] {
+        for item in items
+            .iter()
+            .filter(|item| !item.is_parent && !item.parent_placeholder)
+        {
+            let tp2 = crate::app::wlb_inputs::parse_identity(&item.raw_line).map_or_else(
+                || crate::app::mod_downloads::normalize_mod_download_tp2(&item.tp_file),
+                |identity| identity.normalized_tp2,
+            );
+            let language = install_language(&state.step2, slot, &tp2);
+            if language != UNTAGGED_LANGUAGE {
+                answers.set_line_language(slot_key, &tp2, language);
+            }
+        }
+    }
+    let (Some(section), Some(obj)) = (answers.to_value(), payload.as_object_mut()) else {
+        return;
+    };
+    obj.insert("answers".to_string(), section);
 }
 
 fn insert_unresolved_mods(payload: &mut serde_json::Value, unresolved_mods: &[String]) {
@@ -308,6 +340,7 @@ pub(crate) struct ModlistSharePreview {
     pub(crate) description: Option<String>,
     pub(crate) forked_from: Vec<ForkAncestor>,
     pub(crate) unresolved_mods: Vec<String>,
+    pub(crate) answers: ShareAnswers,
 }
 
 pub(crate) fn preview_modlist_share_code(code: &str) -> Result<ModlistSharePreview, String> {
@@ -325,6 +358,7 @@ pub(crate) fn import_modlist_share_code(
     step1.install_mode =
         crate::app::state::Step1State::normalize_install_mode(&payload.install_mode).to_string();
     step1.sync_install_mode_flags();
+    let shared_answers = shared_answer_book(&step1, &preview.answers)?;
     crate::app::modlist_config_files::save_pending_mod_configs(&payload.mod_configs.files)?;
     write_imported_weidu_logs(&step1, &payload)?;
     if let Some(text) = payload
@@ -364,6 +398,7 @@ pub(crate) fn import_modlist_share_code(
     state
         .parser_choice_phrases
         .clone_from(&payload.parser_choice_phrases);
+    state.shared_answers = shared_answers;
     state.step2.selected_source_ids =
         crate::app::app_step2_update_source_refs::load_installed_source_ids();
     state.step5.last_status_text = "Imported modlist share code".to_string();
@@ -428,6 +463,8 @@ pub(crate) struct ModlistSharePayload {
     pub(crate) description: Option<String>,
     #[serde(default)]
     pub(crate) forked_from: Vec<ForkAncestor>,
+    #[serde(default)]
+    pub(crate) answers: serde_json::Value,
 }
 
 const fn default_true() -> bool {
@@ -571,6 +608,7 @@ fn share_preview(payload: &ModlistSharePayload) -> Result<ModlistSharePreview, S
         description: payload.description.clone(),
         forked_from: payload.forked_from.clone(),
         unresolved_mods: payload.source_overrides.unresolved_mods.clone(),
+        answers: ShareAnswers::parse(&payload.answers),
     })
 }
 
@@ -626,26 +664,8 @@ fn rewrite_imported_eet_bg2ee_wlb_paths(
             out.push(line.to_string());
             continue;
         };
-        let mut tokens = crate::app::wlb_inputs::decode_answers(spec)?;
-        let mut line_changed = false;
-        for token in &mut tokens {
-            if wlb_token_is_path_like(token) {
-                if local_bg1_path.is_empty() {
-                    return Err(
-                        "Imported EET WLB input requires local BGEE/BG1 path. Set BGEE game path before importing."
-                            .to_string(),
-                    );
-                }
-                *token = requote_like(token, local_bg1_path);
-                line_changed = true;
-            }
-        }
-        if line_changed {
-            if let Some(encoded) = crate::app::wlb_inputs::encode_answers(&tokens)? {
-                out.push(crate::app::wlb_inputs::replace_marker(line, &encoded)?);
-            } else {
-                out.push(line.to_string());
-            }
+        if let Some(encoded) = localize_eet_spec(spec, local_bg1_path)? {
+            out.push(crate::app::wlb_inputs::replace_marker(line, &encoded)?);
             changed = true;
         } else {
             out.push(line.to_string());
@@ -656,6 +676,67 @@ fn rewrite_imported_eet_bg2ee_wlb_paths(
     } else {
         Ok(Some(text.to_string()))
     }
+}
+
+fn localize_eet_spec(spec: &str, local_bg1_path: &str) -> Result<Option<String>, String> {
+    let mut tokens = crate::app::wlb_inputs::decode_answers(spec)?;
+    let mut changed = false;
+    for token in &mut tokens {
+        if wlb_token_is_path_like(token) {
+            if local_bg1_path.is_empty() {
+                return Err(
+                    "Imported EET WLB input requires local BGEE/BG1 path. Set BGEE game path before importing."
+                        .to_string(),
+                );
+            }
+            *token = requote_like(token, local_bg1_path);
+            changed = true;
+        }
+    }
+    if changed {
+        crate::app::wlb_inputs::encode_answers(&tokens)
+    } else {
+        Ok(None)
+    }
+}
+
+fn localize_eet_sets(sets: &AnswerSets, local_bg1_path: &str) -> Result<AnswerSets, String> {
+    let mut localized = sets.clone();
+    for language in sets.languages() {
+        let Some(spec) = sets.get(language) else {
+            continue;
+        };
+        if crate::app::wlb_inputs::decode_answers(spec).is_err() {
+            continue;
+        }
+        if let Some(encoded) = localize_eet_spec(spec, local_bg1_path)? {
+            localized.set(language, &encoded);
+        }
+    }
+    Ok(localized)
+}
+
+fn shared_answer_book(
+    step1: &crate::app::state::Step1State,
+    answers: &ShareAnswers,
+) -> Result<AnswerBook, String> {
+    let eet = step1.game_install == "EET";
+    let local_bg1_path = local_eet_bg1_source_path(step1);
+    let mut book = AnswerBook::default();
+    for (slot_key, slot_answers) in answers.slots() {
+        let Some(slot) = slot_for_key(slot_key) else {
+            continue;
+        };
+        for ((tp2, id), sets) in &slot_answers.components {
+            let sets = if eet && slot == GameSlot::Second {
+                localize_eet_sets(sets, local_bg1_path)?
+            } else {
+                sets.clone()
+            };
+            book.set_others(AnswerKey::new(slot, tp2, *id), sets);
+        }
+    }
+    Ok(book)
 }
 
 fn local_eet_bg1_source_path(step1: &crate::app::state::Step1State) -> &str {
@@ -3113,6 +3194,108 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    fn answer_sets_of(pairs: &[(&str, &str)]) -> AnswerSets {
+        let mut sets = AnswerSets::default();
+        for (language, spec) in pairs {
+            sets.set(language, spec);
+        }
+        sets
+    }
+
+    #[test]
+    fn export_writes_line_language_marker_and_every_set() {
+        let _lock = crate::app::mod_downloads::AMBIENT_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _guard = ConfigDirGuard::new("answers_section");
+        let mut state = WizardState::default();
+        state.step1.game_install = "BGEE".to_string();
+        state.step3.bgee_items = vec![crate::app::state::Step3ItemState {
+            tp_file: "SETUP-TWEAKS.TP2".to_string(),
+            component_id: "1200".to_string(),
+            mod_name: "TWEAKS".to_string(),
+            component_label: "Tweak".to_string(),
+            raw_line: "~TWEAKS/SETUP-TWEAKS.TP2~ #1 #1200 // Tweak // @wlb-inputs: t".to_string(),
+            prompt_summary: None,
+            prompt_events: Vec::new(),
+            selected_order: 1,
+            block_id: String::new(),
+            is_parent: false,
+            parent_placeholder: false,
+        }];
+        state
+            .step2
+            .bgee_mod_languages
+            .insert("tweaks".to_string(), "polish".to_string());
+        state.step3.answer_book.set_others(
+            AnswerKey::new(GameSlot::First, "TWEAKS/SETUP-TWEAKS.TP2", 1200),
+            answer_sets_of(&[("english", "y")]),
+        );
+
+        let code = export_modlist_share_code(&state).expect("export");
+        let json = decode_payload_json(&code);
+
+        assert_eq!(
+            json["answers"],
+            json!({
+                "bgee": {
+                    "languages": { "tweaks": "polish" },
+                    "components": [
+                        { "tp2": "tweaks", "id": 1200, "sets": { "english": "y", "polish": "t" } }
+                    ]
+                }
+            })
+        );
+        let log = json["weidu_logs"]["bgee"].as_str().expect("bgee log");
+        let line = log
+            .lines()
+            .find(|line| line.contains("#1200"))
+            .expect("component line");
+        assert_eq!(crate::app::wlb_inputs::marker_spec(line), Some("t"));
+    }
+
+    #[test]
+    fn eet_bg2ee_paths_localized_in_every_set() {
+        let step1 = crate::app::state::Step1State {
+            game_install: "EET".to_string(),
+            eet_bgee_game_folder: r"D:\Games\BGEE".to_string(),
+            ..Default::default()
+        };
+        let section = json!({
+            "bgee": { "components": [
+                { "tp2": "a", "id": 1, "sets": { "english": r"y,C:\Old\BGEE" } }
+            ] },
+            "bg2ee": { "components": [
+                { "tp2": "a", "id": 1, "sets": {
+                    "english": r"y,C:\Old\BGEE",
+                    "polish": r"t,C:\Stary\BGEE",
+                    "german": "a\nb"
+                } }
+            ] }
+        });
+
+        let book = shared_answer_book(&step1, &ShareAnswers::parse(&section)).expect("book");
+
+        assert_eq!(
+            book.others(&AnswerKey::new(GameSlot::Second, "a", 1)),
+            Some(&answer_sets_of(&[
+                ("english", r"y,D:\Games\BGEE"),
+                ("polish", r"t,D:\Games\BGEE"),
+                ("german", "a\nb"),
+            ]))
+        );
+        assert_eq!(
+            book.others(&AnswerKey::new(GameSlot::First, "a", 1)),
+            Some(&answer_sets_of(&[("english", r"y,C:\Old\BGEE")]))
+        );
+
+        let no_local_path = crate::app::state::Step1State {
+            game_install: "EET".to_string(),
+            ..Default::default()
+        };
+        assert!(shared_answer_book(&no_local_path, &ShareAnswers::parse(&section)).is_err());
     }
 }
 

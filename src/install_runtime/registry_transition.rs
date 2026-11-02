@@ -169,10 +169,7 @@ fn build_verified_code(
                         wizard_state,
                         &crate::registry::workspace_model::ModlistWorkspaceState::default(),
                     );
-                    let has_markers = workspace.order_bgee.iter()
-                        .chain(&workspace.order_bg2ee).chain(&workspace.order_iwdee)
-                        .any(|item| item.wlb_inputs.is_some());
-                    let overlaid = if has_markers {
+                    let overlaid = if has_markers(&workspace) {
                         match share_export::overlay_workspace_wlb(src, &workspace) {
                             Ok(code) => code,
                             Err(overlay_error) => {
@@ -189,6 +186,15 @@ fn build_verified_code(
         },
         Some,
     )
+}
+
+fn has_markers(workspace: &crate::registry::workspace_model::ModlistWorkspaceState) -> bool {
+    workspace
+        .order_bgee
+        .iter()
+        .chain(&workspace.order_bg2ee)
+        .chain(&workspace.order_iwdee)
+        .any(|item| !item.answer_sets().is_empty())
 }
 
 fn regenerate_code(
@@ -334,6 +340,30 @@ mod tests {
     use std::sync::atomic::{AtomicU64, Ordering};
 
     static TMP_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+    #[test]
+    fn has_markers_counts_non_english_sets() {
+        use crate::app::answer_sets::AnswerSets;
+        use crate::registry::workspace_model::{ComponentRef, ModlistWorkspaceState};
+
+        let mut polish = AnswerSets::default();
+        polish.set("polish", "t");
+        let item = ComponentRef {
+            tp2: "MOD/MOD.TP2".to_string(),
+            id: 17,
+            wlb_inputs: None,
+            answers: AnswerSets::default(),
+        }
+        .with_answer_sets(polish);
+        assert_eq!(item.wlb_inputs, None);
+
+        let answered = ModlistWorkspaceState {
+            order_bg2ee: vec![item],
+            ..Default::default()
+        };
+        assert!(has_markers(&answered));
+        assert!(!has_markers(&ModlistWorkspaceState::default()));
+    }
 
     fn temp_registry_store(label: &str) -> (RegistryStore, std::path::PathBuf) {
         let n = TMP_COUNTER.fetch_add(1, Ordering::Relaxed);

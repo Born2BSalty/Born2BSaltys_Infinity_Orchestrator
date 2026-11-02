@@ -878,6 +878,7 @@ mod tests {
             description: None,
             forked_from: Vec::new(),
             unresolved_mods: Vec::new(),
+            answers: crate::app::share_answers::ShareAnswers::default(),
         };
         assert_eq!(display_name("  Typed  ", &preview), "Typed");
         assert_eq!(display_name("   ", &preview), "From the code");

@@ -675,6 +675,7 @@ mod tests {
             description: None,
             forked_from: Vec::new(),
             unresolved_mods: Vec::new(),
+            answers: crate::app::share_answers::ShareAnswers::default(),
         });
 
         refresh_source_compat_issue(&mut app.install_screen_state, &app.wizard_state.step1);
@@ -729,6 +730,7 @@ mod tests {
             description: None,
             forked_from: Vec::new(),
             unresolved_mods: vec!["Alpha".to_string(), "Beta".to_string()],
+            answers: crate::app::share_answers::ShareAnswers::default(),
         });
 
         refresh_source_compat_issue(&mut app.install_screen_state, &app.wizard_state.step1);
@@ -776,6 +778,7 @@ mod tests {
                 description: None,
                 forked_from: Vec::new(),
                 unresolved_mods: Vec::new(),
+                answers: crate::app::share_answers::ShareAnswers::default(),
             }
         }
 
@@ -854,6 +857,7 @@ mod tests {
             description: None,
             forked_from: Vec::new(),
             unresolved_mods: Vec::new(),
+            answers: crate::app::share_answers::ShareAnswers::default(),
         }
     }
 
@@ -1406,6 +1410,7 @@ mod tests {
             description: None,
             forked_from: Vec::new(),
             unresolved_mods: Vec::new(),
+            answers: crate::app::share_answers::ShareAnswers::default(),
         });
         app.install_screen_state.review.name = "Tactical EET".to_string();
         app.install_screen_state.destination = destination.to_string_lossy().into_owned();

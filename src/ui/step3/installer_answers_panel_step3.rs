@@ -3,13 +3,22 @@
 
 use eframe::egui;
 
-use crate::app::state::{InstallerAnswerDraft, InstallerAnswersEditor, WizardState};
+use crate::app::language_names::display_language_name;
+use crate::app::state::{
+    InstallerAnswerDraft, InstallerAnswerTarget, InstallerAnswersEditor, WizardState,
+};
 use crate::ui::orchestrator::widgets::btn::{BtnOpts, redesign_btn};
 use crate::ui::orchestrator::widgets::drawer::{self, DrawerSpec, DrawerWidth};
+use crate::ui::orchestrator::widgets::tab_strip::{TabItem, render_tab_strip};
 use crate::ui::shared::redesign_tokens::{ThemePalette, redesign_text_muted};
 use crate::ui::step3::installer_answers_step3::{
-    current_target_available, editing_locked, save_current,
+    answer_languages, current_target_available, editing_locked, save_current, select_language,
+    shows_language_tabs,
 };
+
+const SINGLE_LANGUAGE_HINT: &str =
+    "Save closes this window. With no answers, it clears this component's saved inputs.";
+const LANGUAGE_TAB_HINT: &str = "Save closes this window and saves only this tab. With no answers, it clears this language's answers.";
 
 pub(crate) fn render(ctx: &egui::Context, state: &mut WizardState, palette: ThemePalette) -> bool {
     if editing_locked(state) || !current_target_available(state) {
@@ -31,11 +40,12 @@ pub(crate) fn render(ctx: &egui::Context, state: &mut WizardState, palette: Them
         header_button: None,
         suppress_escape: false,
     };
+    let mut requested_language = None;
     let response = drawer::render(
         ctx,
         palette,
         &spec,
-        |ui| render_body(ui, &mut editor, palette),
+        |ui| requested_language = render_body(ui, &mut editor, palette),
         |ui| {
             let save = redesign_btn(
                 ui,
@@ -60,6 +70,10 @@ pub(crate) fn render(ctx: &egui::Context, state: &mut WizardState, palette: Them
         .active_game_tab
         .clone_from(&editor.targets[editor.active].game_tab);
     state.step3.installer_answers = Some(editor);
+    if let Some(language) = requested_language {
+        select_language(state, &language);
+        ctx.request_repaint();
+    }
     if response.footer.0 {
         match save_current(state) {
             Ok(()) => return true,
@@ -73,7 +87,11 @@ pub(crate) fn render(ctx: &egui::Context, state: &mut WizardState, palette: Them
     false
 }
 
-fn render_body(ui: &mut egui::Ui, editor: &mut InstallerAnswersEditor, palette: ThemePalette) {
+fn render_body(
+    ui: &mut egui::Ui,
+    editor: &mut InstallerAnswersEditor,
+    palette: ThemePalette,
+) -> Option<String> {
     if editor.review_missing {
         ui.strong(format!(
             "{} components need installer answers",
@@ -121,8 +139,19 @@ fn render_body(ui: &mut egui::Ui, editor: &mut InstallerAnswersEditor, palette: 
         egui::RichText::new(&target.title).family(egui::FontFamily::Name("poppins_medium".into())),
     );
     ui.add_space(10.0);
+    let tabs_shown = shows_language_tabs(target);
+    let requested_language = if tabs_shown {
+        render_language_tabs(ui, target, palette)
+    } else {
+        None
+    };
     ui.label("Enter the answers BIO should send when the installer asks for input. Answers are sent in order. Some questions depend on your game or earlier choices.");
     ui.add_space(18.0);
+    let hint = if tabs_shown {
+        LANGUAGE_TAB_HINT
+    } else {
+        SINGLE_LANGUAGE_HINT
+    };
     if ui.available_width() >= 900.0 {
         let item_spacing = ui.spacing().item_spacing.x;
         ui.scope(|ui| {
@@ -136,17 +165,63 @@ fn render_body(ui: &mut egui::Ui, editor: &mut InstallerAnswersEditor, palette: 
                     &mut columns[1],
                     &mut target.answers,
                     &mut editor.status,
+                    hint,
                     palette,
                 );
             });
         });
     } else {
-        render_answer_section(ui, &mut target.answers, &mut editor.status, palette);
+        render_answer_section(ui, &mut target.answers, &mut editor.status, hint, palette);
         ui.add_space(20.0);
         ui.separator();
         ui.add_space(12.0);
         render_questions(ui, &target.questions);
     }
+    requested_language
+}
+
+fn render_language_tabs(
+    ui: &mut egui::Ui,
+    target: &InstallerAnswerTarget,
+    palette: ThemePalette,
+) -> Option<String> {
+    let languages = answer_languages(target);
+    let labels = languages
+        .iter()
+        .map(|language| display_language_name(language))
+        .collect::<Vec<_>>();
+    let tabs = languages
+        .iter()
+        .zip(&labels)
+        .map(|(language, label)| TabItem {
+            label,
+            sub: (*language == target.install_language).then_some("installs"),
+        })
+        .collect::<Vec<_>>();
+    let selected = languages
+        .iter()
+        .position(|language| *language == target.answer_language)
+        .unwrap_or(0);
+    let mut active = selected;
+    render_tab_strip(ui, palette, &tabs, &mut active);
+    let clip = ui.clip_rect();
+    let pointer = ui.input(|input| input.pointer.interact_pos());
+    if !pointer.is_some_and(|pos| clip.contains(pos)) {
+        active = selected;
+    }
+    ui.add_space(8.0);
+    if target.answer_language != target.install_language {
+        ui.label(
+            egui::RichText::new(format!(
+                "{install} is the language this mod installs in. These {lang} answers are kept for sharing and for installs in {lang}.",
+                install = display_language_name(&target.install_language),
+                lang = display_language_name(&target.answer_language),
+            ))
+            .color(redesign_text_muted(palette)),
+        );
+        ui.add_space(10.0);
+    }
+    (active != selected).then(|| languages[active].clone())
 }
 
 fn render_questions(ui: &mut egui::Ui, questions: &str) {
@@ -159,6 +234,7 @@ fn render_answer_section(
     ui: &mut egui::Ui,
     answers: &mut Vec<InstallerAnswerDraft>,
     status: &mut Option<String>,
+    hint: &str,
     palette: ThemePalette,
 ) {
     ui.strong("Answers to send, in order");
@@ -171,12 +247,7 @@ fn render_answer_section(
         *status = None;
     }
     ui.add_space(14.0);
-    ui.label(
-        egui::RichText::new(
-            "Save closes this window. With no answers, it clears this component's saved inputs.",
-        )
-        .color(redesign_text_muted(palette)),
-    );
+    ui.label(egui::RichText::new(hint).color(redesign_text_muted(palette)));
     if let Some(status) = status {
         ui.add_space(12.0);
         ui.label(status.as_str());
