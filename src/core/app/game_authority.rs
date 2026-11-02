@@ -4,7 +4,7 @@
 use crate::app::compat_dlc_source::{bg2ee_source_for, bgee_source_for};
 use crate::app::state::Step1State;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum GameSlot {
     First,
     Second,

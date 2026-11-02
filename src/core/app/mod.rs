@@ -2,6 +2,7 @@
 // Copyright (c) 2026 Born2BSalty
 
 pub mod added_mods;
+pub mod answer_sets;
 pub mod app_bootstrap_init;
 #[path = "navigation/app_nav.rs"]
 pub mod app_nav;
@@ -104,6 +105,8 @@ pub mod game_version;
 pub mod github_forks_list;
 #[path = "step2/update/github_release_list.rs"]
 pub mod github_release_list;
+pub mod install_language_rewrite;
+pub mod language_names;
 pub mod mod_downloads;
 pub mod mod_downloads_migrate;
 pub mod mod_installer_parser;
@@ -127,6 +130,7 @@ pub mod scan;
 pub mod selected_details;
 pub mod selection_jump;
 pub mod selection_refs;
+pub mod share_answers;
 pub mod source_check;
 #[path = "step2/update/source_form.rs"]
 pub mod source_form;
@@ -162,5 +166,9 @@ pub mod tp2_component_begin;
 pub mod versions_view;
 pub mod wlb_inputs;
 
+#[cfg(test)]
+mod language_names_tests;
+#[cfg(test)]
+mod share_answers_tests;
 #[cfg(test)]
 mod wlb_inputs_tests;

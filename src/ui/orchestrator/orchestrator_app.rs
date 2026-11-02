@@ -1420,7 +1420,7 @@ impl eframe::App for OrchestratorApp {
         });
 
         self.notification_manager
-            .guard_language_recovery_escape(ctx);
+            .guard_selection_recovery_escape(ctx);
 
         let history_has_items = self.notification_manager.has_history();
         let history_open = self.notification_manager.history_open;
@@ -1566,15 +1566,7 @@ impl OrchestratorApp {
         if history_clicked {
             self.notification_manager.history_open = !self.notification_manager.history_open;
         }
-        self.notification_manager.set_language_recovery_enabled(
-            self.workspace_view.modlist_id.trim(),
-            self.workspace_view.step2.recovery_scan_generation,
-            self.wizard_state.step2.is_scanning,
-        );
         self.notification_manager.show(ctx, palette);
-        if let Some(action) = self.notification_manager.take_language_recovery_action() {
-            crate::ui::workspace::step2::step2_language_recovery::apply_recovery(self, action);
-        }
         self.notification_manager
             .render_history_popup(ctx, palette, !history_clicked);
     }
@@ -2508,5 +2500,5 @@ mod tests {
 }
 
 #[cfg(test)]
-#[path = "orchestrator_language_recovery_tests.rs"]
-mod language_recovery_tests;
+#[path = "orchestrator_selection_recovery_tests.rs"]
+mod selection_recovery_tests;

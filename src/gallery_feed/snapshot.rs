@@ -224,8 +224,8 @@ mod parser_sharing_tests {
             order_bgee: vec![ComponentRef {
                 tp2: "MOD/MOD.TP2".to_string(),
                 id: 17,
-                language: 2,
                 wlb_inputs: Some("bio-json-v1:[\"a,b\",\"\"]".to_string()),
+                answers: crate::app::answer_sets::AnswerSets::default(),
             }],
             ..Default::default()
         };

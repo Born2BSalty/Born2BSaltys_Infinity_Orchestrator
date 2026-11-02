@@ -41,8 +41,10 @@ pub(super) fn poll_step2_scan_events(
             Ok(Step2ScanEvent::Finished {
                 bgee_mods,
                 bg2ee_mods,
+                mod_languages,
                 report,
             }) => {
+                state.step2.replace_mod_languages(mod_languages);
                 handle_finished(
                     state,
                     step2_scan_rx,
@@ -266,4 +268,118 @@ fn prune_stale_installed_refs(state: &WizardState, scanned_mods_root: &str) -> O
     )
     .err()
     .map(|err| err.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app::answer_sets::{AnswerKey, AnswerSets};
+    use crate::app::game_authority::GameSlot;
+    use crate::app::state::Step2ComponentState;
+
+    struct ConfigRoot(std::path::PathBuf);
+
+    impl ConfigRoot {
+        fn new() -> Self {
+            use std::sync::atomic::{AtomicU64, Ordering};
+            static N: AtomicU64 = AtomicU64::new(0);
+            let root = Self(std::env::temp_dir().join(format!(
+                "bio_scan_events_{}_{}",
+                std::process::id(),
+                N.fetch_add(1, Ordering::Relaxed)
+            )));
+            std::fs::create_dir_all(&root.0).expect("create temp root");
+            crate::platform_defaults::set_config_dir_override(Some(root.0.clone()));
+            root
+        }
+    }
+
+    impl Drop for ConfigRoot {
+        fn drop(&mut self) {
+            crate::platform_defaults::clear_config_dir_override_if(&self.0);
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn scanned(raw_line: &str, selected: Option<usize>) -> Step2ModState {
+        Step2ModState {
+            name: "MOD".to_string(),
+            tp_file: "MOD/MOD.TP2".to_string(),
+            tp2_path: "MOD/MOD.TP2".to_string(),
+            readme_path: None,
+            ini_path: None,
+            web_url: None,
+            package_marker: None,
+            latest_checked_version: None,
+            update_locked: false,
+            mod_prompt_summary: None,
+            mod_prompt_events: Vec::new(),
+            checked: selected.is_some(),
+            hidden_components: Vec::new(),
+            components: vec![Step2ComponentState {
+                component_id: "5".to_string(),
+                label: "Label".to_string(),
+                weidu_group: None,
+                collapsible_group: None,
+                collapsible_group_is_umbrella: false,
+                collapsible_group_combinable: false,
+                raw_line: raw_line.to_string(),
+                prompt_summary: None,
+                prompt_events: Vec::new(),
+                is_meta_mode_component: false,
+                disabled: false,
+                compat_kind: None,
+                compat_source: None,
+                compat_related_mod: None,
+                compat_related_component: None,
+                compat_graph: None,
+                compat_evidence: None,
+                disabled_reason: None,
+                checked: selected.is_some(),
+                selected_order: selected,
+            }],
+        }
+    }
+
+    #[test]
+    fn autosave_mid_scan_tags_markers_with_previous_languages() {
+        let _root = ConfigRoot::new();
+        let mut state = WizardState::default();
+        state.step1.game_install = "BGEE".to_string();
+        state
+            .step2
+            .bgee_mod_languages
+            .insert("mod".to_string(), "polish".to_string());
+        state.step2.bgee_mods = vec![scanned(
+            "~MOD/MOD.TP2~ #1 #5 // Label // @wlb-inputs: t",
+            Some(1),
+        )];
+        state.step3.answer_book.set_others(
+            AnswerKey::new(GameSlot::First, "MOD/MOD.TP2", 5),
+            AnswerSets::from_legacy(Some("y")),
+        );
+        state.step3.bgee_items =
+            crate::app::controller::step3_sync::build_step3_items(&state.step2.bgee_mods);
+
+        handle_preview(
+            &mut state,
+            vec![scanned("~MOD/MOD.TP2~ #0 #5 // Label", None)],
+            Vec::new(),
+            1,
+        );
+
+        assert_eq!(
+            state.step2.mod_install_language("BGEE", "MOD/MOD.TP2"),
+            Some("polish")
+        );
+        let extracted =
+            crate::ui::workspace::workspace_state_loader::extract_workspace_state_from_wizard(
+                &state,
+                &crate::registry::workspace_model::ModlistWorkspaceState::default(),
+            );
+        let mut expected = AnswerSets::from_legacy(Some("y"));
+        expected.set("polish", "t");
+        assert_eq!(extracted.order_bgee.len(), 1);
+        assert_eq!(extracted.order_bgee[0].answer_sets(), expected);
+    }
 }

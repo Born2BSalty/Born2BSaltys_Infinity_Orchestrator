@@ -692,6 +692,11 @@ fn manual_wlb_real_checked_completion_saves_and_exports_actual_manual_answers() 
     expected["weidu_logs"]["bgee"] = serde_json::json!(
         "~BARDICWONDERS/SETUP-BARDICWONDERS.TP2~ #0 #1008 // Bardic Wonders: Troubadour Kit // @wlb-inputs: 1\n~BP-BGT-WORLDMAP/SETUP-BP-BGT-WORLDMAP.TP2~ #0 #0 // Worldmap // @wlb-inputs: 2"
     );
+    expected["answers"] = serde_json::json!({
+        "bgee": { "components": [
+            { "tp2": "bardicwonders", "id": 1008, "sets": { "english": "1" } }
+        ] }
+    });
     assert_eq!(exported, expected);
     std::fs::remove_file(store.path()).expect("remove fixture file");
     std::fs::remove_dir(root).expect("remove empty fixture directory");

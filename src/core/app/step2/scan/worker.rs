@@ -7,6 +7,8 @@ mod build_states;
 #[path = "worker_language.rs"]
 mod language;
 
+pub use language::detect_preferred_game_locale;
+
 mod orchestrate {
     use std::collections::BTreeMap;
     use std::path::{Path, PathBuf};
@@ -17,7 +19,10 @@ mod orchestrate {
     use crate::app::controller::util::current_exe_fingerprint;
     use crate::app::scan::cache::{cache_context, load_scan_cache, save_scan_cache};
     use crate::app::scan::discovery::{build_preview_mods, group_tp2s, resolve_scan_game_dir};
-    use crate::app::scan::{ENABLE_TWO_PHASE_PREVIEW, ScannedComponent, Step2ScanEvent};
+    use crate::app::scan::{
+        ENABLE_TWO_PHASE_PREVIEW, ModInstallLanguages, ScannedComponent, Step2ScanEvent,
+        languages_by_component_tp2,
+    };
     use crate::app::state::{Step1State, Step2ModState, Step2ScanReport, Step2Tp2ProbeReport};
     use crate::platform_defaults::resolve_weidu_binary;
 
@@ -132,7 +137,15 @@ mod orchestrate {
         step1: &Step1State,
         sender: &Sender<Step2ScanEvent>,
         cancel: &Arc<AtomicBool>,
-    ) -> Result<(Vec<Step2ModState>, Vec<Step2ModState>, Step2ScanReport), String> {
+    ) -> Result<
+        (
+            Vec<Step2ModState>,
+            Vec<Step2ModState>,
+            ModInstallLanguages,
+            Step2ScanReport,
+        ),
+        String,
+    > {
         let inputs = scan_inputs(step1)?;
         let grouped = group_tp2s(&inputs.mods_root, inputs.scan_depth)?;
         let preferred_locale_info = Arc::new(detect_preferred_game_locale(step1));
@@ -155,6 +168,7 @@ mod orchestrate {
                 &inputs.weidu,
                 &inputs.game_dir,
                 &inputs.mods_root,
+                &preferred_locale_info.locale,
             )),
             next_index: Arc::new(AtomicUsize::new(0)),
             progress_count: Arc::new(AtomicUsize::new(0)),
@@ -180,9 +194,12 @@ mod orchestrate {
             scan_cache_save_error,
             tp2_reports,
         } = results;
+        let languages_by_tp2 = languages_by_component_tp2(&mods_map);
         let scanned_mods = to_mod_states(mods_map, &tp2_map, &inputs.mods_root);
         let (first_game_mods, second_game_mods) =
             split_mods_by_game(step1.game_install.as_str(), scanned_mods);
+        let mod_languages =
+            ModInstallLanguages::from_scan(&first_game_mods, &second_game_mods, &languages_by_tp2);
         let report = build_scan_report(
             &inputs,
             &preferred_locale_info,
@@ -192,7 +209,7 @@ mod orchestrate {
             scan_cache_save_error,
             tp2_reports,
         );
-        Ok((first_game_mods, second_game_mods, report))
+        Ok((first_game_mods, second_game_mods, mod_languages, report))
     }
 
     fn scan_inputs(step1: &Step1State) -> Result<ScanInputs, String> {

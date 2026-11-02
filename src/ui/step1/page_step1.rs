@@ -390,6 +390,7 @@ mod tests {
                 author: "@root".to_string(),
             }],
             unresolved_mods: Vec::new(),
+            answers: crate::app::share_answers::ShareAnswers::default(),
         };
 
         let text = format_modlist_import_preview(&preview);

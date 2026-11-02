@@ -1557,6 +1557,10 @@ fn seed_active_wizard(wizard: &mut crate::app::state::WizardState) {
                 text: "preserved-answer".to_string(),
                 blank_enter: false,
             }],
+            install_language: "english".to_string(),
+            answer_language: "english".to_string(),
+            book_sets: crate::app::answer_sets::AnswerSets::default(),
+            parked: std::collections::BTreeMap::new(),
         }],
         ..InstallerAnswersEditor::default()
     });

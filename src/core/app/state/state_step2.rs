@@ -9,6 +9,7 @@ use crate::app::game_authority::GameSlot;
 use crate::app::github_forks_list::ForksListState;
 use crate::app::github_release_list::ReleaseListState;
 use crate::app::mod_downloads::normalize_mod_download_tp2;
+use crate::app::scan::ModInstallLanguages;
 use crate::app::source_form::SourceForm;
 use crate::app::step2_action::ModSourceEditDestination;
 use crate::app::versions_view::{KnownExtras, VersionsView};
@@ -163,6 +164,8 @@ pub struct Step2State<Flag = bool> {
     pub total_count: usize,
     pub bgee_mods: Vec<Step2ModState>,
     pub bg2ee_mods: Vec<Step2ModState>,
+    pub bgee_mod_languages: BTreeMap<String, String>,
+    pub bg2ee_mod_languages: BTreeMap<String, String>,
     pub selected: Option<Step2Selection>,
     pub next_selection_order: usize,
     pub collapse_epoch: u64,
@@ -263,6 +266,8 @@ impl Default for Step2State {
             total_count: 0,
             bgee_mods: Vec::new(),
             bg2ee_mods: Vec::new(),
+            bgee_mod_languages: BTreeMap::new(),
+            bg2ee_mod_languages: BTreeMap::new(),
             selected: None,
             next_selection_order: 1,
             collapse_epoch: 0,
@@ -368,6 +373,23 @@ impl Step2State {
     #[must_use]
     pub fn logged_missing_count(&self) -> usize {
         self.logged_missing_keys().len()
+    }
+
+    #[must_use]
+    pub(crate) fn mod_install_language(&self, tab: &str, tp2: &str) -> Option<&str> {
+        let languages = if tab == "BG2EE" {
+            &self.bg2ee_mod_languages
+        } else {
+            &self.bgee_mod_languages
+        };
+        languages
+            .get(&normalize_mod_download_tp2(tp2))
+            .map(String::as_str)
+    }
+
+    pub(crate) fn replace_mod_languages(&mut self, languages: ModInstallLanguages) {
+        self.bgee_mod_languages = languages.bgee;
+        self.bg2ee_mod_languages = languages.bg2ee;
     }
 }
 

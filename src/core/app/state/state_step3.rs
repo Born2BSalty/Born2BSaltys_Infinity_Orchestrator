@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
+use crate::app::answer_sets::{AnswerBook, AnswerSets};
 use crate::app::game_authority::GameSlot;
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -24,6 +25,10 @@ pub struct InstallerAnswerTarget {
     pub(crate) title: String,
     pub(crate) questions: String,
     pub(crate) answers: Vec<InstallerAnswerDraft>,
+    pub(crate) install_language: String,
+    pub(crate) answer_language: String,
+    pub(crate) book_sets: AnswerSets,
+    pub(crate) parked: BTreeMap<String, Vec<InstallerAnswerDraft>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -107,6 +112,7 @@ pub struct Step3State<Flag = bool> {
     pub prompt_edit_json: String,
     pub prompt_edit_status: String,
     pub pending_log_placements: Vec<Step3LogPlacement>,
+    pub answer_book: AnswerBook,
 }
 
 impl<Flag> Step3State<Flag> {
@@ -175,6 +181,7 @@ impl Default for Step3State {
             prompt_edit_json: String::new(),
             prompt_edit_status: String::new(),
             pending_log_placements: Vec::new(),
+            answer_book: AnswerBook::default(),
         }
     }
 }

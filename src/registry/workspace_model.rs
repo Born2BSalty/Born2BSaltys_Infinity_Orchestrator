@@ -5,6 +5,8 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
+use crate::app::answer_sets::AnswerSets;
+use crate::app::language_names::UNTAGGED_LANGUAGE;
 use crate::ui::install::state_install::DestChoice;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -22,10 +24,29 @@ pub struct ComponentRef {
 
     pub id: i64,
 
-    pub language: u8,
-
     #[serde(skip_serializing_if = "Option::is_none")]
     pub wlb_inputs: Option<String>,
+
+    #[serde(default, skip_serializing_if = "AnswerSets::is_empty")]
+    pub answers: AnswerSets,
+}
+
+impl ComponentRef {
+    #[must_use]
+    pub fn answer_sets(&self) -> AnswerSets {
+        if self.answers.is_empty() {
+            AnswerSets::from_legacy(self.wlb_inputs.as_deref())
+        } else {
+            self.answers.clone()
+        }
+    }
+
+    #[must_use]
+    pub fn with_answer_sets(mut self, sets: AnswerSets) -> Self {
+        self.wlb_inputs = sets.get(UNTAGGED_LANGUAGE).map(str::to_string);
+        self.answers = sets;
+        self
+    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -47,24 +68,15 @@ pub struct UnresolvedSelection {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
-pub struct RetainedLanguageAnswers {
-    pub original: ComponentRef,
-    pub target: ComponentRef,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(default)]
 pub struct SelectionRecovery {
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub unresolved: Vec<UnresolvedSelection>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub retained_answers: Vec<RetainedLanguageAnswers>,
 }
 
 impl SelectionRecovery {
     #[must_use]
     pub const fn is_empty(&self) -> bool {
-        self.unresolved.is_empty() && self.retained_answers.is_empty()
+        self.unresolved.is_empty()
     }
 }
 
@@ -147,8 +159,8 @@ mod tests {
         w.order_bgee.push(ComponentRef {
             tp2: "EET/EET.TP2".to_string(),
             id: 0,
-            language: 0,
             wlb_inputs: None,
+            answers: AnswerSets::default(),
         });
         w.expand_state.insert("bgee:EET/EET.TP2".to_string(), true);
         w.last_share_code = Some("ABC-123".to_string());
@@ -287,8 +299,8 @@ mod tests {
         let r = ComponentRef {
             tp2: "MOD/MOD.TP2".to_string(),
             id: 0,
-            language: 0,
             wlb_inputs: None,
+            answers: AnswerSets::default(),
         };
         let s = serde_json::to_string(&r).expect("serialize");
         assert!(
@@ -303,8 +315,8 @@ mod tests {
         let r = ComponentRef {
             tp2: "MOD/MOD.TP2".to_string(),
             id: 5,
-            language: 0,
             wlb_inputs: Some(r"y,D:\test1".to_string()),
+            answers: AnswerSets::default(),
         };
         let s = serde_json::to_string(&r).expect("serialize");
         let r2: ComponentRef = serde_json::from_str(&s).expect("deserialize");
@@ -320,5 +332,69 @@ mod tests {
             r.wlb_inputs, None,
             "legacy entry without the field must parse to None"
         );
+    }
+
+    #[test]
+    fn legacy_language_field_loads_and_is_not_written_back() {
+        let raw = r#"{"tp2":"MOD/MOD.TP2","id":3,"language":4,"wlb_inputs":"y"}"#;
+        let r: ComponentRef = serde_json::from_str(raw).expect("parse legacy");
+        assert_eq!(
+            r,
+            ComponentRef {
+                tp2: "MOD/MOD.TP2".to_string(),
+                id: 3,
+                wlb_inputs: Some("y".to_string()),
+                answers: AnswerSets::default(),
+            }
+        );
+        let s = serde_json::to_string(&r).expect("serialize");
+        assert!(!s.contains("language"), "got: {s}");
+    }
+
+    #[test]
+    fn legacy_retained_answers_load_into_recovery_and_are_not_written_back() {
+        let raw = r#"{"selection_recovery":{"BGEE":{"unresolved":[{"original":{"tp2":"MOD/MOD.TP2","id":3,"language":0},"position":1}],"retained_answers":[{"original":{"tp2":"MOD/MOD.TP2","id":4,"language":0,"wlb_inputs":"y"},"target":{"tp2":"MOD/MOD.TP2","id":4,"language":1}}]},"BG2EE":{"retained_answers":[{"original":{"tp2":"X/X.TP2","id":1,"language":0},"target":{"tp2":"X/X.TP2","id":1,"language":2}}]}}}"#;
+        let w: ModlistWorkspaceState = serde_json::from_str(raw).expect("parse legacy");
+        assert_eq!(w.selection_recovery["BGEE"].unresolved[0].position, 1);
+        assert_eq!(w.selection_recovery["BGEE"].unresolved[0].original.id, 3);
+        assert!(w.selection_recovery["BG2EE"].is_empty());
+        let s = serde_json::to_string(&w).expect("serialize");
+        assert!(!s.contains("retained_answers"), "got: {s}");
+        assert!(!s.contains("language"), "got: {s}");
+    }
+
+    #[test]
+    fn component_ref_writes_answers_and_english_wlb_inputs() {
+        let mut sets = AnswerSets::default();
+        sets.set("english", "y");
+        sets.set("polish", "t");
+        let r = ComponentRef {
+            tp2: "MOD/MOD.TP2".to_string(),
+            id: 2,
+            ..ComponentRef::default()
+        }
+        .with_answer_sets(sets.clone());
+        let json: serde_json::Value = serde_json::to_value(&r).expect("serialize");
+        assert_eq!(
+            json["answers"],
+            serde_json::json!({"english": "y", "polish": "t"})
+        );
+        assert_eq!(json["wlb_inputs"], serde_json::json!("y"));
+        let back: ComponentRef = serde_json::from_value(json).expect("deserialize");
+        assert_eq!(back.answer_sets(), sets);
+
+        let old: ComponentRef =
+            serde_json::from_str(r#"{"tp2":"MOD/MOD.TP2","id":2,"wlb_inputs":"y"}"#)
+                .expect("parse old entry");
+        assert!(old.answers.is_empty());
+        assert_eq!(old.answer_sets(), AnswerSets::from_legacy(Some("y")));
+        assert_eq!(
+            old.answer_sets().languages().collect::<Vec<_>>(),
+            ["english"]
+        );
+
+        let polish_only = ComponentRef::default().with_answer_sets(sets.merged("english", None));
+        let json = serde_json::to_string(&polish_only).expect("serialize");
+        assert!(!json.contains("wlb_inputs"), "got: {json}");
     }
 }

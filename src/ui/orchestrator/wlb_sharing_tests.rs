@@ -20,8 +20,8 @@ fn manual_wlb_cached_share_uses_requested_workspace_and_refreshes_both_caches() 
             order_bgee: vec![ComponentRef {
                 tp2: "MOD/MOD.TP2".to_string(),
                 id: 17,
-                language: 2,
                 wlb_inputs: Some("bio-json-v1:[\"\",\"a,b\"]".to_string()),
+                answers: crate::app::answer_sets::AnswerSets::default(),
             }],
             parser_choice_phrases: Some(vec!["Workspace".to_string()]),
             last_share_code: Some(original),
@@ -76,8 +76,8 @@ fn share_falls_back_to_stored_code_when_overlay_fails() {
             order_bgee: vec![ComponentRef {
                 tp2: "MOD/MOD.TP2".to_string(),
                 id: 17,
-                language: 0,
                 wlb_inputs: Some("y".to_string()),
+                answers: crate::app::answer_sets::AnswerSets::default(),
             }],
             ..Default::default()
         },
@@ -114,8 +114,8 @@ fn manual_wlb_active_workspace_share_extracts_current_dirty_answers() {
             order_bgee: vec![ComponentRef {
                 tp2: "MOD/MOD.TP2".to_string(),
                 id: 17,
-                language: 2,
                 wlb_inputs: Some("cached".to_string()),
+                answers: crate::app::answer_sets::AnswerSets::default(),
             }],
             parser_choice_phrases: Some(vec!["Workspace".to_string()]),
             last_share_code: Some(original),

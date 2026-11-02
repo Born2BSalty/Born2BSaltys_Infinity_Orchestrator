@@ -5,6 +5,7 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 use std::time::Instant;
 
+use crate::app::answer_sets::AnswerSets;
 use crate::app::app_step2_log::LogShortfall;
 use crate::app::state::Step2Selection;
 use crate::registry::model::Game;
@@ -75,9 +76,8 @@ impl Default for WeiduLogImportForm {
 pub struct RescanSelection {
     pub tp2_upper: String,
     pub component_id: String,
-    pub language: u8,
     pub selected_order: Option<usize>,
-    pub wlb_inputs: Option<String>,
+    pub answers: AnswerSets,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]

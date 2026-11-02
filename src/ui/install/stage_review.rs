@@ -4,12 +4,15 @@
 use eframe::egui;
 
 use crate::app::compat_dlc_source::{SourceNotice, SourceNoticeSeverity, SourceRemedy};
+use crate::app::language_names::display_language_name;
 use crate::app::modlist_share::ModlistSharePreview;
 use crate::registry::destination_claim::{
     ClaimContext, DestinationClaim, resolve_destination_claim,
 };
 use crate::registry::model::ModlistRegistry;
-use crate::ui::install::state_install::{DestChoice, InstallScreenState, ReviewOrigin};
+use crate::ui::install::state_install::{
+    AnswerLanguageIssue, DestChoice, InstallScreenState, ReviewOrigin,
+};
 use crate::ui::install::{destination_field, destination_not_empty, destination_owned};
 use crate::ui::orchestrator::widgets::{
     BtnOpts, InputOpts, redesign_btn, redesign_section_header, redesign_text_input,
@@ -313,6 +316,16 @@ fn render_all_source_notices(
         render_source_notice(ui, palette, &notice, action);
         ui.add_space(16.0);
     }
+
+    if let Some(issue) = answer_language_warning(state) {
+        render_warning_frame(
+            ui,
+            &answer_language_warning_title(issue),
+            &answer_language_warning_body(issue),
+            "",
+        );
+        ui.add_space(16.0);
+    }
 }
 
 fn fact_row(ui: &mut egui::Ui, palette: ThemePalette, label: &str, value: &str) {
@@ -406,15 +419,50 @@ pub(crate) const fn source_warning_action_text(
     }
 }
 
+#[must_use]
+pub(crate) const fn answer_language_warning(
+    state: &InstallScreenState,
+) -> Option<&AnswerLanguageIssue> {
+    if state.review.modify || reinstall_locked(state.review.origin) {
+        return None;
+    }
+    state.answer_language_issue.as_ref()
+}
+
+#[must_use]
+pub(crate) fn answer_language_warning_title(issue: &AnswerLanguageIssue) -> String {
+    format!(
+        "Installer answers are not in {}",
+        display_language_name(&issue.language)
+    )
+}
+
+#[must_use]
+pub(crate) fn answer_language_warning_body(issue: &AnswerLanguageIssue) -> String {
+    format!(
+        "This list's installer answers were set in another language. Installing in {} will pause at up to {} components to ask for about {} answers. Choose Review and modify to set your own answers first.",
+        display_language_name(&issue.language),
+        issue.components,
+        issue.answers
+    )
+}
+
 pub(crate) fn render_source_warning(
     ui: &mut egui::Ui,
     issue: &str,
     action: SourceWarningAction,
     remedy: SourceRemedy,
 ) {
+    render_warning_frame(
+        ui,
+        source_warning_title(remedy),
+        issue,
+        source_warning_action_text(action, remedy),
+    );
+}
+
+fn render_warning_frame(ui: &mut egui::Ui, title: &str, issue: &str, action_text: &str) {
     let body_color = egui::Color32::from_rgba_unmultiplied(0xff, 0xff, 0xff, 0xCC);
-    let title = source_warning_title(remedy);
-    let action_text = source_warning_action_text(action, remedy);
     egui::Frame::default()
         .fill(destination_not_empty::warn_fill())
         .stroke(egui::Stroke::new(
@@ -878,6 +926,7 @@ mod tests {
             description: None,
             forked_from: Vec::new(),
             unresolved_mods: Vec::new(),
+            answers: crate::app::share_answers::ShareAnswers::default(),
         };
         assert_eq!(display_name("  Typed  ", &preview), "Typed");
         assert_eq!(display_name("   ", &preview), "From the code");
@@ -1219,6 +1268,68 @@ mod tests {
                 ""
             );
         }
+    }
+
+    fn polish_issue() -> AnswerLanguageIssue {
+        AnswerLanguageIssue {
+            language: "polish".to_string(),
+            components: 3,
+            answers: 7,
+        }
+    }
+
+    #[test]
+    fn issue_never_holds_begin() {
+        let checks = DestinationChecks {
+            claim: DestinationClaim::Free,
+            ownership_blocks: false,
+            dest_valid: true,
+            dest_non_empty: false,
+        };
+        let mut state = InstallScreenState {
+            review: crate::ui::install::state_install::ReviewState {
+                name: "Tactical EET".to_string(),
+                ..Default::default()
+            },
+            import_code: "BIO-MODLIST-V1:CODE".to_string(),
+            answer_language_issue: Some(polish_issue()),
+            ..Default::default()
+        };
+        assert!(answer_language_warning(&state).is_some());
+        assert!(!source_notice_blocks(&state));
+        assert!(!begin_disabled_for(&state, &checks));
+        state.review.modify = true;
+        assert!(!begin_disabled_for(&state, &checks));
+    }
+
+    #[test]
+    fn warning_hidden_in_modify_mode_and_on_reinstall() {
+        let mut state = InstallScreenState {
+            answer_language_issue: Some(polish_issue()),
+            ..Default::default()
+        };
+        assert_eq!(answer_language_warning(&state), Some(&polish_issue()));
+        state.review.modify = true;
+        assert_eq!(answer_language_warning(&state), None);
+        state.review.modify = false;
+        state.review.origin = ReviewOrigin::Reinstall;
+        assert_eq!(answer_language_warning(&state), None);
+        state.review.origin = ReviewOrigin::Paste;
+        state.answer_language_issue = None;
+        assert_eq!(answer_language_warning(&state), None);
+    }
+
+    #[test]
+    fn answer_language_warning_copy_names_the_language_and_counts() {
+        let issue = polish_issue();
+        assert_eq!(
+            answer_language_warning_title(&issue),
+            "Installer answers are not in Polish"
+        );
+        assert_eq!(
+            answer_language_warning_body(&issue),
+            "This list's installer answers were set in another language. Installing in Polish will pause at up to 3 components to ask for about 7 answers. Choose Review and modify to set your own answers first."
+        );
     }
 
     #[test]

@@ -108,15 +108,16 @@ fn pick_resume_folder(dev_mode: bool, workspace: &ModlistWorkspaceState) -> Opti
 }
 
 fn snapshot_from_order(order: &[ComponentRef]) -> Vec<RescanSelection> {
+    let mut seen = std::collections::HashSet::new();
     order
         .iter()
+        .filter(|c| seen.insert((c.tp2.to_ascii_uppercase(), c.id)))
         .enumerate()
         .map(|(i, c)| RescanSelection {
             tp2_upper: c.tp2.to_ascii_uppercase(),
             component_id: c.id.to_string(),
-            language: c.language,
             selected_order: Some(i + 1),
-            wlb_inputs: c.wlb_inputs.clone(),
+            answers: c.answer_sets(),
         })
         .collect()
 }
@@ -131,14 +132,12 @@ mod tests {
             ComponentRef {
                 tp2: "BG1UB/SETUP-BG1UB.TP2".to_string(),
                 id: 0,
-                language: 0,
-                wlb_inputs: None,
+                ..ComponentRef::default()
             },
             ComponentRef {
                 tp2: "EeFixPack/EeFixPack.TP2".to_string(),
                 id: 2,
-                language: 0,
-                wlb_inputs: None,
+                ..ComponentRef::default()
             },
         ];
         let snap = snapshot_from_order(&order);
@@ -360,26 +359,25 @@ mod tests {
             ComponentRef {
                 tp2: "MOD/MOD.TP2".to_string(),
                 id: 5,
-                language: 0,
                 wlb_inputs: Some(r"y,D:\test1".to_string()),
+                ..ComponentRef::default()
             },
             ComponentRef {
                 tp2: "OTHER/OTHER.TP2".to_string(),
                 id: 0,
-                language: 0,
-                wlb_inputs: None,
+                ..ComponentRef::default()
             },
         ];
         let snap = snapshot_from_order(&order);
         assert_eq!(snap.len(), 2);
         assert_eq!(
-            snap[0].wlb_inputs.as_deref(),
+            snap[0].answers.get("english"),
             Some(r"y,D:\test1"),
-            "snapshot_from_order must carry wlb_inputs from ComponentRef"
+            "snapshot_from_order must carry wlb_inputs from ComponentRef as English"
         );
-        assert_eq!(
-            snap[1].wlb_inputs, None,
-            "snapshot_from_order must preserve None when wlb_inputs is absent"
+        assert!(
+            snap[1].answers.is_empty(),
+            "snapshot_from_order must preserve no answers when wlb_inputs is absent"
         );
     }
 
@@ -391,14 +389,12 @@ mod tests {
                 ComponentRef {
                     tp2: "BG1UB/BG1UB.TP2".to_string(),
                     id: 11,
-                    language: 0,
-                    wlb_inputs: None,
+                    ..ComponentRef::default()
                 },
                 ComponentRef {
                     tp2: "BG1UB/BG1UB.TP2".to_string(),
                     id: 0,
-                    language: 0,
-                    wlb_inputs: None,
+                    ..ComponentRef::default()
                 },
             ],
             dev_scanned_mods_folder: Some("/some/scanned/mods".to_string()),
@@ -486,14 +482,14 @@ mod tests {
             let legacy = ComponentRef {
                 tp2: "OLD/OLD.TP2".to_string(),
                 id: 1,
-                language: 0,
                 wlb_inputs: Some("old".to_string()),
+                ..ComponentRef::default()
             };
             let current = ComponentRef {
                 tp2: "MOD/MOD.TP2".to_string(),
                 id: 17,
-                language: 2,
                 wlb_inputs: Some("bio-json-v1:[\"a,b\",\"\"]".to_string()),
+                ..ComponentRef::default()
             };
             let workspace = ModlistWorkspaceState {
                 mods_source: ModsSource::InstallationFolder,
@@ -524,8 +520,8 @@ mod tests {
             assert_eq!(snapshot.bgee.len(), usize::from(canonical));
             if canonical {
                 assert_eq!(snapshot.bgee[0].tp2_upper, current.tp2);
-                assert_eq!(snapshot.bgee[0].language, current.language);
-                assert_eq!(snapshot.bgee[0].wlb_inputs, current.wlb_inputs);
+                assert_eq!(snapshot.bgee[0].component_id, current.id.to_string());
+                assert_eq!(snapshot.bgee[0].answers, current.answer_sets());
             }
             assert_eq!(
                 snapshot.bg2ee,
@@ -607,18 +603,41 @@ mod tests {
         app
     }
 
-    fn language_cycle_saved_store(tag: &str) -> crate::registry::store_workspace::WorkspaceStore {
+    struct LanguageCycleRoot(std::path::PathBuf);
+
+    impl LanguageCycleRoot {
+        fn new() -> Self {
+            use std::sync::atomic::{AtomicU64, Ordering};
+            static N: AtomicU64 = AtomicU64::new(0);
+            let root = Self(std::env::temp_dir().join(format!(
+                "bio_language_cycle_{}_{}",
+                std::process::id(),
+                N.fetch_add(1, Ordering::Relaxed)
+            )));
+            std::fs::create_dir_all(&root.0).expect("create temp root");
+            root
+        }
+    }
+
+    impl Drop for LanguageCycleRoot {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn language_cycle_saved_store(
+        root: &LanguageCycleRoot,
+        tag: &str,
+    ) -> crate::registry::store_workspace::WorkspaceStore {
         let mut app = language_cycle_app(tag);
         app.wizard_state.step2.bgee_mods = language_cycle_mods(true);
         crate::ui::workspace::workspace_header::save_draft(&mut app);
         let store = app.workspace_stores["LANGUAGECYCLE"].clone();
         let saved = store.load().expect("save draft wrote workspace");
         assert_eq!(saved.order_bgee.len(), 2);
-        assert_eq!(saved.order_bgee[0].language, 1);
-        assert_eq!(saved.order_bgee[1].language, 1);
         assert_eq!(saved.order_bgee[0].wlb_inputs.as_deref(), Some("yes"));
         let durable = crate::registry::store_workspace::WorkspaceStore::new_with_path(
-            std::env::temp_dir().join(format!("{tag}-{}-workspace.json", std::process::id())),
+            root.0.join("workspace.json"),
         );
         app.workspace_stores
             .insert("LANGUAGECYCLE".to_string(), durable.clone());
@@ -630,7 +649,8 @@ mod tests {
 
     #[test]
     fn language_cycle_current_one_survives_save_exit_and_cold_reconcile() {
-        let store = language_cycle_saved_store("language-cycle-current");
+        let root = LanguageCycleRoot::new();
+        let store = language_cycle_saved_store(&root, "language-cycle-current");
         let mut app = language_cycle_reopen(&store, "language-cycle-current-reopen");
         let components = &app.wizard_state.step2.bgee_mods[0].components;
         assert!(components[0].checked);
@@ -647,26 +667,170 @@ mod tests {
     }
 
     #[test]
-    fn language_cycle_legacy_zero_mismatch_survives_partial_restore_save() {
-        let store = language_cycle_saved_store("language-cycle-legacy");
-        let mut legacy = store.load().expect("current workspace");
-        legacy.order_bgee[0].language = 0;
-        store.save(&legacy).expect("legacy zero writer fixture");
+    fn language_cycle_legacy_zero_entry_restores_every_component() {
+        let root = LanguageCycleRoot::new();
+        let store = language_cycle_saved_store(&root, "language-cycle-legacy");
+        let current = store.load().expect("current workspace");
+        let mut legacy = serde_json::to_value(&current).expect("workspace as JSON");
+        legacy["order_bgee"][0]["language"] = serde_json::json!(0);
+        legacy["order_bgee"][1]["language"] = serde_json::json!(1);
+        std::fs::write(store.path(), legacy.to_string()).expect("legacy zero writer fixture");
         let mut app = language_cycle_reopen(&store, "language-cycle-legacy-reopen");
         let components = &app.wizard_state.step2.bgee_mods[0].components;
-        assert!(!components[0].checked);
+        assert!(components[0].checked);
         assert!(components[1].checked);
         assert!(!components[2].checked);
+        assert_eq!(components[0].selected_order, Some(1));
         assert_eq!(components[1].selected_order, Some(2));
-        assert!(app.workspace_view.step2.rescan_drop_warning.is_some());
-        assert_eq!(store.load().expect("before later save"), legacy);
+        assert!(components[0].raw_line.contains("@wlb-inputs: yes"));
+        assert!(app.workspace_view.step2.rescan_drop_warning.is_none());
         crate::ui::workspace::workspace_header::save_draft(&mut app);
         eframe::App::on_exit(&mut app, None);
         let after = store.load().expect("after later save");
-        assert_eq!(after.order_bgee, legacy.order_bgee);
-        let reopened = language_cycle_reopen(&store, "language-cycle-legacy-reopen-again");
-        assert!(reopened.workspace_view.step2.rescan_drop_warning.is_some());
-        assert!(!reopened.wizard_state.step2.bgee_mods[0].components[0].checked);
-        assert!(reopened.wizard_state.step2.bgee_mods[0].components[1].checked);
+        assert_eq!(after.order_bgee, current.order_bgee);
+        assert!(after.selection_recovery.is_empty());
+        assert!(
+            !std::fs::read_to_string(store.path())
+                .expect("saved file")
+                .contains("\"language\"")
+        );
+    }
+
+    #[test]
+    fn legacy_language_zero_entry_restores_by_component() {
+        let saved: ModlistWorkspaceState = serde_json::from_str(
+            r#"{"order_bgee":[{"tp2":"X","id":1,"language":1},{"tp2":"X","id":2,"language":0}]}"#,
+        )
+        .expect("legacy workspace");
+        let mut app = language_cycle_app("legacy-language-zero");
+        app.workspace_view.step2.rescan_snapshot = Some(RescanSnapshot {
+            bgee: snapshot_from_order(&saved.order_bgee),
+            bg2ee: Vec::new(),
+        });
+        app.workspace_view.step2.resume_pending = true;
+        app.workspace_view.step2.was_scanning = true;
+        app.workspace_state
+            .insert("LANGUAGECYCLE".to_string(), saved.clone());
+        let mut second = comp("2");
+        second.raw_line = "~X~ #1 #2 // Two".to_string();
+        let mut first = comp("1");
+        first.raw_line = "~X~ #1 #1 // One".to_string();
+        app.wizard_state.step2.bgee_mods = vec![mod_state("X", "X", vec![second, first])];
+        app.wizard_state.step2.last_scan_report =
+            Some(crate::app::state::Step2ScanReport::default());
+        assert!(step2_rescan_reconcile::reconcile_on_scan_complete(&mut app));
+        let components = &app.wizard_state.step2.bgee_mods[0].components;
+        assert!(components[0].checked);
+        assert_eq!(components[0].selected_order, Some(2));
+        assert!(components[1].checked);
+        assert_eq!(components[1].selected_order, Some(1));
+        let leaves = app
+            .wizard_state
+            .step3
+            .bgee_items
+            .iter()
+            .filter(|item| !item.is_parent)
+            .map(|item| item.component_id.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(leaves, ["1", "2"]);
+        let workspace = &app.workspace_state["LANGUAGECYCLE"];
+        assert!(workspace.selection_recovery.is_empty());
+        assert_eq!(workspace.order_bgee, saved.order_bgee);
+        assert!(app.workspace_view.step2.rescan_drop_warning.is_none());
+    }
+
+    #[test]
+    fn opening_a_list_clears_the_previous_scan_mod_languages() {
+        let mut app = language_cycle_app("list-switch-mod-languages");
+        app.wizard_state
+            .step2
+            .bgee_mod_languages
+            .insert("tweaks".to_string(), "polish".to_string());
+        app.wizard_state
+            .step2
+            .bg2ee_mod_languages
+            .insert("ascension".to_string(), "german".to_string());
+        let entry = ModlistEntry {
+            id: "LANGUAGECYCLE".to_string(),
+            game: Game::BGEE,
+            ..Default::default()
+        };
+        workspace_state_loader::populate_wizard_state_from_workspace(
+            &ModlistWorkspaceState::default(),
+            &entry,
+            &app.settings_store,
+            &mut app.wizard_state,
+        );
+        let step2 = &app.wizard_state.step2;
+        assert_eq!(step2.mod_install_language("BGEE", "tweaks"), None);
+        assert_eq!(step2.mod_install_language("BG2EE", "ascension"), None);
+        assert!(step2.bgee_mod_languages.is_empty());
+        assert!(step2.bg2ee_mod_languages.is_empty());
+    }
+
+    #[test]
+    fn duplicate_component_in_saved_order_restores_once_at_first_position() {
+        let saved: ModlistWorkspaceState = serde_json::from_str(
+            r#"{"order_bgee":[{"tp2":"A","id":3,"language":0},{"tp2":"B","id":1,"language":0},{"tp2":"a","id":3,"language":1}]}"#,
+        )
+        .expect("legacy workspace");
+        let snapshot = snapshot_from_order(&saved.order_bgee);
+        assert_eq!(
+            snapshot
+                .iter()
+                .map(|entry| (
+                    entry.tp2_upper.as_str(),
+                    entry.component_id.as_str(),
+                    entry.selected_order
+                ))
+                .collect::<Vec<_>>(),
+            [("A", "3", Some(1)), ("B", "1", Some(2))]
+        );
+        let mut app = language_cycle_app("duplicate-saved-order");
+        app.workspace_view.step2.rescan_snapshot = Some(RescanSnapshot {
+            bgee: snapshot,
+            bg2ee: Vec::new(),
+        });
+        app.workspace_view.step2.resume_pending = true;
+        app.workspace_view.step2.was_scanning = true;
+        app.workspace_state
+            .insert("LANGUAGECYCLE".to_string(), saved);
+        let mut a3 = comp("3");
+        a3.raw_line = "~A~ #1 #3 // Three".to_string();
+        let mut b1 = comp("1");
+        b1.raw_line = "~B~ #1 #1 // One".to_string();
+        app.wizard_state.step2.bgee_mods =
+            vec![mod_state("A", "A", vec![a3]), mod_state("B", "B", vec![b1])];
+        app.wizard_state.step2.last_scan_report =
+            Some(crate::app::state::Step2ScanReport::default());
+        assert!(step2_rescan_reconcile::reconcile_on_scan_complete(&mut app));
+        let mods = &app.wizard_state.step2.bgee_mods;
+        assert!(mods[0].components[0].checked);
+        assert_eq!(mods[0].components[0].selected_order, Some(1));
+        assert!(mods[1].components[0].checked);
+        assert_eq!(mods[1].components[0].selected_order, Some(2));
+        let leaves = app
+            .wizard_state
+            .step3
+            .bgee_items
+            .iter()
+            .filter(|item| !item.is_parent)
+            .map(|item| (item.tp_file.as_str(), item.component_id.as_str()))
+            .collect::<Vec<_>>();
+        assert_eq!(leaves, [("A", "3"), ("B", "1")]);
+        let workspace = &app.workspace_state["LANGUAGECYCLE"];
+        assert!(workspace.selection_recovery.is_empty());
+        let extracted = workspace_state_loader::extract_workspace_state_from_wizard(
+            &app.wizard_state,
+            workspace,
+        );
+        assert_eq!(
+            extracted
+                .order_bgee
+                .iter()
+                .map(|item| (item.tp2.to_ascii_uppercase(), item.id))
+                .collect::<Vec<_>>(),
+            [("A".to_string(), 3), ("B".to_string(), 1)]
+        );
     }
 }

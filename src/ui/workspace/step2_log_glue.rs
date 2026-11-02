@@ -1095,11 +1095,10 @@ mod tests {
 
     fn selection(tp2_upper: &str, component_id: &str, order: usize) -> RescanSelection {
         RescanSelection {
-            language: 0,
             tp2_upper: tp2_upper.to_string(),
             component_id: component_id.to_string(),
             selected_order: Some(order),
-            wlb_inputs: None,
+            answers: crate::app::answer_sets::AnswerSets::default(),
         }
     }
 
@@ -1558,11 +1557,10 @@ mod tests {
 
     fn one_selection() -> RescanSelection {
         RescanSelection {
-            language: 0,
             tp2_upper: "SETUP-X.TP2".to_string(),
             component_id: "1".to_string(),
             selected_order: Some(0),
-            wlb_inputs: None,
+            answers: crate::app::answer_sets::AnswerSets::default(),
         }
     }
 

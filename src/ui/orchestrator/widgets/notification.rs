@@ -18,7 +18,7 @@ use crate::ui::shared::redesign_tokens::{
 use crate::ui::shared::redesign_visuals::redesign_overlay_shadow;
 
 const HISTORY_CAP: usize = 5;
-const KIND_LANGUAGE_RECOVERY: u32 = 2;
+const KIND_SELECTION_RECOVERY: u32 = 2;
 const TOAST_OFFSET_RIGHT: f32 = 16.0;
 const TOAST_OFFSET_BOTTOM: f32 = 44.0;
 const TOAST_WIDTH: f32 = 320.0;
@@ -43,64 +43,38 @@ const HISTORY_MAX_ROWS: usize = 4;
 pub const KIND_PROGRESS: u32 = 0;
 pub const KIND_CUSTOM: u32 = 1;
 
+const SELECTION_RECOVERY_TITLE: &str = "Some saved selections could not be restored";
+const SELECTION_RECOVERY_BODY: &str =
+    "Unresolved selections stay saved. You can keep editing and return after another scan.";
+
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct LanguageRecoveryRow {
+pub(crate) struct SelectionRecoveryRow {
     pub tab: String,
     pub original: crate::registry::workspace_model::ComponentRef,
-    pub available_language: Option<u8>,
     pub reason: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct LanguageRecoveryNotice {
-    pub owner: String,
-    pub generation: u64,
-    pub rows: Vec<LanguageRecoveryRow>,
+impl SelectionRecoveryRow {
+    fn line(&self) -> String {
+        format!(
+            "{} / {} #{}: {}",
+            self.tab, self.original.tp2, self.original.id, self.reason
+        )
+    }
 }
 
-impl LanguageRecoveryNotice {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct SelectionRecoveryNotice {
+    pub owner: String,
+    pub generation: u64,
+    pub rows: Vec<SelectionRecoveryRow>,
+}
+
+impl SelectionRecoveryNotice {
     fn text(&self) -> String {
-        let mut lines = Vec::new();
-        if self.rows.iter().any(|row| row.available_language.is_some()) {
-            lines.push("Some saved selections use a different language".to_string());
-            lines.push("An older BIO version could save the wrong language for selected components. These components were found, but their saved language differs from the current scan.".to_string());
-            for row in self
-                .rows
-                .iter()
-                .filter(|row| row.available_language.is_some())
-            {
-                if let Some(language) = row.available_language {
-                    lines.push(format!(
-                        "{} / {} #{}: saved language {}, available language {}",
-                        row.tab, row.original.tp2, row.original.id, row.original.language, language
-                    ));
-                }
-            }
-        }
-        if self.rows.iter().any(|row| row.available_language.is_none()) {
-            lines.push("Other unresolved selections".to_string());
-            for row in self
-                .rows
-                .iter()
-                .filter(|row| row.available_language.is_none())
-            {
-                lines.push(format!(
-                    "{} / {} #{}: {}",
-                    row.tab, row.original.tp2, row.original.id, row.reason
-                ));
-            }
-        }
-        lines.push(
-            "Unresolved selections stay saved. You can keep editing and return after another scan."
-                .to_string(),
-        );
-        if self
-            .rows
-            .iter()
-            .any(|row| row.original.wlb_inputs.is_some())
-        {
-            lines.push("Previous installer answers are kept, but must be reviewed or entered again in Step 3 after changing language.".to_string());
-        }
+        let mut lines = vec![SELECTION_RECOVERY_TITLE.to_string()];
+        lines.extend(self.rows.iter().map(SelectionRecoveryRow::line));
+        lines.push(SELECTION_RECOVERY_BODY.to_string());
         lines.join("\n")
     }
 }
@@ -110,14 +84,14 @@ pub struct NotificationRecord {
     pub kind: ToastKind,
     pub text: String,
     pub added_at: Instant,
-    recovery: Option<LanguageRecoveryNotice>,
+    recovery: Option<SelectionRecoveryNotice>,
 }
 
 #[derive(Clone)]
 struct ViewAllRequest {
     kind: ToastKind,
     text: String,
-    recovery: Option<LanguageRecoveryNotice>,
+    recovery: Option<SelectionRecoveryNotice>,
 }
 
 pub(crate) fn toasts_id() -> egui::Id {
@@ -205,10 +179,8 @@ pub struct NotificationManager {
     history: VecDeque<NotificationRecord>,
     pub history_open: bool,
     view_all: Option<ViewAllRequest>,
-    recovery: Option<LanguageRecoveryNotice>,
+    recovery: Option<SelectionRecoveryNotice>,
     recovery_replaced: bool,
-    recovery_enabled: bool,
-    recovery_action: Option<LanguageRecoveryNotice>,
     dismissed_recovery: Option<(String, u64)>,
 }
 
@@ -234,11 +206,11 @@ impl NotificationManager {
         self.push(ToastKind::Warning, text.into(), true);
     }
 
-    pub(crate) fn warn_language_recovery(&mut self, notice: LanguageRecoveryNotice) {
+    pub(crate) fn warn_selection_recovery(&mut self, notice: SelectionRecoveryNotice) {
         self.pending
-            .retain(|(kind, _, _)| *kind != ToastKind::Custom(KIND_LANGUAGE_RECOVERY));
+            .retain(|(kind, _, _)| *kind != ToastKind::Custom(KIND_SELECTION_RECOVERY));
         self.recovery_replaced = true;
-        let kind = ToastKind::Custom(KIND_LANGUAGE_RECOVERY);
+        let kind = ToastKind::Custom(KIND_SELECTION_RECOVERY);
         let text = notice.text();
         let dismissed = self
             .dismissed_recovery
@@ -254,24 +226,6 @@ impl NotificationManager {
             record.recovery = Some(notice.clone());
         }
         self.recovery = Some(notice);
-    }
-
-    pub(crate) fn set_language_recovery_enabled(
-        &mut self,
-        owner: &str,
-        generation: u64,
-        scanning: bool,
-    ) {
-        self.recovery_enabled = !scanning
-            && self
-                .view_all
-                .as_ref()
-                .and_then(|request| request.recovery.as_ref())
-                .is_some_and(|notice| notice.owner == owner && notice.generation == generation);
-    }
-
-    pub(crate) const fn take_language_recovery_action(&mut self) -> Option<LanguageRecoveryNotice> {
-        self.recovery_action.take()
     }
 
     pub fn replace_persistent_warning(&mut self, slot: &'static str, text: Option<String>) {
@@ -316,7 +270,7 @@ impl NotificationManager {
         if std::mem::take(&mut self.recovery_replaced) {
             ctx.data_mut(|d| {
                 for toast in d.get_temp_mut_or_default::<Vec<Toast>>(toasts_id()) {
-                    if toast.kind == ToastKind::Custom(KIND_LANGUAGE_RECOVERY) {
+                    if toast.kind == ToastKind::Custom(KIND_SELECTION_RECOVERY) {
                         toast.close();
                     }
                 }
@@ -348,7 +302,7 @@ impl NotificationManager {
                 render_custom_toast(ui, toast, palette)
             });
 
-        let mut toasts = toasts.custom_contents(KIND_LANGUAGE_RECOVERY, move |ui, toast| {
+        let mut toasts = toasts.custom_contents(KIND_SELECTION_RECOVERY, move |ui, toast| {
             render_toast_with_recovery(ui, toast, palette, recovery.as_ref())
         });
         for (kind, text, persistent) in self.pending.drain(..) {
@@ -450,24 +404,24 @@ impl NotificationManager {
         }
     }
 
-    fn close_language_recovery_drawer(&mut self, ctx: &egui::Context) {
+    fn close_selection_recovery_drawer(&mut self, ctx: &egui::Context) {
         self.dismissed_recovery = self
             .view_all
             .take()
             .and_then(|request| request.recovery)
             .map(|notice| (notice.owner, notice.generation));
         self.pending
-            .retain(|(kind, _, _)| *kind != ToastKind::Custom(KIND_LANGUAGE_RECOVERY));
+            .retain(|(kind, _, _)| *kind != ToastKind::Custom(KIND_SELECTION_RECOVERY));
         ctx.data_mut(|d| {
             for toast in d.get_temp_mut_or_default::<Vec<Toast>>(toasts_id()) {
-                if toast.kind == ToastKind::Custom(KIND_LANGUAGE_RECOVERY) {
+                if toast.kind == ToastKind::Custom(KIND_SELECTION_RECOVERY) {
                     toast.close();
                 }
             }
         });
     }
 
-    pub(crate) fn guard_language_recovery_escape(&mut self, ctx: &egui::Context) {
+    pub(crate) fn guard_selection_recovery_escape(&mut self, ctx: &egui::Context) {
         if self
             .view_all
             .as_ref()
@@ -475,7 +429,7 @@ impl NotificationManager {
             && !ctx.memory(egui::Memory::any_popup_open)
             && ctx.input_mut(|input| input.consume_key(egui::Modifiers::NONE, egui::Key::Escape))
         {
-            self.close_language_recovery_drawer(ctx);
+            self.close_selection_recovery_drawer(ctx);
         }
     }
 
@@ -486,13 +440,8 @@ impl NotificationManager {
 
         if let Some(notice) = request.recovery.as_ref() {
             self.history_open = false;
-            let (restore, close) =
-                render_recovery_drawer(ctx, palette, notice, self.recovery_enabled, &request.text);
-            if restore {
-                self.recovery_action = Some(notice.clone());
-            }
-            if restore || close {
-                self.close_language_recovery_drawer(ctx);
+            if render_recovery_drawer(ctx, palette, notice, &request.text) {
+                self.close_selection_recovery_drawer(ctx);
             }
             return;
         }
@@ -500,12 +449,10 @@ impl NotificationManager {
         let title = match request.kind {
             ToastKind::Success => "Success",
             ToastKind::Info => "Info",
-            ToastKind::Warning | ToastKind::Custom(KIND_LANGUAGE_RECOVERY) => "Warning",
+            ToastKind::Warning | ToastKind::Custom(KIND_SELECTION_RECOVERY) => "Warning",
             ToastKind::Error | ToastKind::Custom(_) => "Error",
         };
         let text = request.text.as_str();
-        let recovery = request.recovery.clone();
-        let mut restore_clicked = false;
 
         let mut open = true;
         let mut close_clicked = false;
@@ -535,48 +482,40 @@ impl NotificationManager {
                             .wrap(),
                         );
                     });
-                if let Some(notice) = recovery.as_ref() {
-                    (restore_clicked, close_clicked) =
-                        render_recovery_footer(ui, palette, notice, self.recovery_enabled, text);
-                } else {
-                    ui.horizontal(|ui| {
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            if redesign_btn(
-                                ui,
-                                palette,
-                                "Close",
-                                BtnOpts {
-                                    primary: true,
-                                    small: true,
-                                    ..Default::default()
-                                },
-                            )
-                            .clicked()
-                            {
-                                close_clicked = true;
-                            }
-                            if redesign_btn(
-                                ui,
-                                palette,
-                                "Copy",
-                                BtnOpts {
-                                    small: true,
-                                    ..Default::default()
-                                },
-                            )
-                            .clicked()
-                            {
-                                ui.ctx().copy_text(text.to_string());
-                            }
-                        });
+                ui.horizontal(|ui| {
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if redesign_btn(
+                            ui,
+                            palette,
+                            "Close",
+                            BtnOpts {
+                                primary: true,
+                                small: true,
+                                ..Default::default()
+                            },
+                        )
+                        .clicked()
+                        {
+                            close_clicked = true;
+                        }
+                        if redesign_btn(
+                            ui,
+                            palette,
+                            "Copy",
+                            BtnOpts {
+                                small: true,
+                                ..Default::default()
+                            },
+                        )
+                        .clicked()
+                        {
+                            ui.ctx().copy_text(text.to_string());
+                        }
                     });
-                }
+                });
             });
 
-        if restore_clicked {
-            self.recovery_action = recovery;
-        }
-        if !open || close_clicked || restore_clicked {
+        if !open || close_clicked {
             self.view_all = None;
         }
     }
@@ -585,10 +524,9 @@ impl NotificationManager {
 fn render_recovery_drawer(
     ctx: &egui::Context,
     palette: ThemePalette,
-    notice: &LanguageRecoveryNotice,
-    enabled: bool,
+    notice: &SelectionRecoveryNotice,
     text: &str,
-) -> (bool, bool) {
+) -> bool {
     let screen = ctx.screen_rect();
     let panel = egui::Rect::from_min_max(
         screen.min + egui::vec2(0.0, REDESIGN_TITLEBAR_HEIGHT_PX),
@@ -597,7 +535,7 @@ fn render_recovery_drawer(
     let width = super::drawer::drawer_width(screen.width(), super::drawer::DrawerWidth::Content)
         .min(screen.width());
     let popup_open = ctx.memory(egui::Memory::any_popup_open);
-    let scrim_id = egui::Id::new("language_recovery_scrim");
+    let scrim_id = egui::Id::new("selection_recovery_scrim");
     let scrim_layer = egui::LayerId::new(egui::Order::Foreground, scrim_id);
     ctx.move_to_top(scrim_layer);
     let scrim_clicked = egui::Area::new(scrim_id)
@@ -610,9 +548,8 @@ fn render_recovery_drawer(
             response.clicked()
         })
         .inner;
-    let drawer_id = egui::Id::new("language_recovery_drawer");
+    let drawer_id = egui::Id::new("selection_recovery_drawer");
     ctx.move_to_top(egui::LayerId::new(egui::Order::Foreground, drawer_id));
-    let mut restore = false;
     let mut close = false;
     egui::Area::new(drawer_id)
         .constrain(false)
@@ -634,7 +571,7 @@ fn render_recovery_drawer(
                         egui::Stroke::new(1.0_f32, redesign_border_strong(palette)),
                     );
                     let mut header = ui.new_child(egui::UiBuilder::new().max_rect(bounds));
-                    close = render_recovery_header(&mut header, palette, notice);
+                    close = render_recovery_header(&mut header, palette);
                     let header_bottom = header.min_rect().bottom();
                     let content_width = (width - 44.0).max(1.0);
                     let footer_height = recovery_footer_height(ui, content_width);
@@ -649,7 +586,7 @@ fn render_recovery_drawer(
                     let mut list = ui.new_child(egui::UiBuilder::new().max_rect(list_rect));
                     list.set_clip_rect(list_rect);
                     egui::ScrollArea::vertical()
-                        .id_salt("language_recovery_rows")
+                        .id_salt("selection_recovery_rows")
                         .auto_shrink([false, false])
                         .max_height(list_rect.height())
                         .show(&mut list, |ui| render_recovery_rows(ui, palette, notice));
@@ -665,16 +602,13 @@ fn render_recovery_drawer(
                         bounds.right_bottom() - egui::vec2(22.0, 12.0),
                     );
                     let mut footer = ui.new_child(egui::UiBuilder::new().max_rect(footer_rect));
-                    let (clicked, dismissed) =
-                        render_recovery_footer(&mut footer, palette, notice, enabled, text);
-                    restore = clicked;
-                    close |= dismissed;
+                    close |= render_recovery_footer(&mut footer, palette, text);
                 });
         });
-    close |= scrim_clicked
+    let dismissed = scrim_clicked
         || (!popup_open
             && ctx.input_mut(|input| input.consume_key(egui::Modifiers::NONE, egui::Key::Escape)));
-    (restore, close)
+    close || dismissed
 }
 
 fn recovery_footer_height(ui: &egui::Ui, width: f32) -> f32 {
@@ -682,7 +616,7 @@ fn recovery_footer_height(ui: &egui::Ui, width: f32) -> f32 {
     let mut row_width = 0.0;
     let mut height = 0.0;
     let mut row_height: f32 = 0.0;
-    for label in ["Restore selections", "Copy", "Keep unresolved for now"] {
+    for label in ["Copy", "Keep unresolved for now"] {
         let size = ui
             .painter()
             .layout_no_wrap(label.to_string(), font.clone(), egui::Color32::WHITE)
@@ -720,102 +654,50 @@ fn recovery_label(ui: &mut egui::Ui, palette: ThemePalette, text: &str, size: f3
     );
 }
 
-fn render_recovery_header(
-    ui: &mut egui::Ui,
-    palette: ThemePalette,
-    notice: &LanguageRecoveryNotice,
-) -> bool {
-    let eligible = notice
-        .rows
-        .iter()
-        .any(|row| row.available_language.is_some());
+fn render_recovery_header(ui: &mut egui::Ui, palette: ThemePalette) -> bool {
     let mut close = false;
-    egui::Frame::default().inner_margin(egui::Margin { left: 22, right: 22, top: 18, bottom: 12 }).show(ui, |ui| {
-        ui.horizontal_top(|ui| {
-            let title_width = (ui.available_width() - CLOSE_BTN_SIZE.x - 8.0).max(1.0);
-            ui.allocate_ui_with_layout(egui::vec2(title_width, 18.0), egui::Layout::top_down(egui::Align::LEFT), |ui| {
-                ui.set_min_width(title_width);
-                recovery_label(ui, palette, if eligible { "Some saved selections use a different language" } else { "Other unresolved selections" }, 17.0, false);
+    egui::Frame::default()
+        .inner_margin(egui::Margin {
+            left: 22,
+            right: 22,
+            top: 18,
+            bottom: 12,
+        })
+        .show(ui, |ui| {
+            ui.horizontal_top(|ui| {
+                let title_width = (ui.available_width() - CLOSE_BTN_SIZE.x - 8.0).max(1.0);
+                ui.allocate_ui_with_layout(
+                    egui::vec2(title_width, 18.0),
+                    egui::Layout::top_down(egui::Align::LEFT),
+                    |ui| {
+                        ui.set_min_width(title_width);
+                        recovery_label(ui, palette, SELECTION_RECOVERY_TITLE, 17.0, false);
+                    },
+                );
+                let (rect, response) = ui.allocate_exact_size(CLOSE_BTN_SIZE, egui::Sense::click());
+                paint_close_icon(ui.painter(), rect, redesign_text_muted(palette));
+                close = response.on_hover_text("Close").clicked();
             });
-            let (rect, response) = ui.allocate_exact_size(CLOSE_BTN_SIZE, egui::Sense::click());
-            paint_close_icon(ui.painter(), rect, redesign_text_muted(palette));
-            close = response.on_hover_text("Close").clicked();
+            recovery_label(ui, palette, SELECTION_RECOVERY_BODY, 12.0, true);
         });
-        if eligible {
-            recovery_label(ui, palette, "An older BIO version could save the wrong language for selected components. These components were found, but their saved language differs from the current scan.", 12.0, true);
-        }
-        recovery_label(ui, palette, "Unresolved selections stay saved. You can keep editing and return after another scan.", 12.0, true);
-        if notice.rows.iter().any(|row| row.original.wlb_inputs.is_some()) {
-            recovery_label(ui, palette, "Previous installer answers are kept, but must be reviewed or entered again in Step 3 after changing language.", 12.0, true);
-        }
-    });
     close
 }
 
-fn render_recovery_rows(ui: &mut egui::Ui, palette: ThemePalette, notice: &LanguageRecoveryNotice) {
-    for row in notice
-        .rows
-        .iter()
-        .filter(|row| row.available_language.is_some())
-    {
-        if let Some(language) = row.available_language {
-            recovery_label(
-                ui,
-                palette,
-                &format!(
-                    "{} / {} #{}: saved language {}, available language {}",
-                    row.tab, row.original.tp2, row.original.id, row.original.language, language
-                ),
-                12.0,
-                false,
-            );
-        }
-    }
-    if notice
-        .rows
-        .iter()
-        .any(|row| row.available_language.is_none())
-    {
-        if notice
-            .rows
-            .iter()
-            .any(|row| row.available_language.is_some())
-        {
-            ui.add_space(12.0);
-            recovery_label(ui, palette, "Other unresolved selections", 12.0, false);
-        }
-        for row in notice
-            .rows
-            .iter()
-            .filter(|row| row.available_language.is_none())
-        {
-            recovery_label(
-                ui,
-                palette,
-                &format!(
-                    "{} / {} #{}: {}",
-                    row.tab, row.original.tp2, row.original.id, row.reason
-                ),
-                12.0,
-                false,
-            );
-        }
+fn render_recovery_rows(
+    ui: &mut egui::Ui,
+    palette: ThemePalette,
+    notice: &SelectionRecoveryNotice,
+) {
+    for row in &notice.rows {
+        recovery_label(ui, palette, &row.line(), 12.0, false);
     }
 }
 
-fn render_recovery_footer(
-    ui: &mut egui::Ui,
-    palette: ThemePalette,
-    notice: &LanguageRecoveryNotice,
-    enabled: bool,
-    text: &str,
-) -> (bool, bool) {
-    let mut restore_clicked = false;
+fn render_recovery_footer(ui: &mut egui::Ui, palette: ThemePalette, text: &str) -> bool {
     let mut close_clicked = false;
     ui.scope(|ui| {
         ui.spacing_mut().item_spacing = egui::vec2(8.0, 8.0);
         ui.horizontal_wrapped(|ui| {
-            restore_clicked = render_recovery_button(ui, palette, Some(notice), enabled);
             if redesign_btn(
                 ui,
                 palette,
@@ -844,38 +726,7 @@ fn render_recovery_footer(
             }
         });
     });
-    (restore_clicked, close_clicked)
-}
-
-fn render_recovery_button(
-    ui: &mut egui::Ui,
-    palette: ThemePalette,
-    notice: Option<&LanguageRecoveryNotice>,
-    enabled: bool,
-) -> bool {
-    let Some(notice) = notice else {
-        return false;
-    };
-    let eligible = notice
-        .rows
-        .iter()
-        .any(|row| row.available_language.is_some());
-    ui.add_enabled_ui(enabled && eligible, |ui| {
-        redesign_btn(
-            ui,
-            palette,
-            "Restore selections",
-            BtnOpts {
-                primary: true,
-                small: true,
-                ..Default::default()
-            },
-        )
-        .on_hover_text("Restore selections using current scanned language")
-        .on_disabled_hover_text("Restore selections using current scanned language")
-        .clicked()
-    })
-    .inner
+    close_clicked
 }
 
 fn render_history_popup_body(
@@ -927,7 +778,7 @@ fn toast_options_for(kind: ToastKind) -> ToastOptions {
     match kind {
         ToastKind::Success => base.show_progress(true).duration_in_seconds(TTL_SUCCESS),
         ToastKind::Info => base.show_progress(true).duration_in_seconds(TTL_INFO),
-        ToastKind::Warning | ToastKind::Custom(KIND_LANGUAGE_RECOVERY) => {
+        ToastKind::Warning | ToastKind::Custom(KIND_SELECTION_RECOVERY) => {
             base.show_progress(true).duration_in_seconds(TTL_WARNING)
         }
         ToastKind::Error | ToastKind::Custom(_) => {
@@ -940,7 +791,9 @@ const fn accent_color_for(kind: ToastKind, palette: ThemePalette) -> egui::Color
     match kind {
         ToastKind::Success => redesign_success(palette),
         ToastKind::Info => redesign_info(palette),
-        ToastKind::Warning | ToastKind::Custom(KIND_LANGUAGE_RECOVERY) => redesign_warning(palette),
+        ToastKind::Warning | ToastKind::Custom(KIND_SELECTION_RECOVERY) => {
+            redesign_warning(palette)
+        }
         ToastKind::Error | ToastKind::Custom(_) => redesign_error_emphasis(palette),
     }
 }
@@ -949,7 +802,9 @@ const fn text_color_for(kind: ToastKind, palette: ThemePalette) -> egui::Color32
     match kind {
         ToastKind::Success => redesign_success(palette),
         ToastKind::Info => redesign_info(palette),
-        ToastKind::Warning | ToastKind::Custom(KIND_LANGUAGE_RECOVERY) => redesign_warning(palette),
+        ToastKind::Warning | ToastKind::Custom(KIND_SELECTION_RECOVERY) => {
+            redesign_warning(palette)
+        }
         ToastKind::Error | ToastKind::Custom(_) => redesign_error(palette),
     }
 }
@@ -966,7 +821,7 @@ fn render_toast_with_recovery(
     ui: &mut egui::Ui,
     toast: &mut Toast,
     palette: ThemePalette,
-    recovery: Option<&LanguageRecoveryNotice>,
+    recovery: Option<&SelectionRecoveryNotice>,
 ) -> egui::Response {
     let accent = accent_color_for(toast.kind, palette);
     let text_color = text_color_for(toast.kind, palette);
@@ -1111,7 +966,7 @@ fn render_toast_icon(ui: &mut egui::Ui, kind: ToastKind, accent: egui::Color32) 
                     .color(accent),
             );
         }
-        ToastKind::Warning | ToastKind::Custom(KIND_LANGUAGE_RECOVERY) => {
+        ToastKind::Warning | ToastKind::Custom(KIND_SELECTION_RECOVERY) => {
             let (rect, _) = ui.allocate_exact_size(egui::vec2(14.0, 14.0), egui::Sense::hover());
             paint_warning_icon(ui.painter(), rect.center(), accent);
         }
@@ -1206,7 +1061,7 @@ fn render_history_icon(ui: &mut egui::Ui, kind: ToastKind, accent: egui::Color32
                     .color(accent),
             );
         }
-        ToastKind::Warning | ToastKind::Custom(KIND_LANGUAGE_RECOVERY) => {
+        ToastKind::Warning | ToastKind::Custom(KIND_SELECTION_RECOVERY) => {
             let (r, _) = ui.allocate_exact_size(egui::vec2(12.0, 12.0), egui::Sense::hover());
             paint_warning_icon(ui.painter(), r.center(), accent);
         }
@@ -1478,5 +1333,5 @@ mod tests {
 }
 
 #[cfg(test)]
-#[path = "notification_language_recovery_tests.rs"]
-mod language_recovery_tests;
+#[path = "notification_selection_recovery_tests.rs"]
+mod selection_recovery_tests;

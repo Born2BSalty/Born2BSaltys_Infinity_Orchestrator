@@ -2,21 +2,20 @@ use super::*;
 use crate::registry::workspace_model::ComponentRef;
 use egui_kittest::{Harness, kittest::Queryable};
 
-fn fixture_notice(eligible: usize, other: usize) -> LanguageRecoveryNotice {
-    let rows = (0..eligible + other)
-        .map(|index| LanguageRecoveryRow {
+fn fixture_notice(count: usize) -> SelectionRecoveryNotice {
+    let rows = (0..count)
+        .map(|index| SelectionRecoveryRow {
             tab: "BGEE".to_string(),
             original: ComponentRef {
                 tp2: format!("LONG_MOD_{index}/SETUP_LONG_MOD_{index}.TP2"),
                 id: i64::try_from(index).unwrap(),
-                language: 0,
                 wlb_inputs: (index == 0).then(|| "yes".to_string()),
+                answers: crate::app::answer_sets::AnswerSets::default(),
             },
-            available_language: (index < eligible).then_some(1),
             reason: "mod no longer present".to_string(),
         })
         .collect();
-    LanguageRecoveryNotice {
+    SelectionRecoveryNotice {
         owner: "RECOVERY".to_string(),
         generation: 4,
         rows,
@@ -26,11 +25,11 @@ fn fixture_notice(eligible: usize, other: usize) -> LanguageRecoveryNotice {
 fn popup(
     size: egui::Vec2,
     palette: ThemePalette,
-    notice: Option<LanguageRecoveryNotice>,
+    notice: Option<SelectionRecoveryNotice>,
 ) -> Harness<'static, NotificationManager> {
     let mut manager = NotificationManager::new();
     if let Some(notice) = notice {
-        manager.warn_language_recovery(notice.clone());
+        manager.warn_selection_recovery(notice.clone());
         manager.pending.clear();
         manager.recovery_replaced = false;
         manager.view_all = Some(ViewAllRequest {
@@ -39,11 +38,11 @@ fn popup(
             recovery: Some(notice),
         });
     } else {
-        manager.warn_persistent("Some saved selections use a different language");
+        manager.warn_persistent("Ordinary view-all warning");
         manager.pending.clear();
         manager.view_all = Some(ViewAllRequest {
             kind: ToastKind::Warning,
-            text: "Some saved selections use a different language".to_string(),
+            text: "Ordinary view-all warning".to_string(),
             recovery: None,
         });
     }
@@ -63,7 +62,7 @@ fn popup(
                 ctx.set_visuals(crate::ui::shared::redesign_visuals::build_for(palette));
                 egui::CentralPanel::default().show(ctx, |_| {});
                 if ctx.data(|data| data.get_temp::<bool>(egui::Id::new("recovery-test-versions"))).unwrap_or(false) {
-                    state.guard_language_recovery_escape(ctx);
+                    state.guard_selection_recovery_escape(ctx);
                     let app = versions_app.get_or_insert_with(|| {
                         let mut app = crate::ui::orchestrator::orchestrator_app::OrchestratorApp::new_isolated_for_test("recovery-overlay");
                         app.wizard_state.step2.update_selected_popup_open = true;
@@ -72,15 +71,9 @@ fn popup(
                     crate::ui::workspace::versions::versions_drawer::render(ctx, app, &mut None, palette);
                     ctx.data_mut(|data| data.insert_temp(egui::Id::new("recovery-test-versions-open"), app.wizard_state.step2.update_selected_popup_open));
                 }
-                let (owner, generation, scanning) = ctx
-                    .data(|data| {
-                        data.get_temp::<(String, u64, bool)>(egui::Id::new("recovery-test-status"))
-                    })
-                    .unwrap_or_else(|| ("RECOVERY".to_string(), 4, false));
                 if ctx.data(|data| data.get_temp::<bool>(egui::Id::new("recovery-test-guard"))).unwrap_or(false) {
-                    state.guard_language_recovery_escape(ctx);
+                    state.guard_selection_recovery_escape(ctx);
                 }
-                state.set_language_recovery_enabled(&owner, generation, scanning);
                 state.show(ctx, palette);
                 state.render_history_popup(ctx, palette, false);
                 let copies = ctx.output(|output| {
@@ -123,6 +116,14 @@ fn painted(harness: &Harness<'_, NotificationManager>, label: &str) -> egui::Rec
         .unwrap_or_else(|| panic!("Missing {label}"))
 }
 
+fn is_painted(harness: &Harness<'_, NotificationManager>, label: &str) -> bool {
+    harness
+        .output()
+        .shapes
+        .iter()
+        .any(|shape| shape_label(&shape.shape, label).is_some())
+}
+
 fn click(harness: &mut Harness<'_, NotificationManager>, label: &str) {
     if label == "View all" {
         harness.get_by_label(label).click();
@@ -147,7 +148,7 @@ fn click(harness: &mut Harness<'_, NotificationManager>, label: &str) {
 }
 
 fn capture(harness: &mut Harness<'_, NotificationManager>, name: &str) {
-    if let Some(directory) = std::env::var_os("BIO_LANGUAGE_RECOVERY_SCREENSHOT_DIR") {
+    if let Some(directory) = std::env::var_os("BIO_SELECTION_RECOVERY_SCREENSHOT_DIR") {
         let directory = std::path::PathBuf::from(directory);
         assert!(directory.is_absolute());
         std::fs::create_dir_all(&directory).unwrap();
@@ -160,11 +161,33 @@ fn capture(harness: &mut Harness<'_, NotificationManager>, name: &str) {
 }
 
 #[test]
-fn language_recovery_drawer_restore_keep_copy_and_ordinary_warning() {
+fn selection_recovery_text_lists_rows_between_title_and_body() {
+    let mut notice = fixture_notice(2);
+    notice.rows[1].tab = "BG2EE".to_string();
+    notice.rows[1].reason = "component no longer present".to_string();
+    assert_eq!(
+        notice.text(),
+        "Some saved selections could not be restored\nBGEE / LONG_MOD_0/SETUP_LONG_MOD_0.TP2 #0: mod no longer present\nBG2EE / LONG_MOD_1/SETUP_LONG_MOD_1.TP2 #1: component no longer present\nUnresolved selections stay saved. You can keep editing and return after another scan."
+    );
+}
+
+#[test]
+fn selection_recovery_drawer_keep_copy_and_ordinary_warning() {
     let size = egui::vec2(1000.0, 800.0);
-    let expected = fixture_notice(1, 0);
+    let expected = fixture_notice(1);
     let mut harness = popup(size, ThemePalette::Dark, Some(expected.clone()));
     harness.run();
+    painted(&harness, "Some saved selections could not be restored");
+    painted(
+        &harness,
+        "Unresolved selections stay saved. You can keep editing and return after another scan.",
+    );
+    painted(
+        &harness,
+        "BGEE / LONG_MOD_0/SETUP_LONG_MOD_0.TP2 #0: mod no longer present",
+    );
+    assert!(!is_painted(&harness, "Restore selections"));
+    assert!(!is_painted(&harness, "Other unresolved selections"));
     click(&mut harness, "Copy");
     assert!(
         harness
@@ -177,25 +200,6 @@ fn language_recovery_drawer_restore_keep_copy_and_ordinary_warning() {
     assert!(harness.state().view_all.is_some());
     click(&mut harness, "Keep unresolved for now");
     assert!(harness.state().view_all.is_none());
-    assert!(
-        harness
-            .state_mut()
-            .take_language_recovery_action()
-            .is_none()
-    );
-    let mut harness = popup(size, ThemePalette::Dark, Some(expected.clone()));
-    harness.run();
-    click(&mut harness, "Restore selections");
-    assert_eq!(
-        harness.state_mut().take_language_recovery_action(),
-        Some(expected)
-    );
-    assert!(
-        harness
-            .state_mut()
-            .take_language_recovery_action()
-            .is_none()
-    );
     let mut ordinary = popup(size, ThemePalette::Dark, None);
     ordinary.run();
     assert!(ordinary.state().history.back().unwrap().recovery.is_none());
@@ -208,75 +212,40 @@ fn language_recovery_drawer_restore_keep_copy_and_ordinary_warning() {
     click(&mut ordinary, "Copy");
     assert!(ordinary.state().view_all.is_some());
     click(&mut ordinary, "Close");
-    assert!(
-        ordinary
-            .state_mut()
-            .take_language_recovery_action()
-            .is_none()
-    );
+    assert!(ordinary.state().view_all.is_none());
 }
 
 #[test]
-fn language_recovery_drawer_no_eligible_disables_restore() {
-    let mut harness = popup(
-        egui::vec2(1000.0, 800.0),
-        ThemePalette::Dark,
-        Some(fixture_notice(0, 2)),
-    );
-    harness.run();
-    click(&mut harness, "Restore selections");
-    assert!(harness.state().view_all.is_some());
-    assert!(
-        harness
-            .state_mut()
-            .take_language_recovery_action()
-            .is_none()
-    );
-}
-
-#[test]
-fn language_recovery_drawer_snapshots_actual_widget_and_footer_bounds() {
-    for (name, palette, size, eligible, other) in [
+fn selection_recovery_drawer_snapshots_actual_widget_and_footer_bounds() {
+    for (name, palette, size, count) in [
         (
-            "mismatch-dark",
+            "rows-dark",
             ThemePalette::Dark,
             egui::vec2(1000.0, 800.0),
             2,
-            0,
         ),
         (
-            "mismatch-light",
+            "rows-light",
             ThemePalette::Light,
             egui::vec2(1000.0, 800.0),
-            2,
-            0,
-        ),
-        ("mixed", ThemePalette::Dark, egui::vec2(1000.0, 800.0), 1, 2),
-        (
-            "no-eligible",
-            ThemePalette::Dark,
-            egui::vec2(1000.0, 800.0),
-            0,
             2,
         ),
         (
             "remaining",
             ThemePalette::Light,
             egui::vec2(1000.0, 800.0),
-            0,
             1,
         ),
         (
             "long-narrow",
             ThemePalette::Dark,
             egui::vec2(640.0, 560.0),
-            24,
-            8,
+            32,
         ),
     ] {
-        let mut harness = popup(size, palette, Some(fixture_notice(eligible, other)));
+        let mut harness = popup(size, palette, Some(fixture_notice(count)));
         harness.run();
-        for label in ["Keep unresolved for now", "Copy", "Restore selections"] {
+        for label in ["Keep unresolved for now", "Copy"] {
             let rect = painted(&harness, label);
             assert!(
                 egui::Rect::from_min_size(egui::Pos2::ZERO, size).contains_rect(rect),
@@ -306,11 +275,11 @@ fn language_recovery_drawer_snapshots_actual_widget_and_footer_bounds() {
 }
 
 #[test]
-fn language_recovery_drawer_footer_normal_row_geometry() {
+fn selection_recovery_drawer_footer_normal_row_geometry() {
     let mut harness = popup(
         egui::vec2(1000.0, 800.0),
         ThemePalette::Dark,
-        Some(fixture_notice(2, 0)),
+        Some(fixture_notice(2)),
     );
     harness.run();
     let bounds = drawer_rect(&harness);
@@ -318,21 +287,14 @@ fn language_recovery_drawer_footer_normal_row_geometry() {
         (bounds.max.x - 1000.0).abs() <= 1.0 && bounds.min.x >= 380.0,
         "Recovery drawer must align with the right viewport edge: {bounds:?}"
     );
-    let restore = button_rect(&harness, "Restore selections");
     let copy = button_rect(&harness, "Copy");
     let keep = button_rect(&harness, "Keep unresolved for now");
-    println!(
-        "Measured normal drawer {bounds:?}, width={}, footer={restore:?}/{copy:?}/{keep:?}",
-        bounds.width()
-    );
     assert!(
-        (restore.min.y - copy.min.y).abs() <= 1.0 && (copy.min.y - keep.min.y).abs() <= 1.0,
-        "Footer buttons must share one row: restore={restore:?}, copy={copy:?}, keep={keep:?}"
+        (copy.min.y - keep.min.y).abs() <= 1.0,
+        "Footer buttons must share one row: copy={copy:?}, keep={keep:?}"
     );
-    assert!((restore.height() - copy.height()).abs() <= 1.0);
     assert!((copy.height() - keep.height()).abs() <= 1.0);
-    assert!(restore.max.x < copy.min.x && copy.max.x < keep.min.x);
-    assert!((copy.min.x - restore.max.x - 8.0).abs() <= 1.0);
+    assert!(copy.max.x < keep.min.x);
     assert!((keep.min.x - copy.max.x - 8.0).abs() <= 1.0);
 }
 
@@ -361,14 +323,13 @@ fn button_rect(harness: &Harness<'_, NotificationManager>, label: &str) -> egui:
 fn drawer_rect(harness: &Harness<'_, NotificationManager>) -> egui::Rect {
     harness.ctx.memory(|memory| {
         memory
-            .area_rect(egui::Id::new("language_recovery_drawer"))
+            .area_rect(egui::Id::new("selection_recovery_drawer"))
             .unwrap()
     })
 }
 
-fn footer_rects(harness: &Harness<'_, NotificationManager>) -> [egui::Rect; 3] {
-    ["Restore selections", "Copy", "Keep unresolved for now"]
-        .map(|label| button_rect(harness, label))
+fn footer_rects(harness: &Harness<'_, NotificationManager>) -> [egui::Rect; 2] {
+    ["Copy", "Keep unresolved for now"].map(|label| button_rect(harness, label))
 }
 
 fn visible_row(harness: &Harness<'_, NotificationManager>, index: usize) -> Option<egui::Rect> {
@@ -409,17 +370,17 @@ fn assert_drawer_bounds(harness: &Harness<'_, NotificationManager>, size: egui::
     for pair in footer.windows(2) {
         assert!(!pair[0].intersects(pair[1]));
     }
-    let header = painted(harness, "Some saved selections use a different language");
+    let header = painted(harness, "Some saved selections could not be restored");
     assert!(bounds.contains_rect(header));
     assert!(header.max.y < footer[0].min.y);
 }
 
 #[test]
-fn language_recovery_drawer_snapshots_true_narrow_scroll_and_resize_back() {
+fn selection_recovery_drawer_snapshots_true_narrow_scroll_and_resize_back() {
     let mut harness = popup(
         egui::vec2(1000.0, 800.0),
         ThemePalette::Dark,
-        Some(fixture_notice(24, 8)),
+        Some(fixture_notice(32)),
     );
     harness.run();
     for size in [
@@ -438,7 +399,7 @@ fn language_recovery_drawer_snapshots_true_narrow_scroll_and_resize_back() {
     harness.run();
     let bounds = drawer_rect(&harness);
     let before = footer_rects(&harness);
-    let header = painted(&harness, "Some saved selections use a different language");
+    let header = painted(&harness, "Some saved selections could not be restored");
     let first = visible_row(&harness, 0).expect("First row is visible initially");
     assert!(first.min.y > header.max.y && first.max.y < before[0].min.y);
     assert!(visible_row(&harness, 31).is_none());
@@ -462,61 +423,25 @@ fn language_recovery_drawer_snapshots_true_narrow_scroll_and_resize_back() {
     assert!(last.max.y <= before[0].min.y);
     assert_eq!(
         header,
-        painted(&harness, "Some saved selections use a different language")
+        painted(&harness, "Some saved selections could not be restored")
     );
     assert_eq!(before, footer_rects(&harness));
     capture(&mut harness, "true-320-long-after-scroll");
 }
 
 #[test]
-fn language_recovery_drawer_stale_and_scanning_restore_disabled() {
-    for status in [
-        ("RECOVERY", 4_u64, true),
-        ("OTHER", 4, false),
-        ("RECOVERY", 5, false),
-    ] {
-        let mut harness = popup(
-            egui::vec2(1000.0, 800.0),
-            ThemePalette::Dark,
-            Some(fixture_notice(1, 0)),
-        );
-        harness.ctx.data_mut(|data| {
-            data.insert_temp(
-                egui::Id::new("recovery-test-status"),
-                (status.0.to_string(), status.1, status.2),
-            );
-        });
-        harness.run();
-        click(&mut harness, "Restore selections");
-        assert!(harness.state().view_all.is_some());
-        assert!(
-            harness
-                .state_mut()
-                .take_language_recovery_action()
-                .is_none()
-        );
-        click(&mut harness, "Copy");
-        assert!(harness.state().view_all.is_some());
-    }
-}
-
-#[test]
-fn language_recovery_drawer_close_escape_and_scrim_dismiss_only() {
+fn selection_recovery_drawer_close_escape_and_scrim_dismiss_only() {
     for action in ["close", "escape", "scrim"] {
         let mut harness = popup(
             egui::vec2(1000.0, 800.0),
             ThemePalette::Dark,
-            Some(fixture_notice(1, 0)),
+            Some(fixture_notice(1)),
         );
         harness.run();
         match action {
             "close" => {
                 let bounds = drawer_rect(&harness);
                 let pos = egui::pos2(bounds.max.x - 31.0, bounds.min.y + 27.0);
-                println!(
-                    "Close target {pos:?}, shell {bounds:?}, title {:?}",
-                    painted(&harness, "Some saved selections use a different language")
-                );
                 capture(&mut harness, "close-target");
                 harness.input_mut().events.extend([
                     egui::Event::PointerMoved(pos),
@@ -566,25 +491,19 @@ fn language_recovery_drawer_close_escape_and_scrim_dismiss_only() {
             }
         }
         assert!(harness.state().view_all.is_none(), "{action}");
-        assert!(
-            harness
-                .state_mut()
-                .take_language_recovery_action()
-                .is_none()
-        );
         assert_eq!(harness.state().history.len(), 1);
     }
 }
 
 #[test]
-fn language_recovery_drawer_over_actual_versions_and_single_escape() {
+fn selection_recovery_drawer_over_actual_versions_and_single_escape() {
     let _ambient_lock = crate::app::mod_downloads::AMBIENT_TEST_LOCK
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     let mut harness = popup(
         egui::vec2(1000.0, 800.0),
         ThemePalette::Dark,
-        Some(fixture_notice(2, 0)),
+        Some(fixture_notice(2)),
     );
     harness
         .ctx
@@ -595,7 +514,7 @@ fn language_recovery_drawer_over_actual_versions_and_single_escape() {
         harness.ctx.layer_id_at(footer.center()),
         Some(egui::LayerId::new(
             egui::Order::Foreground,
-            egui::Id::new("language_recovery_drawer")
+            egui::Id::new("selection_recovery_drawer")
         ))
     );
     click(&mut harness, "Copy");
@@ -616,25 +535,10 @@ fn language_recovery_drawer_over_actual_versions_and_single_escape() {
             .data(|data| data.get_temp::<bool>(egui::Id::new("recovery-test-versions-open")))
             .unwrap()
     );
-    assert!(
-        harness
-            .state_mut()
-            .take_language_recovery_action()
-            .is_none()
-    );
     harness.state_mut().history_open = true;
     harness.run();
     harness.run_steps(2);
-    let history_link = painted(&harness, "View all");
-    println!(
-        "History expected {:?}, versions {:?}",
-        egui::Id::new("notification_history_popup"),
-        egui::Id::new(("drawer", "versions_drawer"))
-    );
-    println!(
-        "History link {history_link:?}, top layer {:?}",
-        harness.ctx.layer_id_at(history_link.center())
-    );
+    painted(&harness, "View all");
     capture(&mut harness, "history-entry");
     click(&mut harness, "View all");
     assert!(harness.state().view_all.is_some());
@@ -663,20 +567,14 @@ fn language_recovery_drawer_over_actual_versions_and_single_escape() {
             .data(|data| data.get_temp::<bool>(egui::Id::new("recovery-test-versions-open")))
             .unwrap()
     );
-    assert!(
-        harness
-            .state_mut()
-            .take_language_recovery_action()
-            .is_none()
-    );
 }
 
 #[test]
-fn language_recovery_drawer_popup_suppresses_escape() {
+fn selection_recovery_drawer_popup_suppresses_escape() {
     let mut harness = popup(
         egui::vec2(1000.0, 800.0),
         ThemePalette::Dark,
-        Some(fixture_notice(1, 0)),
+        Some(fixture_notice(1)),
     );
     harness.run();
     harness
@@ -691,24 +589,20 @@ fn language_recovery_drawer_popup_suppresses_escape() {
     });
     harness.run();
     assert!(harness.state().view_all.is_some());
-    assert!(
-        harness
-            .state_mut()
-            .take_language_recovery_action()
-            .is_none()
-    );
 }
 
 #[test]
-fn language_recovery_drawer_toast_entry_keeps_typed_notice() {
-    let expected = fixture_notice(1, 2);
+fn selection_recovery_drawer_toast_entry_keeps_typed_notice() {
+    let expected = fixture_notice(3);
     let mut harness = popup(
         egui::vec2(1000.0, 800.0),
         ThemePalette::Dark,
         Some(expected.clone()),
     );
     harness.state_mut().view_all = None;
-    harness.state_mut().warn_language_recovery(expected.clone());
+    harness
+        .state_mut()
+        .warn_selection_recovery(expected.clone());
     harness.run();
     capture(&mut harness, "toast-entry");
     click(&mut harness, "View all");
@@ -726,16 +620,10 @@ fn live_recovery() -> Harness<'static, NotificationManager> {
     manager.view_all = None;
     manager.pending.clear();
     manager.history.clear();
-    manager.warn_language_recovery(fixture_notice(1, 2));
+    manager.warn_selection_recovery(fixture_notice(3));
     harness.run();
     assert_eq!(recovery_toast_count(&harness), 1);
-    assert!(
-        harness
-            .output()
-            .shapes
-            .iter()
-            .any(|shape| shape_label(&shape.shape, "View all").is_some())
-    );
+    assert!(is_painted(&harness, "View all"));
     click(&mut harness, "View all");
     harness.run_steps(2);
     assert!(harness.state().view_all.is_some());
@@ -748,19 +636,19 @@ fn recovery_toast_count(harness: &Harness<'_, NotificationManager>) -> usize {
         .data(|data| data.get_temp::<Vec<Toast>>(toasts_id()))
         .unwrap_or_default()
         .iter()
-        .filter(|toast| toast.kind == ToastKind::Custom(KIND_LANGUAGE_RECOVERY))
+        .filter(|toast| toast.kind == ToastKind::Custom(KIND_SELECTION_RECOVERY))
         .count()
 }
 
 #[test]
-fn language_recovery_visible_toast_dismissal_retains_history() {
+fn selection_recovery_visible_toast_dismissal_retains_history() {
     let mut harness = live_recovery();
     click(&mut harness, "Keep unresolved for now");
     harness.run_steps(32);
     assert!(harness.state().view_all.is_none());
     assert_eq!(
         harness.state().history.back().unwrap().recovery,
-        Some(fixture_notice(1, 2))
+        Some(fixture_notice(3))
     );
     assert_eq!(
         recovery_toast_count(&harness),
@@ -773,7 +661,7 @@ fn language_recovery_visible_toast_dismissal_retains_history() {
     harness.run_steps(2);
     assert_eq!(
         harness.state().view_all.as_ref().unwrap().recovery,
-        Some(fixture_notice(1, 2))
+        Some(fixture_notice(3))
     );
     assert_eq!(recovery_toast_count(&harness), 0);
 }
@@ -807,9 +695,8 @@ fn recovery_pointer(harness: &mut Harness<'_, NotificationManager>, pos: egui::P
 }
 
 #[test]
-fn language_recovery_visible_toast_all_close_paths_preserve_ordinary_warning() {
+fn selection_recovery_visible_toast_all_close_paths_preserve_ordinary_warning() {
     for action in [
-        "Restore selections",
         "Keep unresolved for now",
         "close",
         "escape",
@@ -822,7 +709,7 @@ fn language_recovery_visible_toast_all_close_paths_preserve_ordinary_warning() {
             .warn_persistent("Ordinary persistent warning");
         harness.run();
         match action {
-            "Restore selections" | "Keep unresolved for now" => click(&mut harness, action),
+            "Keep unresolved for now" => click(&mut harness, action),
             "escape" => recovery_escape(&mut harness),
             "guard" => {
                 harness
@@ -842,24 +729,13 @@ fn language_recovery_visible_toast_all_close_paths_preserve_ordinary_warning() {
         harness.run_steps(32);
         assert!(harness.state().view_all.is_none(), "{action}");
         assert_eq!(recovery_toast_count(&harness), 0, "{action}");
-        assert_eq!(
-            harness.state_mut().take_language_recovery_action(),
-            (action == "Restore selections").then(|| fixture_notice(1, 2)),
-            "{action}"
-        );
-        assert!(
-            harness
-                .state_mut()
-                .take_language_recovery_action()
-                .is_none()
-        );
-        assert_eq!(harness.state().recovery, Some(fixture_notice(1, 2)));
+        assert_eq!(harness.state().recovery, Some(fixture_notice(3)));
         assert!(
             harness
                 .state()
                 .history
                 .iter()
-                .any(|record| record.recovery == Some(fixture_notice(1, 2)))
+                .any(|record| record.recovery == Some(fixture_notice(3)))
         );
         assert!(
             harness
@@ -878,7 +754,7 @@ fn language_recovery_visible_toast_all_close_paths_preserve_ordinary_warning() {
 }
 
 #[test]
-fn language_recovery_visible_toast_copy_and_popup_escape_remain_open() {
+fn selection_recovery_visible_toast_copy_and_popup_escape_remain_open() {
     let mut harness = live_recovery();
     click(&mut harness, "Copy");
     assert!(harness.state().view_all.is_some());
@@ -893,28 +769,20 @@ fn language_recovery_visible_toast_copy_and_popup_escape_remain_open() {
         recovery_escape(&mut harness);
         assert!(harness.state().view_all.is_some());
         assert_eq!(recovery_toast_count(&harness), 1);
-        assert!(
-            harness
-                .state_mut()
-                .take_language_recovery_action()
-                .is_none()
-        );
     }
 }
 
 #[test]
-fn language_recovery_partial_restore_updates_history_without_reannouncing() {
+fn selection_recovery_same_generation_update_after_dismissal_updates_history_without_reannouncing()
+{
     let mut harness = live_recovery();
-    click(&mut harness, "Restore selections");
-    assert_eq!(
-        harness.state_mut().take_language_recovery_action(),
-        Some(fixture_notice(1, 2))
-    );
-    let mut remaining = fixture_notice(1, 2);
+    click(&mut harness, "Keep unresolved for now");
+    harness.run_steps(32);
+    let mut remaining = fixture_notice(3);
     remaining.rows.remove(0);
     harness
         .state_mut()
-        .warn_language_recovery(remaining.clone());
+        .warn_selection_recovery(remaining.clone());
     harness.run_steps(32);
     assert_eq!(recovery_toast_count(&harness), 0);
     assert_eq!(harness.state().recovery, Some(remaining.clone()));
@@ -925,12 +793,6 @@ fn language_recovery_partial_restore_updates_history_without_reannouncing() {
     assert_eq!(
         harness.state().history.back().unwrap().text,
         remaining.text()
-    );
-    assert!(
-        harness
-            .state_mut()
-            .take_language_recovery_action()
-            .is_none()
     );
     harness.state_mut().history_open = true;
     harness.run();
@@ -943,23 +805,23 @@ fn language_recovery_partial_restore_updates_history_without_reannouncing() {
         Some(remaining)
     );
     assert_eq!(recovery_toast_count(&harness), 0);
-    capture(&mut harness, "partial-restore-history-reopened");
+    capture(&mut harness, "same-generation-history-reopened");
 }
 
 #[test]
-fn language_recovery_different_owner_or_generation_announces_again() {
+fn selection_recovery_different_owner_or_generation_announces_again() {
     for change_owner in [false, true] {
         let mut harness = live_recovery();
         click(&mut harness, "Keep unresolved for now");
         harness.run_steps(32);
         assert_eq!(recovery_toast_count(&harness), 0);
-        let mut notice = fixture_notice(1, 2);
+        let mut notice = fixture_notice(3);
         if change_owner {
             notice.owner = "OTHER".to_string();
         } else {
             notice.generation += 1;
         }
-        harness.state_mut().warn_language_recovery(notice.clone());
+        harness.state_mut().warn_selection_recovery(notice.clone());
         harness.run_steps(4);
         assert_eq!(recovery_toast_count(&harness), 1);
         assert_eq!(
@@ -970,14 +832,14 @@ fn language_recovery_different_owner_or_generation_announces_again() {
 }
 
 #[test]
-fn language_recovery_pending_toast_dismissal_prevents_first_display() {
-    let notice = fixture_notice(1, 2);
+fn selection_recovery_pending_toast_dismissal_prevents_first_display() {
+    let notice = fixture_notice(3);
     let mut harness = popup(
         egui::vec2(1000.0, 800.0),
         ThemePalette::Dark,
         Some(notice.clone()),
     );
-    harness.state_mut().warn_language_recovery(notice.clone());
+    harness.state_mut().warn_selection_recovery(notice.clone());
     let ctx = harness.ctx.clone();
     let _ = ctx.run(
         egui::RawInput {
@@ -990,7 +852,7 @@ fn language_recovery_pending_toast_dismissal_prevents_first_display() {
             }],
             ..Default::default()
         },
-        |ctx| harness.state_mut().guard_language_recovery_escape(ctx),
+        |ctx| harness.state_mut().guard_selection_recovery_escape(ctx),
     );
     assert!(harness.state().view_all.is_none());
     harness.run_steps(32);
@@ -1002,7 +864,7 @@ fn language_recovery_pending_toast_dismissal_prevents_first_display() {
 }
 
 #[test]
-fn language_recovery_ordinary_view_all_close_preserves_visible_warning() {
+fn selection_recovery_ordinary_view_all_close_preserves_visible_warning() {
     let mut harness = popup(egui::vec2(1000.0, 800.0), ThemePalette::Dark, None);
     harness
         .state_mut()

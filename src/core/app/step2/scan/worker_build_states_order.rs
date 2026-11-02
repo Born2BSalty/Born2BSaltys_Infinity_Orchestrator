@@ -228,6 +228,7 @@ mod tests {
             prompt_events: Vec::new(),
             mod_prompt_summary: None,
             mod_prompt_events: Vec::new(),
+            language_name: String::new(),
         }
     }
 

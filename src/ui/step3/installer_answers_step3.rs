@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 Born2BSalty
 
+use std::collections::BTreeMap;
+
+use crate::app::answer_sets::{self, AnswerKey};
 use crate::app::game_authority::{self, GameSlot, slot_for_tab};
 use crate::app::mod_downloads::normalize_mod_download_tp2;
 use crate::app::prompt_eval_context::build_prompt_eval_context;
@@ -132,16 +135,12 @@ fn make_target(
     {
         return None;
     }
-    let answers = marker_spec(&item.raw_line)
-        .filter(|spec| !spec.is_empty())
-        .and_then(|spec| decode_answers(spec).ok())
-        .unwrap_or_default()
-        .into_iter()
-        .map(|text| InstallerAnswerDraft {
-            blank_enter: text.is_empty(),
-            text,
-        })
-        .collect::<Vec<_>>();
+    let slot = slot_for_tab(game_tab);
+    let install_language =
+        answer_sets::install_language(&state.step2, slot, &identity.normalized_tp2).to_string();
+    let book_sets = AnswerKey::for_line(slot, &item.raw_line)
+        .and_then(|key| state.step3.answer_book.others(&key).cloned())
+        .unwrap_or_default();
     Some(InstallerAnswerTarget {
         game_tab: game_tab.to_string(),
         package_path: item
@@ -162,13 +161,96 @@ fn make_target(
             item.mod_name, item.component_id, item.component_label
         ),
         questions,
-        answers: if answers.is_empty() {
-            vec![InstallerAnswerDraft::default()]
-        } else {
-            answers
-        },
+        answers: stored_drafts(marker_spec(&item.raw_line)).unwrap_or_else(blank_drafts),
+        answer_language: install_language.clone(),
+        install_language,
+        book_sets,
+        parked: BTreeMap::new(),
     })
 }
+
+fn blank_drafts() -> Vec<InstallerAnswerDraft> {
+    vec![InstallerAnswerDraft::default()]
+}
+
+fn stored_drafts(spec: Option<&str>) -> Option<Vec<InstallerAnswerDraft>> {
+    let answers = match spec.filter(|spec| !spec.is_empty()) {
+        Some(spec) => decode_answers(spec).ok()?,
+        None => Vec::new(),
+    };
+    let drafts = answers
+        .into_iter()
+        .map(|text| InstallerAnswerDraft {
+            blank_enter: text.is_empty(),
+            text,
+        })
+        .collect::<Vec<_>>();
+    Some(if drafts.is_empty() {
+        blank_drafts()
+    } else {
+        drafts
+    })
+}
+
+fn stored_spec_decodes(spec: Option<&str>) -> bool {
+    spec.is_none_or(|spec| decode_answers(spec).is_ok())
+}
+
+fn stored_spec<'a>(target: &'a InstallerAnswerTarget, language: &str) -> Option<&'a str> {
+    if language == target.install_language {
+        marker_spec(&target.original_line)
+    } else {
+        target.book_sets.get(language)
+    }
+}
+
+pub(crate) fn answer_languages(target: &InstallerAnswerTarget) -> Vec<String> {
+    std::iter::once(target.install_language.clone())
+        .chain(
+            target
+                .book_sets
+                .languages()
+                .filter(|language| *language != target.install_language)
+                .map(str::to_string),
+        )
+        .collect()
+}
+
+pub(crate) fn shows_language_tabs(target: &InstallerAnswerTarget) -> bool {
+    answer_languages(target).len() > 1
+}
+
+pub(crate) fn select_language(state: &mut WizardState, language: &str) {
+    let Some(editor) = state.step3.installer_answers.as_mut() else {
+        return;
+    };
+    let Some(target) = editor.targets.get_mut(editor.active) else {
+        return;
+    };
+    if language == target.answer_language
+        || !answer_languages(target)
+            .iter()
+            .any(|candidate| candidate == language)
+    {
+        return;
+    }
+    let drafts = std::mem::take(&mut target.answers);
+    let previous = std::mem::replace(&mut target.answer_language, language.to_string());
+    target.parked.insert(previous, drafts);
+    let stored = stored_drafts(stored_spec(target, language));
+    editor.status = stored.is_none().then(|| INVALID_STORED_ANSWERS.to_string());
+    target.answers = target
+        .parked
+        .remove(language)
+        .or(stored)
+        .unwrap_or_else(blank_drafts);
+}
+
+const INVALID_STORED_ANSWERS: &str =
+    "Existing saved answers are invalid and cannot be overwritten here.";
+const STALE_COMPONENT: &str = "This component changed. Reopen Installer answers.";
+const INVALID_BEFORE_REPLACING: &str =
+    "The existing saved answers are invalid. Fix them before replacing them.";
 
 fn open_targets(
     state: &mut WizardState,
@@ -182,17 +264,19 @@ fn open_targets(
                     && old.block_id == target.block_id
                     && old.row_index == target.row_index
                     && old.original_line == target.original_line
+                    && old.install_language == target.install_language
+                    && old.book_sets == target.book_sets
             }) {
                 target.answers.clone_from(&old.answers);
+                target.parked.clone_from(&old.parked);
+                target.answer_language.clone_from(&old.answer_language);
             }
         }
     }
     let status = targets
         .iter()
-        .any(|target| {
-            marker_spec(&target.original_line).is_some_and(|spec| decode_answers(spec).is_err())
-        })
-        .then(|| "Existing saved answers are invalid and cannot be overwritten here.".to_string());
+        .any(|target| stored_drafts(stored_spec(target, &target.answer_language)).is_none())
+        .then(|| INVALID_STORED_ANSWERS.to_string());
     if let Some(target) = targets.first() {
         state.step3.active_game_tab.clone_from(&target.game_tab);
     }
@@ -244,6 +328,16 @@ pub(crate) fn open_missing(state: &mut WizardState) -> bool {
     true
 }
 
+fn install_language_unchanged(state: &WizardState, target: &InstallerAnswerTarget) -> bool {
+    parse_identity(&target.original_line).is_some_and(|identity| {
+        answer_sets::install_language(
+            &state.step2,
+            slot_for_tab(&target.game_tab),
+            &identity.normalized_tp2,
+        ) == target.install_language
+    })
+}
+
 fn resolve_target<'a>(
     state: &'a WizardState,
     target: &InstallerAnswerTarget,
@@ -264,10 +358,11 @@ fn resolve_target<'a>(
     }
     let identity =
         parse_identity(&target.original_line).ok_or("Cannot identify this component.")?;
+    if !install_language_unchanged(state, target) {
+        return Err(STALE_COMPONENT.to_string());
+    }
     let items = items_for_tab(state, &target.game_tab);
-    let item = items
-        .get(target.row_index)
-        .ok_or("This component changed. Reopen Installer answers.")?;
+    let item = items.get(target.row_index).ok_or(STALE_COMPONENT)?;
     let snapshot_changed = item.raw_line != target.original_line;
     if item.is_parent
         || item.parent_placeholder
@@ -330,19 +425,22 @@ fn step2_mirror(
 
 fn encode_drafts(target: &InstallerAnswerTarget) -> Result<String, String> {
     if let Some(spec) = marker_spec(&target.original_line) {
-        decode_answers(spec).map_err(|_| {
-            "The existing saved answers are invalid. Fix them before replacing them.".to_string()
-        })?;
+        decode_answers(spec).map_err(|_| INVALID_BEFORE_REPLACING.to_string())?;
     }
-    if target
-        .answers
+    encode_draft_answers(&target.answers)?.map_or_else(
+        || Ok(without_saved_answers(&target.original_line)),
+        |spec| replace_marker(&target.original_line, &spec),
+    )
+}
+
+fn encode_draft_answers(drafts: &[InstallerAnswerDraft]) -> Result<Option<String>, String> {
+    if drafts
         .iter()
         .all(|draft| !draft.blank_enter && draft.text.is_empty())
     {
-        return Ok(without_saved_answers(&target.original_line));
+        return Ok(None);
     }
-    let answers = target
-        .answers
+    let answers = drafts
         .iter()
         .map(|draft| {
             if draft.blank_enter {
@@ -354,8 +452,9 @@ fn encode_drafts(target: &InstallerAnswerTarget) -> Result<String, String> {
             }
         })
         .collect::<Result<Vec<_>, _>>()?;
-    let spec = encode_answers(&answers)?.ok_or("Add at least one answer before saving.")?;
-    replace_marker(&target.original_line, &spec)
+    encode_answers(&answers)?
+        .ok_or_else(|| "Add at least one answer before saving.".to_string())
+        .map(Some)
 }
 
 fn without_saved_answers(raw_line: &str) -> String {
@@ -384,6 +483,9 @@ pub(crate) fn save_current(state: &mut WizardState) -> Result<(), String> {
         .ok_or("No component is open.")?
         .clone();
     resolve_target(state, &target)?;
+    if target.answer_language != target.install_language {
+        return save_other_language(state, &target);
+    }
     let replacement = encode_drafts(&target)?;
     let mirror = step2_mirror(state, &target)?;
     let items = match slot_for_tab(&target.game_tab) {
@@ -399,9 +501,42 @@ pub(crate) fn save_current(state: &mut WizardState) -> Result<(), String> {
         mods[mi].components[ci].raw_line.clone_from(&replacement);
     }
     update_selection(state, &target, &replacement);
+    close_editor(state);
+    Ok(())
+}
+
+fn save_other_language(
+    state: &mut WizardState,
+    target: &InstallerAnswerTarget,
+) -> Result<(), String> {
+    let key = AnswerKey::for_line(slot_for_tab(&target.game_tab), &target.original_line)
+        .ok_or("Cannot identify this component.")?;
+    if !install_language_unchanged(state, target)
+        || state
+            .step3
+            .answer_book
+            .others(&key)
+            .cloned()
+            .unwrap_or_default()
+            != target.book_sets
+    {
+        return Err(STALE_COMPONENT.to_string());
+    }
+    if !stored_spec_decodes(target.book_sets.get(&target.answer_language)) {
+        return Err(INVALID_BEFORE_REPLACING.to_string());
+    }
+    let spec = encode_draft_answers(&target.answers)?;
+    let sets = target
+        .book_sets
+        .merged(&target.answer_language, spec.as_deref());
+    state.step3.answer_book.set_others(key, sets);
+    close_editor(state);
+    Ok(())
+}
+
+fn close_editor(state: &mut WizardState) {
     state.step3.installer_answers = None;
     state.step3.installer_answers_workspace = None;
-    Ok(())
 }
 
 fn update_selection(state: &mut WizardState, target: &InstallerAnswerTarget, replacement: &str) {

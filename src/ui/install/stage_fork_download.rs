@@ -162,6 +162,7 @@ fn finish_fork_download(orchestrator: &mut OrchestratorApp) {
         .step2
         .mod_download_forks_popup_open = false;
     persist_fork_resume_workspace_state(orchestrator);
+    orchestrator.wizard_state.shared_answers.clear();
 }
 
 pub(super) fn fork_extract_complete(orchestrator: &OrchestratorApp) -> bool {

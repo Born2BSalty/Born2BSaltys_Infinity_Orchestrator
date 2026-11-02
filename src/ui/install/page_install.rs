@@ -19,7 +19,8 @@ use crate::ui::install::stage_installing::{self, StageInstallingOutcome};
 use crate::ui::install::stage_paste::{self, PasteOutcome};
 use crate::ui::install::stage_review;
 use crate::ui::install::state_install::{
-    DrawerKind, DrawerState, InstallScreenState, InstallStage, PipelineKind, ReviewOrigin,
+    AnswerLanguageIssue, DrawerKind, DrawerState, InstallScreenState, InstallStage, PipelineKind,
+    ReviewOrigin,
 };
 use crate::ui::orchestrator::nav_destination::NavDestination;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
@@ -594,6 +595,56 @@ pub(crate) fn refresh_source_compat_issue(
             crate::app::game_version::version_mismatch_message(step1, &preview.game_install, tag)
         })
     });
+    state.answer_language_issue = state.parsed_preview.as_ref().and_then(|preview| {
+        let locale = crate::app::scan::detect_preferred_game_locale(step1).locale;
+        answer_language_issue(
+            preview,
+            &crate::app::language_names::preferred_language_name(&locale),
+        )
+    });
+}
+
+fn answer_language_issue(
+    preview: &crate::app::modlist_share::ModlistSharePreview,
+    language: &str,
+) -> Option<AnswerLanguageIssue> {
+    use crate::app::language_names::UNTAGGED_LANGUAGE;
+    use crate::app::mod_downloads::{SourceTiers, normalize_mod_download_tp2};
+
+    let model = crate::ui::install::inside_model::build(preview, &SourceTiers::default());
+    let mut seen = std::collections::BTreeSet::new();
+    let mut components = 0;
+    let mut answers = 0;
+    for section in &model.sections {
+        for group in &section.mods {
+            for row in &group.components {
+                let sets = &row.answer_sets;
+                if sets.is_empty() || sets.get(language).is_some() {
+                    continue;
+                }
+                let key = (
+                    section.game.clone(),
+                    normalize_mod_download_tp2(&group.tp_file),
+                    row.id.trim().to_string(),
+                );
+                if !seen.insert(key) {
+                    continue;
+                }
+                let spec = sets
+                    .get(UNTAGGED_LANGUAGE)
+                    .or_else(|| sets.languages().next().and_then(|first| sets.get(first)))
+                    .unwrap_or_default();
+                components += 1;
+                answers +=
+                    crate::app::wlb_inputs::decode_answers(spec).map_or(1, |list| list.len());
+            }
+        }
+    }
+    (components > 0).then(|| AnswerLanguageIssue {
+        language: language.to_string(),
+        components,
+        answers,
+    })
 }
 
 #[cfg(test)]
@@ -603,6 +654,100 @@ mod tests {
 
     fn orch_for_install_test() -> OrchestratorApp {
         OrchestratorApp::new_isolated_for_test("pageinstalltest")
+    }
+
+    fn answers_preview(
+        payload: &serde_json::Value,
+    ) -> crate::app::modlist_share::ModlistSharePreview {
+        let code = crate::app::modlist_share::encode_share_payload_text(&payload.to_string())
+            .expect("encode");
+        preview_modlist_share_code(&code).expect("preview")
+    }
+
+    fn issue_for(
+        payload: &serde_json::Value,
+        language: &str,
+    ) -> Option<crate::ui::install::state_install::AnswerLanguageIssue> {
+        let mut app = orch_for_install_test();
+        app.wizard_state.step1.language = language.to_string();
+        app.install_screen_state.parsed_preview = Some(answers_preview(payload));
+        refresh_source_compat_issue(&mut app.install_screen_state, &app.wizard_state.step1);
+        app.install_screen_state.answer_language_issue.clone()
+    }
+
+    #[test]
+    fn answer_language_issue_counts_components_and_answers() {
+        let payload = serde_json::json!({
+            "format_version": 1,
+            "game_install": "EET",
+            "install_mode": "start_from_scratch",
+            "weidu_logs": {
+                "bgee": "~A\\A.TP2~ #0 #5 // A five: v1\n~A\\A.TP2~ #0 #6 // A six: v1 // @wlb-inputs: y\n~A\\A.TP2~ #0 #7 // A seven: v1\n~A\\A.TP2~ #0 #8 // A eight: v1 // @wlb-inputs: t\n~A\\A.TP2~ #0 #9 // A nine: v1\n~A\\A.TP2~ #0 #5 // A five: v1",
+                "bg2ee": "~B\\B.TP2~ #0 #1 // B one: v1 // @wlb-inputs: bio-json-v2:x"
+            },
+            "answers": {
+                "bgee": {
+                    "components": [
+                        { "tp2": "a", "id": 5, "sets": { "english": "y,1,2" } },
+                        { "tp2": "a", "id": 7, "sets": { "german": "j,1" } },
+                        { "tp2": "a", "id": 8, "sets": { "english": "y", "polish": "t" } }
+                    ]
+                }
+            }
+        });
+
+        assert_eq!(
+            issue_for(&payload, "pl_PL"),
+            Some(crate::ui::install::state_install::AnswerLanguageIssue {
+                language: "polish".to_string(),
+                components: 4,
+                answers: 7,
+            })
+        );
+    }
+
+    #[test]
+    fn no_issue_when_every_answered_component_has_the_language() {
+        let payload = serde_json::json!({
+            "format_version": 1,
+            "game_install": "BGEE",
+            "install_mode": "start_from_scratch",
+            "weidu_logs": {
+                "bgee": "~A\\A.TP2~ #0 #5 // A five: v1 // @wlb-inputs: t\n~A\\A.TP2~ #0 #6 // A six: v1"
+            },
+            "answers": {
+                "bgee": {
+                    "languages": { "a": "polish" },
+                    "components": [
+                        { "tp2": "a", "id": 5, "sets": { "english": "y", "polish": "t" } }
+                    ]
+                }
+            }
+        });
+
+        assert_eq!(issue_for(&payload, "pl_PL"), None);
+    }
+
+    #[test]
+    fn untagged_marker_counts_as_english() {
+        let payload = serde_json::json!({
+            "format_version": 1,
+            "game_install": "BGEE",
+            "install_mode": "start_from_scratch",
+            "weidu_logs": {
+                "bgee": "~A\\A.TP2~ #0 #5 // A five: v1 // @wlb-inputs: y,2"
+            }
+        });
+
+        assert_eq!(issue_for(&payload, "en_US"), None);
+        assert_eq!(
+            issue_for(&payload, "pl_PL"),
+            Some(crate::ui::install::state_install::AnswerLanguageIssue {
+                language: "polish".to_string(),
+                components: 1,
+                answers: 2,
+            })
+        );
     }
 
     #[test]
@@ -675,6 +820,7 @@ mod tests {
             description: None,
             forked_from: Vec::new(),
             unresolved_mods: Vec::new(),
+            answers: crate::app::share_answers::ShareAnswers::default(),
         });
 
         refresh_source_compat_issue(&mut app.install_screen_state, &app.wizard_state.step1);
@@ -729,6 +875,7 @@ mod tests {
             description: None,
             forked_from: Vec::new(),
             unresolved_mods: vec!["Alpha".to_string(), "Beta".to_string()],
+            answers: crate::app::share_answers::ShareAnswers::default(),
         });
 
         refresh_source_compat_issue(&mut app.install_screen_state, &app.wizard_state.step1);
@@ -776,6 +923,7 @@ mod tests {
                 description: None,
                 forked_from: Vec::new(),
                 unresolved_mods: Vec::new(),
+                answers: crate::app::share_answers::ShareAnswers::default(),
             }
         }
 
@@ -854,6 +1002,7 @@ mod tests {
             description: None,
             forked_from: Vec::new(),
             unresolved_mods: Vec::new(),
+            answers: crate::app::share_answers::ShareAnswers::default(),
         }
     }
 
@@ -1406,6 +1555,7 @@ mod tests {
             description: None,
             forked_from: Vec::new(),
             unresolved_mods: Vec::new(),
+            answers: crate::app::share_answers::ShareAnswers::default(),
         });
         app.install_screen_state.review.name = "Tactical EET".to_string();
         app.install_screen_state.destination = destination.to_string_lossy().into_owned();

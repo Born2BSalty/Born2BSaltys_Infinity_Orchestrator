@@ -3,22 +3,20 @@
 
 use std::collections::BTreeSet;
 
+use crate::app::answer_sets::{AnswerBook, AnswerSide, outgoing_for_line, tree_with_answers};
 use crate::app::app_step2_log::component_exclusion_reason;
 use crate::app::controller::step3_sync;
-use crate::app::state::{Step2ComponentState, Step2ModState, Step2State};
+use crate::app::game_authority::GameSlot;
+use crate::app::state::{Step2ComponentState, Step2ModState, Step2State, WizardState};
 use crate::app::wlb_inputs::parse_identity;
 use crate::registry::workspace_model::ModsSource;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::workspace::state_workspace::{RescanSelection, RescanSnapshot};
 use crate::ui::workspace::step2_log_glue;
-use crate::ui::workspace::workspace_state_loader::{extract_wlb_inputs, reattach_wlb_inputs};
 
 pub fn snapshot_current_selection(orchestrator: &mut OrchestratorApp) {
-    let mut snapshot = RescanSnapshot {
-        bgee: capture_tab(&orchestrator.wizard_state.step2.bgee_mods),
-        bg2ee: capture_tab(&orchestrator.wizard_state.step2.bg2ee_mods),
-    };
-    super::step2_language_recovery::include_unresolved(orchestrator, &mut snapshot);
+    let mut snapshot = capture_snapshot(&orchestrator.wizard_state);
+    super::step2_selection_recovery::include_unresolved(orchestrator, &mut snapshot);
     let step2 = &mut orchestrator.workspace_view.step2;
     step2.rescan_snapshot = Some(snapshot);
     step2.rescan_drop_warning = None;
@@ -26,11 +24,8 @@ pub fn snapshot_current_selection(orchestrator: &mut OrchestratorApp) {
 }
 
 pub fn arm_post_download_snapshot(orchestrator: &mut OrchestratorApp) {
-    let mut snapshot = RescanSnapshot {
-        bgee: capture_tab(&orchestrator.wizard_state.step2.bgee_mods),
-        bg2ee: capture_tab(&orchestrator.wizard_state.step2.bg2ee_mods),
-    };
-    super::step2_language_recovery::include_unresolved(orchestrator, &mut snapshot);
+    let mut snapshot = capture_snapshot(&orchestrator.wizard_state);
+    super::step2_selection_recovery::include_unresolved(orchestrator, &mut snapshot);
     orchestrator
         .workspace_view
         .step2
@@ -41,21 +36,45 @@ pub(crate) const fn armed_was_scanning_for_inflight_scan() -> bool {
     true
 }
 
-fn capture_tab(mods: &[Step2ModState]) -> Vec<RescanSelection> {
+fn capture_snapshot(state: &WizardState) -> RescanSnapshot {
+    RescanSnapshot {
+        bgee: capture_tab(
+            &state.step2.bgee_mods,
+            GameSlot::First,
+            &state.step2,
+            &state.step3.answer_book,
+        ),
+        bg2ee: capture_tab(
+            &state.step2.bg2ee_mods,
+            GameSlot::Second,
+            &state.step2,
+            &state.step3.answer_book,
+        ),
+    }
+}
+
+fn capture_tab(
+    mods: &[Step2ModState],
+    slot: GameSlot,
+    step2: &Step2State,
+    book: &AnswerBook,
+) -> Vec<RescanSelection> {
     let mut out = Vec::new();
     for mod_state in mods {
         let tp2_upper = mod_state.tp_file.to_ascii_uppercase();
         for component in &mod_state.components {
-            if component.checked {
-                let Some(identity) = parse_identity(&component.raw_line) else {
-                    continue;
-                };
+            if component.checked && parse_identity(&component.raw_line).is_some() {
                 out.push(RescanSelection {
                     tp2_upper: tp2_upper.clone(),
                     component_id: component.component_id.clone(),
-                    language: identity.language,
                     selected_order: component.selected_order,
-                    wlb_inputs: extract_wlb_inputs(&component.raw_line),
+                    answers: outgoing_for_line(
+                        &component.raw_line,
+                        &mod_state.tp_file,
+                        slot,
+                        step2,
+                        book,
+                    ),
                 });
             }
         }
@@ -89,10 +108,10 @@ fn reconcile_completed_scan(orchestrator: &mut OrchestratorApp) {
     }
 
     orchestrator.workspace_view.step2.recovery_scan_generation =
-        super::step2_language_recovery::next_scan_generation();
+        super::step2_selection_recovery::next_scan_generation();
     if orchestrator.wizard_state.step2.last_scan_report.is_none() {
         if let Some(snapshot) = orchestrator.workspace_view.step2.rescan_snapshot.clone() {
-            super::step2_language_recovery::persist_completed_snapshot(orchestrator, &snapshot);
+            super::step2_selection_recovery::persist_completed_snapshot(orchestrator, &snapshot);
         }
         return;
     }
@@ -102,14 +121,10 @@ fn reconcile_completed_scan(orchestrator: &mut OrchestratorApp) {
         return;
     };
 
-    reapply_snapshot(
-        &snapshot.bgee,
-        &mut orchestrator.wizard_state.step2.bgee_mods,
-    );
-    reapply_snapshot(
-        &snapshot.bg2ee,
-        &mut orchestrator.wizard_state.step2.bg2ee_mods,
-    );
+    let (mods, side) = tree_with_answers(&mut orchestrator.wizard_state, GameSlot::First);
+    reapply_snapshot(&snapshot.bgee, mods, side);
+    let (mods, side) = tree_with_answers(&mut orchestrator.wizard_state, GameSlot::Second);
+    reapply_snapshot(&snapshot.bg2ee, mods, side);
 
     if let Some(err) = crate::ui::step2::service_compat_rules_step2::apply_compat_rules(
         &orchestrator.wizard_state.step1,
@@ -119,7 +134,7 @@ fn reconcile_completed_scan(orchestrator: &mut OrchestratorApp) {
         orchestrator.wizard_state.step2.scan_status = format!("Compat rules load failed: {err}");
     }
 
-    super::step2_language_recovery::persist_completed_snapshot(orchestrator, &snapshot);
+    super::step2_selection_recovery::persist_completed_snapshot(orchestrator, &snapshot);
     recompute_mod_checked(&mut orchestrator.wizard_state.step2.bgee_mods);
     recompute_mod_checked(&mut orchestrator.wizard_state.step2.bg2ee_mods);
 
@@ -166,7 +181,7 @@ fn reconcile_completed_scan(orchestrator: &mut OrchestratorApp) {
             .notification_manager
             .warn_persistent(format_unrestored_notification(&unrestored));
     }
-    super::step2_language_recovery::notify_unresolved(orchestrator);
+    super::step2_selection_recovery::notify_unresolved(orchestrator);
 }
 
 fn take_settled_log_ticks(step2: &mut Step2State) -> BTreeSet<String> {
@@ -349,11 +364,13 @@ const fn completion_edge_fires(was_scanning: bool, scanning_now: bool) -> bool {
 
 fn matches_selection(entry: &RescanSelection, component: &Step2ComponentState) -> bool {
     component.component_id == entry.component_id
-        && parse_identity(&component.raw_line)
-            .is_some_and(|identity| identity.language == entry.language)
 }
 
-fn reapply_snapshot(snapshot: &[RescanSelection], mods: &mut [Step2ModState]) {
+fn reapply_snapshot(
+    snapshot: &[RescanSelection],
+    mods: &mut [Step2ModState],
+    mut side: AnswerSide<'_>,
+) {
     for entry in snapshot {
         for mod_state in mods.iter_mut() {
             if mod_state.tp_file.to_ascii_uppercase() != entry.tp2_upper {
@@ -363,13 +380,12 @@ fn reapply_snapshot(snapshot: &[RescanSelection], mods: &mut [Step2ModState]) {
                 if matches_selection(entry, component) {
                     component.checked = true;
                     component.selected_order = entry.selected_order;
-                    if let Some(inputs) = entry.wlb_inputs.as_deref() {
-                        reattach_wlb_inputs(component, inputs);
-                    }
+                    side.intake_component(component, &entry.answers);
                 }
             }
         }
     }
+    side.settle(mods);
 }
 
 fn recompute_mod_checked(mods: &mut [Step2ModState]) {
@@ -389,6 +405,30 @@ fn max_selected_order(mods: &[Step2ModState]) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::app::answer_sets::AnswerSets;
+
+    fn capture(mods: &[Step2ModState]) -> Vec<RescanSelection> {
+        capture_tab(
+            mods,
+            GameSlot::First,
+            &Step2State::default(),
+            &AnswerBook::default(),
+        )
+    }
+
+    fn reapply(snapshot: &[RescanSelection], mods: &mut [Step2ModState]) {
+        let languages = std::collections::BTreeMap::new();
+        let mut book = AnswerBook::default();
+        reapply_snapshot(
+            snapshot,
+            mods,
+            AnswerSide {
+                slot: GameSlot::First,
+                languages: &languages,
+                book: &mut book,
+            },
+        );
+    }
     use crate::app::state::{Step2ComponentState, Step2ModState};
 
     fn comp(id: &str, checked: bool, order: Option<usize>) -> Step2ComponentState {
@@ -446,7 +486,7 @@ mod tests {
             "EeFixPack.tp2",
             vec![comp("0", true, Some(2)), comp("5", false, None)],
         )];
-        let snap = capture_tab(&mods);
+        let snap = capture(&mods);
         assert_eq!(snap.len(), 1);
         assert_eq!(snap[0].tp2_upper, "EEFIXPACK.TP2");
         assert_eq!(snap[0].component_id, "0");
@@ -457,25 +497,23 @@ mod tests {
     fn reapply_restores_checked_and_order_and_reports_drops() {
         let snapshot = vec![
             RescanSelection {
-                language: 0,
                 tp2_upper: "EEFIXPACK.TP2".to_string(),
                 component_id: "0".to_string(),
                 selected_order: Some(2),
-                wlb_inputs: None,
+                answers: AnswerSets::default(),
             },
             RescanSelection {
-                language: 0,
                 tp2_upper: "GONEMOD.TP2".to_string(),
                 component_id: "1".to_string(),
                 selected_order: Some(1),
-                wlb_inputs: None,
+                answers: AnswerSets::default(),
             },
         ];
         let mut mods = vec![mod_state(
             "eefixpack.tp2",
             vec![comp("0", false, None), comp("5", false, None)],
         )];
-        reapply_snapshot(&snapshot, &mut mods);
+        reapply(&snapshot, &mut mods);
         assert!(mods[0].components[0].checked);
         assert_eq!(mods[0].components[0].selected_order, Some(2));
         assert!(!mods[0].components[1].checked);
@@ -489,11 +527,10 @@ mod tests {
     #[test]
     fn unrestored_reports_component_excluded_by_compatibility_with_its_reason() {
         let snapshot = vec![RescanSelection {
-            language: 0,
             tp2_upper: "OLIRP.TP2".to_string(),
             component_id: "7".to_string(),
             selected_order: Some(1),
-            wlb_inputs: None,
+            answers: AnswerSets::default(),
         }];
         let mut excluded = comp("7", false, None);
         excluded.disabled = true;
@@ -516,11 +553,10 @@ mod tests {
     #[test]
     fn unrestored_reason_comes_from_the_first_match_that_carries_one() {
         let snapshot = vec![RescanSelection {
-            language: 0,
             tp2_upper: "MOD.TP2".to_string(),
             component_id: "1".to_string(),
             selected_order: None,
-            wlb_inputs: None,
+            answers: AnswerSets::default(),
         }];
         let mut with_reason = comp("1", false, None);
         with_reason.disabled_reason = Some("Blocked by rule".to_string());
@@ -537,11 +573,10 @@ mod tests {
     #[test]
     fn unrestored_falls_back_to_generic_exclusion_reason() {
         let snapshot = vec![RescanSelection {
-            language: 0,
             tp2_upper: "MOD.TP2".to_string(),
             component_id: "1".to_string(),
             selected_order: None,
-            wlb_inputs: None,
+            answers: AnswerSets::default(),
         }];
         let mods = vec![mod_state("mod.tp2", vec![comp("1", false, None)])];
         let unrestored = collect_unrestored(&snapshot, &mods);
@@ -553,18 +588,16 @@ mod tests {
     fn unrestored_distinguishes_missing_mod_from_missing_component() {
         let snapshot = vec![
             RescanSelection {
-                language: 0,
                 tp2_upper: "GONE.TP2".to_string(),
                 component_id: "0".to_string(),
                 selected_order: None,
-                wlb_inputs: None,
+                answers: AnswerSets::default(),
             },
             RescanSelection {
-                language: 0,
                 tp2_upper: "MOD.TP2".to_string(),
                 component_id: "9".to_string(),
                 selected_order: None,
-                wlb_inputs: None,
+                answers: AnswerSets::default(),
             },
         ];
         let mods = vec![mod_state("mod.tp2", vec![comp("1", true, Some(1))])];
@@ -578,14 +611,13 @@ mod tests {
     #[test]
     fn unrestored_is_empty_when_every_saved_component_survives() {
         let snapshot = vec![RescanSelection {
-            language: 0,
             tp2_upper: "MOD.TP2".to_string(),
             component_id: "1".to_string(),
             selected_order: Some(1),
-            wlb_inputs: None,
+            answers: AnswerSets::default(),
         }];
         let mut mods = vec![mod_state("mod.tp2", vec![comp("1", false, None)])];
-        reapply_snapshot(&snapshot, &mut mods);
+        reapply(&snapshot, &mut mods);
         assert_eq!(collect_unrestored(&snapshot, &mods).len(), 0);
     }
 
@@ -671,18 +703,16 @@ mod tests {
         let snapshot = RescanSnapshot {
             bgee: vec![
                 RescanSelection {
-                    language: 0,
                     tp2_upper: "BG1UB/BG1UB.TP2".to_string(),
                     component_id: "11".to_string(),
                     selected_order: Some(1),
-                    wlb_inputs: None,
+                    answers: AnswerSets::default(),
                 },
                 RescanSelection {
-                    language: 0,
                     tp2_upper: "BG1UB/BG1UB.TP2".to_string(),
                     component_id: "0".to_string(),
                     selected_order: Some(2),
-                    wlb_inputs: None,
+                    answers: AnswerSets::default(),
                 },
             ],
             bg2ee: Vec::new(),
@@ -703,7 +733,7 @@ mod tests {
             return (bgee_mods, step3_items, resume_pending);
         }
 
-        reapply_snapshot(&snapshot.bgee, &mut bgee_mods);
+        reapply(&snapshot.bgee, &mut bgee_mods);
         recompute_mod_checked(&mut bgee_mods);
         if std::mem::take(&mut resume_pending) {
             step3_items = step3_sync::build_step3_items(&bgee_mods);
@@ -801,10 +831,10 @@ mod tests {
             }],
         )];
 
-        let captured = capture_tab(&mods_with_marker);
+        let captured = capture(&mods_with_marker);
         assert_eq!(captured.len(), 1);
         assert_eq!(
-            captured[0].wlb_inputs.as_deref(),
+            captured[0].answers.get("english"),
             Some(r"y,D:\test1"),
             "capture_tab must extract the wlb_inputs marker"
         );
@@ -835,7 +865,7 @@ mod tests {
             }],
         )];
 
-        reapply_snapshot(&captured, &mut fresh_mods);
+        reapply(&captured, &mut fresh_mods);
         assert!(
             collect_unrestored(&captured, &fresh_mods).is_empty(),
             "component must be found, not dropped"
@@ -865,11 +895,10 @@ mod tests {
         WorkspaceStep2State {
             pending_update_download_snapshot: Some(RescanSnapshot {
                 bgee: vec![RescanSelection {
-                    language: 0,
                     tp2_upper: bgee_tp2.to_ascii_uppercase(),
                     component_id: component_id.to_string(),
                     selected_order: Some(1),
-                    wlb_inputs: None,
+                    answers: AnswerSets::default(),
                 }],
                 bg2ee: Vec::new(),
             }),
@@ -949,18 +978,16 @@ mod tests {
         let mut view = WorkspaceStep2State {
             pending_update_download_snapshot: Some(RescanSnapshot {
                 bgee: vec![RescanSelection {
-                    language: 0,
                     tp2_upper: "BGEE_MOD.TP2".to_string(),
                     component_id: "1".to_string(),
                     selected_order: Some(1),
-                    wlb_inputs: None,
+                    answers: AnswerSets::default(),
                 }],
                 bg2ee: vec![RescanSelection {
-                    language: 0,
                     tp2_upper: "BG2EE_MOD.TP2".to_string(),
                     component_id: "2".to_string(),
                     selected_order: Some(2),
-                    wlb_inputs: None,
+                    answers: AnswerSets::default(),
                 }],
             }),
             ..WorkspaceStep2State::default()
@@ -1001,26 +1028,182 @@ mod tests {
         assert!(!view.was_scanning);
     }
 
+    fn answer_key(id: i64) -> crate::app::answer_sets::AnswerKey {
+        crate::app::answer_sets::AnswerKey::new(GameSlot::First, "MOD/MOD.TP2", id)
+    }
+
     #[test]
-    fn manual_wlb_rescan_preserves_nonzero_language_and_rejects_other_language() {
-        let mut original = comp("17", true, Some(3));
-        original.raw_line =
-            "~MOD/MOD.TP2~ #2 #17 // Label // @wlb-inputs: bio-json-v1:[\"a,b\",\"\"]".to_string();
-        let snapshot = capture_tab(&[mod_state("MOD/MOD.TP2", vec![original])]);
-        assert_eq!(snapshot[0].language, 2);
-        let mut correct = comp("17", false, None);
-        correct.raw_line = "~MOD/MOD.TP2~ #2 #17 // Correct".to_string();
-        let mut other = comp("17", false, None);
-        other.raw_line = "~MOD/MOD.TP2~ #0 #17 // Other".to_string();
-        let mut mods = vec![mod_state("MOD/MOD.TP2", vec![correct, other])];
-        reapply_snapshot(&snapshot, &mut mods);
-        assert!(mods[0].components[0].checked);
-        assert_eq!(mods[0].components[0].selected_order, Some(3));
-        assert!(mods[0].components[0].raw_line.contains("bio-json-v1:"));
-        assert!(!mods[0].components[1].checked);
-        assert!(!mods[0].components[1].raw_line.contains("@wlb-inputs"));
-        assert!(collect_unrestored(&snapshot, &mods).is_empty());
-        mods[0].components.remove(0);
-        assert_eq!(collect_unrestored(&snapshot, &mods).len(), 1);
+    fn manual_wlb_rescan_restores_by_component_across_language_with_answers() {
+        let spec = "bio-json-v1:[\"a,b\",\"\"]";
+        for (language, on_line) in [("polish", false), ("english", true)] {
+            let mut original = comp("17", true, Some(3));
+            original.raw_line = format!("~MOD/MOD.TP2~ #2 #17 // Label // @wlb-inputs: {spec}");
+            let snapshot = capture(&[mod_state("MOD/MOD.TP2", vec![original])]);
+            assert_eq!(snapshot[0].answers, AnswerSets::from_legacy(Some(spec)));
+            let mut rescanned = comp("17", false, None);
+            rescanned.raw_line = "~MOD/MOD.TP2~ #0 #17 // Other language".to_string();
+            let mut neighbour = comp("18", false, None);
+            neighbour.raw_line = "~MOD/MOD.TP2~ #0 #18 // Neighbour".to_string();
+            let mut mods = vec![mod_state("MOD/MOD.TP2", vec![rescanned, neighbour])];
+            let languages =
+                std::collections::BTreeMap::from([("mod".to_string(), language.to_string())]);
+            let mut book = AnswerBook::default();
+            reapply_snapshot(
+                &snapshot,
+                &mut mods,
+                AnswerSide {
+                    slot: GameSlot::First,
+                    languages: &languages,
+                    book: &mut book,
+                },
+            );
+            assert!(mods[0].components[0].checked);
+            assert_eq!(mods[0].components[0].selected_order, Some(3));
+            assert_eq!(
+                mods[0].components[0].raw_line.contains(spec),
+                on_line,
+                "{language}: {}",
+                mods[0].components[0].raw_line
+            );
+            assert_eq!(
+                book.others(&answer_key(17)).cloned(),
+                (!on_line).then(|| AnswerSets::from_legacy(Some(spec))),
+                "{language}"
+            );
+            assert!(!mods[0].components[1].checked);
+            assert!(!mods[0].components[1].raw_line.contains("@wlb-inputs"));
+            assert!(collect_unrestored(&snapshot, &mods).is_empty());
+            mods[0].components.remove(0);
+            assert_eq!(collect_unrestored(&snapshot, &mods).len(), 1);
+        }
+    }
+
+    fn rescan_in(state: &mut WizardState, language: &str) {
+        let snapshot = capture_tab(
+            &state.step2.bgee_mods,
+            GameSlot::First,
+            &state.step2,
+            &state.step3.answer_book,
+        );
+        let mut fresh = comp("17", false, None);
+        fresh.raw_line = "~MOD/MOD.TP2~ #0 #17 // Label".to_string();
+        state.step2.bgee_mods = vec![mod_state("MOD/MOD.TP2", vec![fresh])];
+        state.step2.bgee_mod_languages =
+            std::collections::BTreeMap::from([("mod".to_string(), language.to_string())]);
+        let (mods, side) = tree_with_answers(state, GameSlot::First);
+        reapply_snapshot(&snapshot, mods, side);
+    }
+
+    #[test]
+    fn language_change_round_trip_keeps_every_set() {
+        let mut state = WizardState::default();
+        let mut row = comp("17", true, Some(1));
+        row.raw_line = "~MOD/MOD.TP2~ #0 #17 // Label // @wlb-inputs: y,1".to_string();
+        state.step2.bgee_mods = vec![mod_state("MOD/MOD.TP2", vec![row])];
+        let mut polish = AnswerSets::default();
+        polish.set("polish", "t,1");
+        state
+            .step3
+            .answer_book
+            .set_others(answer_key(17), polish.clone());
+        let english = AnswerSets::from_legacy(Some("y,1"));
+        let line = |state: &WizardState| state.step2.bgee_mods[0].components[0].raw_line.clone();
+
+        rescan_in(&mut state, "polish");
+        assert!(
+            line(&state).ends_with("// @wlb-inputs: t,1"),
+            "{}",
+            line(&state)
+        );
+        assert_eq!(
+            state.step3.answer_book.others(&answer_key(17)),
+            Some(&english)
+        );
+
+        rescan_in(&mut state, "english");
+        assert!(
+            line(&state).ends_with("// @wlb-inputs: y,1"),
+            "{}",
+            line(&state)
+        );
+        assert_eq!(
+            state.step3.answer_book.others(&answer_key(17)),
+            Some(&polish)
+        );
+        let all = capture_tab(
+            &state.step2.bgee_mods,
+            GameSlot::First,
+            &state.step2,
+            &state.step3.answer_book,
+        );
+        assert_eq!(all[0].answers, english.merged("polish", Some("t,1")));
+        assert!(state.step2.bgee_mods[0].components[0].checked);
+        assert_eq!(
+            state.step2.bgee_mods[0].components[0].selected_order,
+            Some(1)
+        );
+    }
+
+    #[test]
+    fn unticked_component_across_language_change_keeps_its_set() {
+        let mut state = WizardState::default();
+        let mut row = comp("17", true, Some(1));
+        row.raw_line = "~MOD/MOD.TP2~ #1 #17 // Label // @wlb-inputs: t".to_string();
+        state.step2.bgee_mods = vec![mod_state("MOD/MOD.TP2", vec![row])];
+        state.step2.bgee_mod_languages =
+            std::collections::BTreeMap::from([("mod".to_string(), "polish".to_string())]);
+        let english = AnswerSets::from_legacy(Some("y"));
+        state
+            .step3
+            .answer_book
+            .set_others(answer_key(17), english.clone());
+
+        state.step2.bgee_mods[0].components[0].checked = false;
+        state.step2.bgee_mods[0].components[0].selected_order = None;
+        rescan_in(&mut state, "english");
+
+        assert_eq!(state.step3.answer_book.others(&answer_key(17)), None);
+        let component = &mut state.step2.bgee_mods[0].components[0];
+        assert_eq!(
+            crate::app::wlb_inputs::marker_spec(&component.raw_line),
+            Some("y")
+        );
+        component.checked = true;
+        component.selected_order = Some(1);
+        state.step3.bgee_items = step3_sync::build_step3_items(&state.step2.bgee_mods);
+        let extracted =
+            crate::ui::workspace::workspace_state_loader::extract_workspace_state_from_wizard(
+                &state,
+                &crate::registry::workspace_model::ModlistWorkspaceState::default(),
+            );
+        assert_eq!(extracted.order_bgee.len(), 1);
+        assert_eq!(extracted.order_bgee[0].answer_sets(), english);
+    }
+
+    #[test]
+    fn settle_drops_the_book_copy_when_the_line_has_its_own_set() {
+        let mut state = WizardState::default();
+        let mut row = comp("17", false, None);
+        row.raw_line = "~MOD/MOD.TP2~ #1 #17 // Label // @wlb-inputs: t".to_string();
+        state.step2.bgee_mods = vec![mod_state("MOD/MOD.TP2", vec![row])];
+        state.step2.bgee_mod_languages =
+            std::collections::BTreeMap::from([("mod".to_string(), "polish".to_string())]);
+        let mut book_sets = AnswerSets::from_legacy(Some("y"));
+        book_sets.set("polish", "stale");
+        state
+            .step3
+            .answer_book
+            .set_others(answer_key(17), book_sets);
+        let (mods, mut side) = tree_with_answers(&mut state, GameSlot::First);
+        side.settle(mods);
+        assert!(
+            state.step2.bgee_mods[0].components[0]
+                .raw_line
+                .ends_with("// @wlb-inputs: t")
+        );
+        assert_eq!(
+            state.step3.answer_book.others(&answer_key(17)),
+            Some(&AnswerSets::from_legacy(Some("y")))
+        );
     }
 }

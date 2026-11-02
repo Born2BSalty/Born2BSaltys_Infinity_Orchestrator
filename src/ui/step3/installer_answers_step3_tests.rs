@@ -1,4 +1,9 @@
-use super::{bind_workspace, open_component, open_missing, save_current};
+use super::{
+    answer_languages, bind_workspace, current_target_available, open_component, open_missing,
+    save_current, select_language, shows_language_tabs,
+};
+use crate::app::answer_sets::{AnswerKey, AnswerSets, outgoing_for_line};
+use crate::app::game_authority::GameSlot;
 use crate::app::state::{
     InstallerAnswerDraft, Step2ComponentState, Step2ModState, Step2Selection, Step3ItemState,
     WizardState,
@@ -146,6 +151,46 @@ fn reopening_saved_answers_preserves_exact_values_identity_and_selection_key() {
         panic!("component selection must remain selected");
     };
     assert_eq!(component_key, raw);
+}
+
+#[test]
+fn editor_save_on_polish_line_persists_both_languages_through_step2_mirror() {
+    use crate::app::answer_sets::{AnswerKey, AnswerSets};
+    use crate::app::game_authority::GameSlot;
+
+    let mut state = with_mirror();
+    state
+        .step2
+        .bgee_mod_languages
+        .insert("quest".to_string(), "polish".to_string());
+    let english = AnswerSets::from_legacy(Some("y"));
+    state.step3.answer_book.set_others(
+        AnswerKey::new(GameSlot::First, "QUEST/SETUP-QUEST.TP2", 11),
+        english.clone(),
+    );
+    assert_eq!(
+        wlb_inputs::marker_spec(&state.step3.bgee_items[0].raw_line),
+        None
+    );
+    open_fixture(&mut state);
+    answers(&mut state, &[("t", false)]);
+    save_current(&mut state).unwrap();
+
+    assert_eq!(
+        wlb_inputs::marker_spec(&state.step2.bgee_mods[0].components[0].raw_line),
+        Some("t")
+    );
+    let extracted =
+        crate::ui::workspace::workspace_state_loader::extract_workspace_state_from_wizard(
+            &state,
+            &crate::registry::workspace_model::ModlistWorkspaceState::default(),
+        );
+    assert_eq!(extracted.order_bgee.len(), 1);
+    assert_eq!(
+        extracted.order_bgee[0].answer_sets(),
+        english.merged("polish", Some("t"))
+    );
+    assert_eq!(extracted.order_bgee[0].wlb_inputs.as_deref(), Some("y"));
 }
 
 #[test]
@@ -622,4 +667,228 @@ fn changing_install_context_invalidates_an_existing_editor() {
     let before = state.step3.bgee_items.clone();
     assert!(save_current(&mut state).is_err());
     assert_eq!(state.step3.bgee_items, before);
+}
+
+fn quest_key() -> AnswerKey {
+    AnswerKey::new(GameSlot::First, "QUEST/SETUP-QUEST.TP2", 11)
+}
+
+fn sets(entries: &[(&str, &str)]) -> AnswerSets {
+    let mut sets = AnswerSets::default();
+    for (language, spec) in entries {
+        sets.set(language, spec);
+    }
+    sets
+}
+
+fn polish_fixture(book: &AnswerSets) -> WizardState {
+    let mut state = with_mirror();
+    state
+        .step2
+        .bgee_mod_languages
+        .insert("quest".to_string(), "polish".to_string());
+    set_saved(&mut state.step3.bgee_items[0], &["t".to_string()]);
+    state.step2.bgee_mods[0].components[0].raw_line = state.step3.bgee_items[0].raw_line.clone();
+    state.step2.selected = Some(Step2Selection::Component {
+        game_tab: "BGEE".to_string(),
+        tp_file: "setup-quest.tp2".to_string(),
+        component_id: "11".to_string(),
+        component_key: state.step3.bgee_items[0].raw_line.clone(),
+    });
+    state
+        .step3
+        .answer_book
+        .set_others(quest_key(), book.clone());
+    state
+}
+
+fn active_target(state: &WizardState) -> &crate::app::state::InstallerAnswerTarget {
+    let editor = state.step3.installer_answers.as_ref().unwrap();
+    &editor.targets[editor.active]
+}
+
+fn draft_texts(state: &WizardState) -> Vec<String> {
+    active_target(state)
+        .answers
+        .iter()
+        .map(|draft| draft.text.clone())
+        .collect()
+}
+
+fn line_stores(state: &WizardState) -> (String, String, Option<Step2Selection>) {
+    (
+        state.step3.bgee_items[0].raw_line.clone(),
+        state.step2.bgee_mods[0].components[0].raw_line.clone(),
+        state.step2.selected.clone(),
+    )
+}
+
+#[test]
+fn language_tabs_list_install_language_first_then_book_languages() {
+    let mut state = polish_fixture(&sets(&[("english", "y"), ("german", "j")]));
+    open_fixture(&mut state);
+    let target = active_target(&state);
+    assert_eq!(answer_languages(target), ["polish", "english", "german"]);
+    assert!(shows_language_tabs(target));
+    assert_eq!(target.answer_language, "polish");
+    assert_eq!(draft_texts(&state), ["t"]);
+}
+
+#[test]
+fn single_language_component_shows_no_tabs() {
+    let mut state = with_mirror();
+    open_fixture(&mut state);
+    let target = active_target(&state);
+    assert_eq!(answer_languages(target), ["english"]);
+    assert!(!shows_language_tabs(target));
+}
+
+#[test]
+fn save_on_other_language_tab_writes_book_and_leaves_line() {
+    let mut state = polish_fixture(&sets(&[("english", "y")]));
+    let before = line_stores(&state);
+    open_fixture(&mut state);
+    select_language(&mut state, "english");
+    assert_eq!(draft_texts(&state), ["y"]);
+    answers(&mut state, &[("n", false)]);
+    save_current(&mut state).unwrap();
+    assert_eq!(line_stores(&state), before);
+    assert_eq!(
+        state.step3.answer_book.others(&quest_key()),
+        Some(&sets(&[("english", "n")]))
+    );
+    assert_eq!(
+        outgoing_for_line(
+            &state.step3.bgee_items[0].raw_line,
+            "",
+            GameSlot::First,
+            &state.step2,
+            &state.step3.answer_book,
+        ),
+        sets(&[("english", "n"), ("polish", "t")])
+    );
+    assert_eq!(state.step3.installer_answers, None);
+}
+
+#[test]
+fn clearing_other_language_tab_removes_only_that_language() {
+    let mut state = polish_fixture(&sets(&[("english", "y"), ("german", "j")]));
+    let before = line_stores(&state);
+    open_fixture(&mut state);
+    select_language(&mut state, "english");
+    answers(&mut state, &[]);
+    save_current(&mut state).unwrap();
+    assert_eq!(line_stores(&state), before);
+    assert_eq!(
+        state.step3.answer_book.others(&quest_key()),
+        Some(&sets(&[("german", "j")]))
+    );
+}
+
+#[test]
+fn switching_tabs_keeps_each_tabs_unsaved_drafts() {
+    let mut state = polish_fixture(&sets(&[("english", "y")]));
+    open_fixture(&mut state);
+    answers(&mut state, &[("x", false)]);
+    select_language(&mut state, "english");
+    assert_eq!(draft_texts(&state), ["y"]);
+    answers(&mut state, &[("n", false)]);
+    select_language(&mut state, "polish");
+    assert_eq!(draft_texts(&state), ["x"]);
+    select_language(&mut state, "english");
+    assert_eq!(draft_texts(&state), ["n"]);
+    select_language(&mut state, "german");
+    assert_eq!(active_target(&state).answer_language, "english");
+}
+
+#[test]
+fn save_acts_on_the_selected_tab_only() {
+    let mut state = polish_fixture(&sets(&[("english", "y")]));
+    let before = line_stores(&state);
+    open_fixture(&mut state);
+    answers(&mut state, &[("p2", false)]);
+    select_language(&mut state, "english");
+    answers(&mut state, &[("n", false)]);
+    save_current(&mut state).unwrap();
+    assert_eq!(line_stores(&state), before);
+    assert_eq!(
+        wlb_inputs::marker_spec(&state.step3.bgee_items[0].raw_line),
+        Some("t")
+    );
+    assert_eq!(
+        state.step3.answer_book.others(&quest_key()),
+        Some(&sets(&[("english", "n")]))
+    );
+}
+
+#[test]
+fn invalid_other_language_set_cannot_be_overwritten() {
+    let book = sets(&[("english", "bio-json-v1:not-json")]);
+    let mut state = polish_fixture(&book);
+    open_fixture(&mut state);
+    assert_eq!(state.step3.installer_answers.as_ref().unwrap().status, None);
+    select_language(&mut state, "english");
+    assert_eq!(
+        state
+            .step3
+            .installer_answers
+            .as_ref()
+            .unwrap()
+            .status
+            .as_deref(),
+        Some("Existing saved answers are invalid and cannot be overwritten here.")
+    );
+    assert_eq!(
+        active_target(&state).answers,
+        [InstallerAnswerDraft::default()]
+    );
+    answers(&mut state, &[("n", false)]);
+    assert!(save_current(&mut state).is_err());
+    assert_eq!(state.step3.answer_book.others(&quest_key()), Some(&book));
+    assert!(state.step3.installer_answers.is_some());
+    select_language(&mut state, "polish");
+    assert_eq!(state.step3.installer_answers.as_ref().unwrap().status, None);
+}
+
+#[test]
+fn install_language_change_invalidates_the_open_editor() {
+    for other_tab in [false, true] {
+        let mut state = polish_fixture(&sets(&[("english", "y")]));
+        open_fixture(&mut state);
+        if other_tab {
+            select_language(&mut state, "english");
+        }
+        answers(&mut state, &[("n", false)]);
+        state
+            .step2
+            .bgee_mod_languages
+            .insert("quest".to_string(), "english".to_string());
+        let before = (line_stores(&state), state.step3.answer_book.clone());
+        assert!(!current_target_available(&state));
+        assert!(save_current(&mut state).is_err());
+        assert_eq!(
+            (line_stores(&state), state.step3.answer_book.clone()),
+            before
+        );
+    }
+}
+
+#[test]
+fn book_change_invalidates_an_other_tab_save() {
+    let mut state = polish_fixture(&sets(&[("english", "y")]));
+    open_fixture(&mut state);
+    select_language(&mut state, "english");
+    answers(&mut state, &[("n", false)]);
+    let changed = sets(&[("english", "z")]);
+    state
+        .step3
+        .answer_book
+        .set_others(quest_key(), changed.clone());
+    let before = line_stores(&state);
+    assert_eq!(
+        save_current(&mut state),
+        Err("This component changed. Reopen Installer answers.".to_string())
+    );
+    assert_eq!(state.step3.answer_book.others(&quest_key()), Some(&changed));
+    assert_eq!(line_stores(&state), before);
 }
