@@ -8,13 +8,14 @@ use crate::app::state::VersionsSheet;
 use crate::app::step2_action::Step2Action;
 use crate::ui::orchestrator::nav_destination::NavDestination;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
+use crate::ui::orchestrator::widgets::drawer::{self, DrawerWidth};
 use crate::ui::orchestrator::widgets::icon_button::{self, ButtonIcon};
 use crate::ui::orchestrator::widgets::{BtnOpts, redesign_btn, redesign_btn_height};
 use crate::ui::settings::state_settings::SettingsTab;
 use crate::ui::shared::redesign_tokens::{
-    ThemePalette, redesign_accent, redesign_border_soft, redesign_border_strong, redesign_error,
-    redesign_shell_bg, redesign_success, redesign_text_muted, redesign_text_primary,
-    redesign_warning,
+    REDESIGN_TITLEBAR_HEIGHT_PX, ThemePalette, redesign_accent, redesign_border_soft,
+    redesign_border_strong, redesign_error, redesign_shell_bg, redesign_success,
+    redesign_text_muted, redesign_text_primary, redesign_warning,
 };
 use crate::ui::workspace::versions::{versions_form, versions_menus, versions_sheets};
 
@@ -52,7 +53,6 @@ pub(crate) fn render(ui: &mut egui::Ui, app: &mut OrchestratorApp, ctx: &egui::C
     app.catalog_runtime
         .ensure_loaded(&mut app.catalog_screen_state, &destination);
     app.catalog_runtime.poll(&mut app.catalog_screen_state);
-    let rect = ui.max_rect();
     egui::Frame::default().show(ui, |ui| {
         ui.set_width(ui.available_width());
         render_header(ui, app, palette);
@@ -105,7 +105,7 @@ pub(crate) fn render(ui: &mut egui::Ui, app: &mut OrchestratorApp, ctx: &egui::C
         ui.add_space(((bottom_gap - top_gap) * 0.5).max(0.0));
         render_footer(ui, app, palette, &destination);
     });
-    render_sheet(app, ctx, palette, rect);
+    render_sheet(app, ctx, palette);
     if app.catalog_runtime.running
         || app.catalog_runtime.scan_rx.is_some()
         || app.catalog_screen_state.editor_step2.forks_list.status
@@ -1137,12 +1137,27 @@ fn render_destination_line(
     }
 }
 
-fn render_sheet(
-    app: &mut OrchestratorApp,
-    ctx: &egui::Context,
-    palette: ThemePalette,
-    rect: egui::Rect,
-) {
+fn source_editor_rect(ctx: &egui::Context) -> egui::Rect {
+    let screen = ctx.screen_rect();
+    let width = drawer::drawer_width(screen.width(), DrawerWidth::Wide);
+    egui::Rect::from_min_max(
+        egui::pos2(
+            screen.right() - width,
+            screen.top() + REDESIGN_TITLEBAR_HEIGHT_PX,
+        ),
+        screen.max,
+    )
+}
+
+fn sheet_backdrop_rect(ctx: &egui::Context) -> egui::Rect {
+    let screen = ctx.screen_rect();
+    egui::Rect::from_min_max(
+        egui::pos2(screen.left(), screen.top() + REDESIGN_TITLEBAR_HEIGHT_PX),
+        screen.max,
+    )
+}
+
+fn render_sheet(app: &mut OrchestratorApp, ctx: &egui::Context, palette: ThemePalette) {
     let sheet = app.catalog_screen_state.editor_step2.versions_ui.sheet;
     let outcome = match sheet {
         Some(VersionsSheet::EditSource) => {
@@ -1157,20 +1172,28 @@ fn render_sheet(
                     .clone(),
                 has_modlist_destination: false,
                 id_salt: "catalog_sheet_edit",
+                categories: app
+                    .catalog_screen_state
+                    .category_options
+                    .values()
+                    .cloned()
+                    .collect(),
             };
-            Some(versions_sheets::render_edit_source(
+            Some(versions_sheets::render_edit_source_with_backdrop(
                 ctx,
                 palette,
-                rect,
+                source_editor_rect(ctx),
+                sheet_backdrop_rect(ctx),
                 &mut app.catalog_screen_state.editor_step2,
                 &env,
                 true,
             ))
         }
-        Some(VersionsSheet::Forks) => Some(versions_sheets::render_forks(
+        Some(VersionsSheet::Forks) => Some(versions_sheets::render_forks_with_backdrop(
             ctx,
             palette,
-            rect,
+            source_editor_rect(ctx),
+            sheet_backdrop_rect(ctx),
             &app.catalog_screen_state.editor_step2,
             true,
         )),

@@ -4713,12 +4713,15 @@ fn catalog_type_options_all_existing_custom_dedup_and_games_searchable() {
         .chain(games.iter())
         .map(|s| (*s).to_owned())
         .collect();
-    source
-        .categories
-        .extend([" quests ".to_owned(), "Future Custom".to_owned()]);
+    source.categories.extend([
+        " quests ".to_owned(),
+        " bgee ".to_owned(),
+        " ".to_owned(),
+        "Future Custom".to_owned(),
+    ]);
     let mut state = CatalogScreenState::default();
     state.replace_sources(vec![source], None);
-    assert_eq!(state.category_options.len(), 30);
+    assert_eq!(state.category_options.len(), types.len() + games.len() + 1);
     for category in types.into_iter().chain(["Future Custom"]) {
         assert!(
             state
@@ -4732,8 +4735,16 @@ fn catalog_type_options_all_existing_custom_dedup_and_games_searchable() {
         );
     }
     for game in games {
-        assert!(!state.category_options.contains_key(&game.to_lowercase()));
-        assert!(!state.rows[0].category_keys.contains(&game.to_lowercase()));
+        assert_eq!(
+            state
+                .category_options
+                .get(&game.to_lowercase())
+                .map(String::as_str),
+            Some(game)
+        );
+        assert!(state.rows[0].category_keys.contains(&game.to_lowercase()));
+        state.selected_types = BTreeSet::from([game.to_lowercase()]);
+        assert_eq!(state.visible_rows(), vec![0]);
         state.query = game.to_owned();
         assert_eq!(state.visible_rows(), vec![0]);
     }
@@ -4744,12 +4755,14 @@ fn catalog_type_or_and_query_kind_refresh_and_selection_contract() {
     let mut state = CatalogScreenState::default();
     let sources = catalog_type_sources();
     state.replace_sources(sources.clone(), None);
-    assert_eq!(state.category_options.len(), 2);
+    assert_eq!(state.category_options.len(), 3);
     assert_eq!(state.visible_rows().len(), 4);
     state.focus("tdd");
     state.toggle("tdd");
     state.choose_source("tdd", "mirror");
     let picks = state.source_picks.clone();
+    state.selected_types.insert("bgee".to_owned());
+    assert_eq!(state.visible_rows().len(), 1);
     state.selected_types.insert("npc".to_owned());
     assert_eq!(state.visible_rows().len(), 2);
     state.selected_types.insert("quests".to_owned());
@@ -4767,10 +4780,10 @@ fn catalog_type_or_and_query_kind_refresh_and_selection_contract() {
     state.query.clear();
     state.kind = CatalogKind::All;
     state.replace_sources(sources, None);
-    assert_eq!(state.selected_types.len(), 2);
+    assert_eq!(state.selected_types.len(), 3);
     assert_eq!(state.source_picks, picks);
     state.replace_sources(vec![fixture_sources()[3].clone()], None);
-    assert_eq!(state.selected_types.len(), 2);
+    assert_eq!(state.selected_types.len(), 3);
     assert!(state.category_options.is_empty());
     assert_eq!(state.visible_rows(), Vec::<usize>::new());
     state.selected_types.clear();
@@ -4788,6 +4801,45 @@ fn catalog_type_capture(harness: &mut Harness<'_, CatalogScene>, name: &str) {
             .save(directory.join(format!("filter-{name}.png")))
             .unwrap();
     }
+}
+
+fn catalog_type_select_game_and_npc(harness: &mut Harness<'_, CatalogScene>, name: &str) {
+    let game = catalog_painted_text(harness, "BGEE");
+    catalog_pointer_click(harness, game.center());
+    assert!(harness.state().popup_open);
+    assert_eq!(
+        harness.state().app.catalog_screen_state.selected_types,
+        BTreeSet::from(["bgee".to_owned()])
+    );
+    assert_eq!(
+        harness
+            .state()
+            .app
+            .catalog_screen_state
+            .visible_rows()
+            .len(),
+        1
+    );
+    catalog_painted_text(harness, "Filter (1)");
+    catalog_type_capture(harness, &format!("game-selected-{name}"));
+    let npc = catalog_painted_text(harness, "NPC");
+    catalog_pointer_click(harness, npc.center());
+    assert!(harness.state().popup_open);
+    assert_eq!(
+        harness.state().app.catalog_screen_state.selected_types,
+        BTreeSet::from(["bgee".to_owned(), "npc".to_owned()])
+    );
+    assert_eq!(
+        harness
+            .state()
+            .app
+            .catalog_screen_state
+            .visible_rows()
+            .len(),
+        2
+    );
+    catalog_painted_text(harness, "Filter (2)");
+    catalog_type_capture(harness, &format!("selected-{name}"));
 }
 
 #[test]
@@ -4815,20 +4867,12 @@ fn catalog_type_popup_click_clear_escape_outside_and_live_resize() {
         catalog_pointer_click(&mut harness, filter.center());
         assert!(harness.state().popup_open);
         catalog_type_capture(&mut harness, &format!("open-{name}"));
-        let npc = catalog_painted_text(&harness, "NPC");
-        catalog_pointer_click(&mut harness, npc.center());
-        assert!(harness.state().popup_open);
-        assert_eq!(
-            harness.state().app.catalog_screen_state.selected_types,
-            BTreeSet::from(["npc".to_owned()])
-        );
-        catalog_painted_text(&harness, "Filter (1)");
-        catalog_type_capture(&mut harness, &format!("selected-{name}"));
+        catalog_type_select_game_and_npc(&mut harness, name);
         for width in [1280_u16, 1100, 900, 1570] {
             harness.set_size(egui::vec2(f32::from(width), 813.0));
             harness.run();
             assert!(harness.state().popup_open);
-            for label in ["NPC", "Quests", "Clear filters"] {
+            for label in ["BGEE", "NPC", "Quests", "Clear filters"] {
                 let rect = catalog_painted_text(&harness, label);
                 assert!(
                     egui::Rect::from_min_size(
@@ -4863,6 +4907,15 @@ fn catalog_type_popup_click_clear_escape_outside_and_live_resize() {
                 .focused_tp2
                 .as_deref(),
             Some("tdd")
+        );
+        assert_eq!(
+            harness
+                .state()
+                .app
+                .catalog_screen_state
+                .visible_rows()
+                .len(),
+            4
         );
         catalog_type_capture(&mut harness, &format!("cleared-{name}"));
         harness.press_key(egui::Key::Escape);
@@ -4989,7 +5042,13 @@ fn catalog_full_toolbar_geometry(
 }
 
 fn catalog_full_toolbar_states(harness: &mut Harness<'_, CatalogScene>, theme: &str) {
-    for count in [0, 2, 29] {
+    let all_categories = harness
+        .state()
+        .app
+        .catalog_screen_state
+        .category_options
+        .len();
+    for count in [0, 2, all_categories] {
         let state = &mut harness.state_mut().app.catalog_screen_state;
         state.selected_types = state.category_options.keys().take(count).cloned().collect();
         harness.run();
@@ -5049,7 +5108,25 @@ fn catalog_full_default_normal_1280_toolbar_stays_inline() {
                 .sum::<usize>(),
             1292
         );
-        assert_eq!(state.category_options.len(), 29);
+        let metadata: toml::Value = mod_downloads::default_mod_downloads_content()
+            .parse()
+            .unwrap();
+        let expected: BTreeSet<String> = metadata["mods"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .flat_map(|entry| entry["categories"].as_array().unwrap())
+            .map(|value| value.as_str().unwrap().trim().to_lowercase())
+            .filter(|value| !value.is_empty())
+            .collect();
+        assert_eq!(
+            state
+                .category_options
+                .keys()
+                .cloned()
+                .collect::<BTreeSet<_>>(),
+            expected
+        );
         catalog_full_toolbar_states(&mut harness, theme);
         harness.state_mut().app.catalog_screen_state.query = "baldur".to_owned();
         harness.run();
@@ -5077,4 +5154,1199 @@ fn catalog_toolbar_widget(harness: &Harness<'_, CatalogScene>, label: &str) -> e
             _ => None,
         })
         .unwrap_or_else(|| panic!("missing toolbar widget {label}"))
+}
+
+#[test]
+fn source_categories_editor_catalog_control_is_available() {
+    let _lock = mod_downloads::AMBIENT_TEST_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let _guard = AmbientGuard(mod_downloads::active_modlist_dir());
+    for palette in [ThemePalette::Dark, ThemePalette::Light] {
+        for size in [egui::vec2(1570.0, 1002.0), egui::vec2(1100.0, 760.0)] {
+            let harness = catalog_scene(size, palette, "source-editor");
+            assert_visible_text(&harness, "Categories", size);
+            assert_visible_text(&harness, "Find or add a category…", size);
+            assert_visible_text(&harness, "Save to My default", size);
+        }
+    }
+}
+
+#[test]
+fn source_categories_editor_versions_control_is_available() {
+    for (theme, palette) in [("dark", ThemePalette::Dark), ("light", ThemePalette::Light)] {
+        for (width, size) in [
+            ("normal", egui::vec2(1570.0, 1002.0)),
+            ("narrow", egui::vec2(1100.0, 760.0)),
+        ] {
+            source_categories_versions_interactions(size, palette, &format!("{theme}-{width}"));
+        }
+    }
+}
+
+fn source_categories_versions_interactions(size: egui::Vec2, palette: ThemePalette, name: &str) {
+    use crate::ui::workspace::versions::versions_sheets::{self, EditSourceEnv};
+    let source = github_source();
+    let mut step2 = crate::app::state::Step2State::default();
+    step2.versions_ui.source_form = Some(source_form::from_source(
+        &source,
+        SourceFormIdentity::default(),
+        ModSourceEditDestination::ThisModlist,
+        "tdd",
+    ));
+    let mut ready = false;
+    let mut harness = Harness::builder()
+        .with_size(size)
+        .with_step_dt(1.0 / 60.0)
+        .with_max_steps(64)
+        .build_state(
+            move |ctx, step2| {
+                if !ready {
+                    crate::ui::shared::redesign_fonts::install_redesign_fonts(ctx);
+                    ready = true;
+                    ctx.request_repaint();
+                    return;
+                }
+                ctx.set_visuals(crate::ui::shared::redesign_visuals::build_for(palette));
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    versions_sheets::render_edit_source(
+                        ctx,
+                        palette,
+                        ui.max_rect(),
+                        step2,
+                        &EditSourceEnv {
+                            busy: false,
+                            logged_in: true,
+                            release_list:
+                                crate::app::github_release_list::ReleaseListState::default(),
+                            has_modlist_destination: true,
+                            id_salt: "source_categories_versions_test",
+                            categories: vec!["BG2EE".to_string(), "EET".to_string()],
+                        },
+                        true,
+                    );
+                });
+            },
+            step2,
+        );
+    assert!(
+        harness
+            .output()
+            .shapes
+            .iter()
+            .any(|shape| { text_bounds(&shape.shape, "Find or add a category…").is_some() })
+    );
+    source_categories_sheet_click(&mut harness, "EET");
+    assert_eq!(
+        harness
+            .state()
+            .versions_ui
+            .source_form
+            .as_ref()
+            .unwrap()
+            .kept
+            .categories,
+        vec!["EET"]
+    );
+    source_categories_sheet_scroll(&mut harness, size, -1000.0);
+    source_categories_sheet_capture(&mut harness, &format!("versions-open-{name}"));
+    source_categories_sheet_capture(&mut harness, &format!("versions-closed-{name}"));
+    source_categories_sheet_click(&mut harness, "EET  ×");
+    assert_eq!(
+        harness
+            .state()
+            .versions_ui
+            .source_form
+            .as_ref()
+            .unwrap()
+            .kept
+            .categories,
+        Vec::<String>::new()
+    );
+}
+
+fn source_categories_sheet_scroll<T>(harness: &mut Harness<'_, T>, size: egui::Vec2, delta: f32) {
+    let pos = egui::pos2(size.x - 180.0, size.y - 180.0);
+    harness.input_mut().events.extend([
+        egui::Event::PointerMoved(pos),
+        egui::Event::MouseWheel {
+            unit: egui::MouseWheelUnit::Point,
+            delta: egui::vec2(0.0, delta),
+            modifiers: egui::Modifiers::NONE,
+        },
+    ]);
+    harness.run();
+    harness.run_steps(12);
+}
+
+fn source_categories_sheet_click<T>(harness: &mut Harness<'_, T>, text: &str) {
+    let rect = harness
+        .output()
+        .shapes
+        .iter()
+        .find_map(|shape| text_bounds(&shape.shape, text))
+        .unwrap_or_else(|| panic!("missing {text}"));
+    let pos = rect.center();
+    harness.input_mut().events.extend([
+        egui::Event::PointerMoved(pos),
+        egui::Event::PointerButton {
+            pos,
+            button: egui::PointerButton::Primary,
+            pressed: true,
+            modifiers: egui::Modifiers::NONE,
+        },
+        egui::Event::PointerButton {
+            pos,
+            button: egui::PointerButton::Primary,
+            pressed: false,
+            modifiers: egui::Modifiers::NONE,
+        },
+    ]);
+    harness.run();
+}
+
+fn source_categories_sheet_capture<T>(harness: &mut Harness<'_, T>, name: &str) {
+    if let Some(directory) = std::env::var_os("BIO_TEST_SCREENSHOT_DIR") {
+        let directory = PathBuf::from(directory);
+        std::fs::create_dir_all(&directory).unwrap();
+        harness
+            .render()
+            .unwrap()
+            .save(directory.join(format!("source-categories-{name}.png")))
+            .unwrap();
+    }
+}
+
+#[test]
+fn source_categories_editor_catalog_save_applies_edits_losslessly() {
+    let _lock = mod_downloads::AMBIENT_TEST_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let _guard = AmbientGuard(mod_downloads::active_modlist_dir());
+    let root = FixtureRoot::new();
+    let mut app = isolated_app(&root);
+    mod_downloads::set_active_modlist_dir(None);
+    let original = catalog_categories_text("categories = [\"Original\"]");
+    let path = mod_downloads::mod_downloads_user_path();
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    std::fs::write(&path, &original).unwrap();
+    let loaded = mod_downloads::load_mod_download_sources_from_texts("", &original, "");
+    app.catalog_screen_state
+        .replace_sources(loaded.sources, loaded.error);
+    app.catalog_screen_state.open_editor("fixture");
+    let wanted = vec![
+        "Quest, story".to_string(),
+        "NPC's \"Journeys\"".to_string(),
+        "Überblick".to_string(),
+    ];
+    app.catalog_screen_state
+        .editor_step2
+        .versions_ui
+        .source_form
+        .as_mut()
+        .unwrap()
+        .kept
+        .categories
+        .clone_from(&wanted);
+    app.catalog_runtime
+        .save_editor(&mut app.catalog_screen_state)
+        .unwrap();
+    let saved = std::fs::read_to_string(&path).unwrap();
+    let loaded = mod_downloads::load_mod_download_sources_from_texts("", &saved, "");
+    assert!(loaded.error.is_none(), "{:?}", loaded.error);
+    assert_eq!(loaded.sources.len(), 2);
+    for source in &loaded.sources {
+        assert_eq!(source.categories, wanted);
+    }
+    app.catalog_screen_state
+        .replace_sources(loaded.sources, loaded.error);
+    app.catalog_screen_state.open_editor("fixture");
+    assert_eq!(
+        app.catalog_screen_state
+            .editor_step2
+            .versions_ui
+            .source_form
+            .as_ref()
+            .unwrap()
+            .kept
+            .categories,
+        wanted
+    );
+}
+
+#[test]
+fn source_categories_editor_cancel_clear_and_unchanged_override() {
+    let _lock = mod_downloads::AMBIENT_TEST_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let _guard = AmbientGuard(mod_downloads::active_modlist_dir());
+    let root = FixtureRoot::new();
+    let mut app = isolated_app(&root);
+    mod_downloads::set_active_modlist_dir(None);
+    let original = catalog_categories_text("categories = [\"Original\"]");
+    let path = mod_downloads::mod_downloads_user_path();
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    std::fs::write(&path, &original).unwrap();
+    app.catalog_screen_state.replace_from_texts("", &original);
+    app.catalog_screen_state.open_editor("fixture");
+    app.catalog_screen_state
+        .editor_step2
+        .versions_ui
+        .source_form
+        .as_mut()
+        .unwrap()
+        .kept
+        .categories
+        .clear();
+    app.catalog_runtime
+        .dismiss_editor(&mut app.catalog_screen_state);
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), original);
+    app.catalog_screen_state.open_editor("fixture");
+    app.catalog_screen_state
+        .editor_step2
+        .versions_ui
+        .source_form
+        .as_mut()
+        .unwrap()
+        .kept
+        .categories
+        .clear();
+    app.catalog_runtime
+        .save_editor(&mut app.catalog_screen_state)
+        .unwrap();
+    let cleared = std::fs::read_to_string(&path).unwrap();
+    let parsed: toml::Value = toml::from_str(&cleared).unwrap();
+    assert_eq!(parsed["mods"][0]["categories"].as_array().unwrap().len(), 0);
+    app.catalog_screen_state.replace_from_texts("", &original);
+    app.catalog_screen_state.open_editor("fixture");
+    let form = app
+        .catalog_screen_state
+        .editor_step2
+        .versions_ui
+        .source_form
+        .as_mut()
+        .unwrap();
+    form.tag = "v9".to_owned();
+    form.category_editor.input = "Unsubmitted category".to_owned();
+    app.catalog_runtime
+        .save_editor(&mut app.catalog_screen_state)
+        .unwrap();
+    let unchanged = std::fs::read_to_string(&path).unwrap();
+    let parsed: toml::Value = toml::from_str(&unchanged).unwrap();
+    assert_eq!(parsed["mods"][0]["categories"].as_array().unwrap().len(), 0);
+    assert!(!unchanged.contains("Unsubmitted category"));
+}
+
+fn source_categories_catalog_click(harness: &mut Harness<'_, CatalogScene>, label: &str) {
+    let target = catalog_painted_text(harness, label);
+    catalog_pointer_click(harness, target.center());
+}
+
+fn source_categories_catalog_form<'a>(
+    harness: &'a Harness<'_, CatalogScene>,
+) -> &'a source_form::SourceForm {
+    harness
+        .state()
+        .app
+        .catalog_screen_state
+        .editor_step2
+        .versions_ui
+        .source_form
+        .as_ref()
+        .unwrap()
+}
+
+fn source_categories_catalog_custom(harness: &mut Harness<'_, CatalogScene>, value: &str) {
+    source_categories_catalog_click(harness, "Find or add a category…");
+    harness
+        .input_mut()
+        .events
+        .push(egui::Event::Text(value.to_owned()));
+    harness.run();
+    harness.press_key(egui::Key::Enter);
+    harness.run();
+}
+
+fn source_categories_catalog_interactions(
+    harness: &mut Harness<'_, CatalogScene>,
+    name: &str,
+    size: egui::Vec2,
+) {
+    source_categories_sheet_scroll(harness, size, -1000.0);
+    assert_visible_text(harness, "Clear categories", size);
+    source_categories_catalog_click(harness, "BG2EE");
+    assert!(
+        source_categories_catalog_form(harness)
+            .kept
+            .categories
+            .contains(&"BG2EE".to_string())
+    );
+    source_categories_catalog_custom(harness, " Quest, story ");
+    assert!(
+        source_categories_catalog_form(harness)
+            .kept
+            .categories
+            .contains(&"Quest, story".to_string())
+    );
+    source_categories_catalog_custom(harness, "quest, STORY");
+    assert_eq!(
+        source_categories_catalog_form(harness)
+            .kept
+            .categories
+            .len(),
+        2
+    );
+    catalog_type_capture(harness, &format!("source-categories-open-{name}"));
+    assert_visible_text(harness, "Quest, story  ×", size);
+    catalog_type_capture(harness, &format!("source-categories-closed-{name}"));
+    source_categories_catalog_click(harness, "Clear categories");
+    assert_eq!(
+        source_categories_catalog_form(harness).kept.categories,
+        Vec::<String>::new()
+    );
+    source_categories_catalog_click(harness, "Cancel");
+    assert!(
+        harness
+            .state()
+            .app
+            .catalog_screen_state
+            .editor_step2
+            .versions_ui
+            .source_form
+            .is_none()
+    );
+}
+
+#[test]
+fn source_categories_editor_catalog_picker_actual_interactions() {
+    let _lock = mod_downloads::AMBIENT_TEST_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let _guard = AmbientGuard(mod_downloads::active_modlist_dir());
+    for (theme, palette) in [("dark", ThemePalette::Dark), ("light", ThemePalette::Light)] {
+        for (width, size) in [
+            ("normal", egui::vec2(1570.0, 1002.0)),
+            ("narrow", egui::vec2(1100.0, 760.0)),
+        ] {
+            let mut harness = catalog_scene(size, palette, "source-editor");
+            harness
+                .state_mut()
+                .app
+                .catalog_screen_state
+                .category_options = BTreeMap::from([
+                ("bg2ee".to_string(), "BG2EE".to_string()),
+                ("eet".to_string(), "EET".to_string()),
+            ]);
+            harness
+                .state_mut()
+                .app
+                .catalog_screen_state
+                .editor_step2
+                .versions_ui
+                .source_form
+                .as_mut()
+                .unwrap()
+                .advanced_open = false;
+            harness.run();
+            source_categories_catalog_interactions(
+                &mut harness,
+                &format!("catalog-{theme}-{width}"),
+                size,
+            );
+        }
+    }
+}
+
+#[test]
+fn source_categories_editor_explicit_empty_clear_overrides_destination() {
+    let _lock = mod_downloads::AMBIENT_TEST_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let _guard = AmbientGuard(mod_downloads::active_modlist_dir());
+    let root = FixtureRoot::new();
+    let mut app = isolated_app(&root);
+    mod_downloads::set_active_modlist_dir(None);
+    let path = mod_downloads::mod_downloads_user_path();
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    let original = catalog_categories_text("categories = [\"Destination\"]");
+    std::fs::write(&path, original).unwrap();
+    app.catalog_screen_state
+        .replace_from_texts("", &catalog_categories_text("categories = []"));
+    app.catalog_screen_state.open_editor("fixture");
+    let form = app
+        .catalog_screen_state
+        .editor_step2
+        .versions_ui
+        .source_form
+        .as_mut()
+        .unwrap();
+    assert_eq!(form.kept.categories, Vec::<String>::new());
+    form.category_editor.clear_requested = true;
+    app.catalog_runtime
+        .save_editor(&mut app.catalog_screen_state)
+        .unwrap();
+    let saved = std::fs::read_to_string(&path).unwrap();
+    let parsed: toml::Value = toml::from_str(&saved).unwrap();
+    assert_eq!(parsed["mods"][0]["categories"].as_array().unwrap().len(), 0);
+}
+
+#[test]
+fn source_categories_editor_all_configured_choices_scroll_and_footer() {
+    let _lock = mod_downloads::AMBIENT_TEST_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let _guard = AmbientGuard(mod_downloads::active_modlist_dir());
+    let mut configured = CatalogScreenState::default();
+    configured.replace_from_texts(mod_downloads::default_mod_downloads_content(), "");
+    assert_eq!(configured.category_options.len(), 42);
+    for game in [
+        "bg1", "bg2", "bgee", "sod", "bg2ee", "eet", "tutu", "bgt", "iwd", "iwdee", "iwd2", "pst",
+        "pstee",
+    ] {
+        assert!(configured.category_options.contains_key(game), "{game}");
+    }
+    let last = configured
+        .category_options
+        .values()
+        .next_back()
+        .unwrap()
+        .clone();
+    let size = egui::vec2(1100.0, 760.0);
+    for (theme, palette) in [("dark", ThemePalette::Dark), ("light", ThemePalette::Light)] {
+        let mut harness = catalog_scene(size, palette, "source-editor");
+        harness
+            .state_mut()
+            .app
+            .catalog_screen_state
+            .category_options
+            .clone_from(&configured.category_options);
+        harness
+            .state_mut()
+            .app
+            .catalog_screen_state
+            .editor_step2
+            .versions_ui
+            .source_form
+            .as_mut()
+            .unwrap()
+            .advanced_open = false;
+        harness.run();
+        source_categories_sheet_capture(&mut harness, &format!("all42-top-{theme}"));
+        source_categories_sheet_scroll(&mut harness, size, -3000.0);
+        assert_visible_text(&harness, &last, size);
+        assert_visible_text(&harness, "Clear categories", size);
+        assert_visible_text(&harness, "Save to My default", size);
+        source_categories_sheet_capture(&mut harness, &format!("all42-bottom-{theme}"));
+        source_categories_catalog_click(&mut harness, &last);
+        assert!(
+            source_categories_catalog_form(&harness)
+                .kept
+                .categories
+                .contains(&last)
+        );
+    }
+}
+
+#[test]
+fn source_tag_editor_empty_input_and_selected_first() {
+    let _lock = mod_downloads::AMBIENT_TEST_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let _guard = AmbientGuard(mod_downloads::active_modlist_dir());
+    let size = egui::vec2(1570.0, 1002.0);
+    let mut harness = catalog_scene(size, ThemePalette::Dark, "source-editor");
+    let form = harness
+        .state_mut()
+        .app
+        .catalog_screen_state
+        .editor_step2
+        .versions_ui
+        .source_form
+        .as_mut()
+        .unwrap();
+    form.kept.categories = vec!["Audio".to_owned(), "Music".to_owned(), "IWD".to_owned()];
+    harness.run();
+    assert_visible_text(&harness, "Find or add a category…", size);
+    let input = catalog_painted_text(&harness, "Find or add a category…");
+    let assigned = catalog_painted_text(&harness, "Audio  ×");
+    assert!(assigned.top() > input.bottom());
+    assert_eq!(
+        source_categories_catalog_form(&harness)
+            .category_editor
+            .input,
+        ""
+    );
+    assert!(
+        !harness
+            .output()
+            .shapes
+            .iter()
+            .any(|shape| text_bounds(&shape.shape, "Edit categories").is_some())
+    );
+}
+
+fn source_tag_versions_scene(
+    size: egui::Vec2,
+    palette: ThemePalette,
+) -> Harness<'static, CatalogScene> {
+    let root = FixtureRoot::new();
+    let mut app = isolated_app(&root);
+    app.theme_palette = palette;
+    app.wizard_state.step2.update_selected_popup_open = true;
+    app.wizard_state.step2.versions_ui.sheet = Some(crate::app::state::VersionsSheet::EditSource);
+    app.wizard_state.step2.versions_ui.sheet_tp2 = Some("tdd".to_owned());
+    app.wizard_state.step2.versions_ui.known =
+        Some(crate::app::versions_view::KnownExtras::default());
+    app.wizard_state.step2.versions_ui.source_form = Some(source_form::from_source(
+        &github_source(),
+        SourceFormIdentity::default(),
+        ModSourceEditDestination::GlobalDefault,
+        "tdd",
+    ));
+    let mut ready = false;
+    Harness::builder().with_size(size).build_state(
+        move |ctx, state| {
+            if !ready {
+                crate::ui::shared::redesign_fonts::install_redesign_fonts(ctx);
+                ready = true;
+                ctx.request_repaint();
+                return;
+            }
+            ctx.set_visuals(crate::ui::shared::redesign_visuals::build_for(palette));
+            let mut action = None;
+            crate::ui::workspace::versions::versions_drawer::render(
+                ctx,
+                &mut state.app,
+                &mut action,
+                palette,
+            );
+        },
+        CatalogScene {
+            app,
+            root,
+            urls: Vec::new(),
+            copied_paths: Vec::new(),
+            content_rect: egui::Rect::NOTHING,
+            popup_open: false,
+            focused_widget: None,
+        },
+    )
+}
+
+#[test]
+fn source_sheet_spacing_versions_keeps_original_flush_bounds() {
+    let _lock = mod_downloads::AMBIENT_TEST_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let _guard = AmbientGuard(mod_downloads::active_modlist_dir());
+    for (theme, palette) in [("dark", ThemePalette::Dark), ("light", ThemePalette::Light)] {
+        for (width, size) in [
+            ("normal", egui::vec2(1570.0, 1002.0)),
+            ("narrow", egui::vec2(1100.0, 760.0)),
+        ] {
+            let mut harness = source_tag_versions_scene(size, palette);
+            source_sheet_assert_flush_bounds(&harness, size);
+            source_categories_sheet_capture(
+                &mut harness,
+                &format!("versions-flush-{theme}-{width}"),
+            );
+        }
+    }
+}
+
+fn source_sheet_assert_flush_bounds(harness: &Harness<'_, CatalogScene>, size: egui::Vec2) {
+    let mut shapes = Vec::new();
+    for clipped in &harness.output().shapes {
+        catalog_shapes(&clipped.shape, &mut shapes);
+    }
+    let panel = shapes
+        .iter()
+        .filter_map(|shape| match shape {
+            egui::Shape::Rect(rect)
+                if (rect.rect.width() - 600.0).abs() < 1.0 && rect.rect.height() > size.y * 0.6 =>
+            {
+                Some(rect.rect)
+            }
+            _ => None,
+        })
+        .max_by(|a, b| a.height().total_cmp(&b.height()))
+        .expect("shared source sheet background");
+    assert!(
+        (panel.right() - size.x).abs() < 1.0,
+        "right edge: {panel:?}"
+    );
+    assert!(
+        (panel.bottom() - size.y).abs() < 1.0,
+        "bottom edge: {panel:?}"
+    );
+    let top = crate::ui::shared::redesign_tokens::REDESIGN_TITLEBAR_HEIGHT_PX;
+    assert!((panel.top() - top).abs() < 1.0, "top edge: {panel:?}");
+}
+
+#[test]
+fn source_sheet_spacing_catalog_matches_original_versions_bounds() {
+    let _lock = mod_downloads::AMBIENT_TEST_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let _guard = AmbientGuard(mod_downloads::active_modlist_dir());
+    for (theme, palette) in [("dark", ThemePalette::Dark), ("light", ThemePalette::Light)] {
+        for (width, size) in [
+            ("normal", egui::vec2(1570.0, 1002.0)),
+            ("narrow", egui::vec2(1100.0, 760.0)),
+        ] {
+            let mut harness = catalog_scene(size, palette, "source-editor");
+            source_sheet_assert_flush_bounds(&harness, size);
+            source_categories_sheet_capture(
+                &mut harness,
+                &format!("catalog-flush-{theme}-{width}"),
+            );
+        }
+    }
+}
+
+fn source_tag_type_query(harness: &mut Harness<'_, CatalogScene>, text: &str) {
+    source_categories_catalog_click(harness, "Find or add a category…");
+    harness
+        .input_mut()
+        .events
+        .push(egui::Event::Text(text.to_owned()));
+    harness.run();
+}
+
+#[test]
+fn source_tag_editor_filter_enter_and_pending_query() {
+    let _lock = mod_downloads::AMBIENT_TEST_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let _guard = AmbientGuard(mod_downloads::active_modlist_dir());
+    let mut harness = catalog_scene(
+        egui::vec2(1570.0, 1002.0),
+        ThemePalette::Dark,
+        "source-editor",
+    );
+    harness
+        .state_mut()
+        .app
+        .catalog_screen_state
+        .category_options = BTreeMap::from([
+        ("eet".to_owned(), "EET".to_owned()),
+        ("difficulty".to_owned(), "Difficulty".to_owned()),
+    ]);
+    let form = harness
+        .state_mut()
+        .app
+        .catalog_screen_state
+        .editor_step2
+        .versions_ui
+        .source_form
+        .as_mut()
+        .unwrap();
+    form.kept.categories = vec!["Audio".to_owned()];
+    form.category_editor.original = form.kept.categories.clone();
+    harness.run();
+    source_tag_type_query(&mut harness, "eEt");
+    assert!(!source_categories_catalog_form(&harness).categories_changed());
+    assert!(
+        harness
+            .output()
+            .shapes
+            .iter()
+            .any(|shape| text_bounds(&shape.shape, "Audio  ×").is_some())
+    );
+    assert!(
+        harness
+            .output()
+            .shapes
+            .iter()
+            .any(|shape| text_bounds(&shape.shape, "EET").is_some())
+    );
+    assert!(
+        !harness
+            .output()
+            .shapes
+            .iter()
+            .any(|shape| text_bounds(&shape.shape, "Difficulty").is_some())
+    );
+    harness.press_key(egui::Key::Enter);
+    harness.run();
+    assert_eq!(
+        source_categories_catalog_form(&harness).kept.categories,
+        vec!["Audio", "EET"]
+    );
+    source_categories_catalog_custom(&mut harness, "eet");
+    assert_eq!(
+        source_categories_catalog_form(&harness).kept.categories,
+        vec!["Audio", "EET"]
+    );
+    source_categories_catalog_custom(&mut harness, "  Quest, \"Überblick\"  ");
+    assert_eq!(
+        source_categories_catalog_form(&harness).kept.categories,
+        vec!["Audio", "EET", "Quest, \"Überblick\""]
+    );
+    source_categories_catalog_click(&mut harness, "Quest, \"Überblick\"  ×");
+    assert_eq!(
+        source_categories_catalog_form(&harness).kept.categories,
+        vec!["Audio", "EET"]
+    );
+}
+
+fn catalog_backdrop_scene(
+    size: egui::Vec2,
+    palette: ThemePalette,
+    surface: &str,
+) -> Harness<'static, CatalogScene> {
+    let versions = matches!(surface, "versions" | "versions-forks");
+    let root = FixtureRoot::new();
+    let mut app = isolated_app(&root);
+    app.theme_palette = palette;
+    app.nav = NavDestination::Catalog;
+    app.last_rendered_nav = NavDestination::Catalog;
+    app.catalog_screen_state = fixture_state();
+    app.catalog_runtime.mark_loaded();
+    if versions {
+        app.wizard_state.step2.update_selected_popup_open = true;
+        app.wizard_state.step2.versions_ui.sheet = Some(if surface == "versions-forks" {
+            crate::app::state::VersionsSheet::Forks
+        } else {
+            crate::app::state::VersionsSheet::EditSource
+        });
+        app.wizard_state.step2.versions_ui.sheet_tp2 = Some("tdd".to_owned());
+        app.wizard_state.step2.versions_ui.known =
+            Some(crate::app::versions_view::KnownExtras::default());
+        app.wizard_state.step2.versions_ui.source_form = Some(source_form::from_source(
+            &github_source(),
+            SourceFormIdentity::default(),
+            ModSourceEditDestination::GlobalDefault,
+            "tdd",
+        ));
+        if surface == "versions-forks" {
+            app.wizard_state.step2.mod_download_forks = vec![fixture_fork()];
+            app.wizard_state.step2.mod_download_forks_popup_tp2 = "tdd".to_owned();
+            app.wizard_state.step2.mod_download_forks_popup_label = "The Darkest Day".to_owned();
+        }
+    } else {
+        seed_catalog_surface(&mut app, surface);
+    }
+    let mut ready = false;
+    Harness::builder()
+        .with_size(size)
+        .with_step_dt(1.0 / 60.0)
+        .with_max_steps(64)
+        .build_state(
+            move |ctx, scene| {
+                if !ready {
+                    crate::ui::shared::redesign_fonts::install_redesign_fonts(ctx);
+                    ready = true;
+                    ctx.request_repaint();
+                    return;
+                }
+                seed_catalog_scene_releases(scene);
+                ctx.set_visuals(crate::ui::shared::redesign_visuals::build_for(palette));
+                catalog_backdrop_shell(ctx, scene, palette);
+                if versions {
+                    let mut action = None;
+                    crate::ui::workspace::versions::versions_drawer::render(
+                        ctx,
+                        &mut scene.app,
+                        &mut action,
+                        palette,
+                    );
+                }
+            },
+            CatalogScene {
+                app,
+                root,
+                urls: Vec::new(),
+                copied_paths: Vec::new(),
+                content_rect: egui::Rect::NOTHING,
+                popup_open: false,
+                focused_widget: None,
+            },
+        )
+}
+
+fn catalog_backdrop_shell(ctx: &egui::Context, scene: &mut CatalogScene, palette: ThemePalette) {
+    let _history_clicked =
+        crate::ui::shell::shell_chrome::render_shell(ctx, palette, 3, None, false, false, |ui| {
+            egui::SidePanel::left("catalog_backdrop_rail")
+                .exact_width(crate::ui::shared::redesign_tokens::REDESIGN_NAV_WIDTH_PX)
+                .resizable(false)
+                .show_separator_line(false)
+                .frame(egui::Frame::NONE)
+                .show_inside(ui, |ui| {
+                    crate::ui::orchestrator::left_rail::render(
+                        ui,
+                        palette,
+                        &mut scene.app.nav,
+                        false,
+                        &scene.app.path_validation,
+                        None,
+                    );
+                });
+            egui::CentralPanel::default()
+                .frame(egui::Frame::NONE.inner_margin(egui::Margin {
+                    left: 28,
+                    right: 28,
+                    top: 24,
+                    bottom: 24,
+                }))
+                .show_inside(ui, |ui| {
+                    scene.content_rect = ui.max_rect();
+                    crate::ui::orchestrator::page_router::render(ui, &mut scene.app, ctx);
+                });
+        });
+}
+
+fn catalog_backdrop_rects(harness: &Harness<'_, CatalogScene>) -> Vec<(usize, egui::Rect, u8)> {
+    let mut result = Vec::new();
+    for (index, clipped) in harness.output().shapes.iter().enumerate() {
+        let mut shapes = Vec::new();
+        catalog_shapes(&clipped.shape, &mut shapes);
+        for shape in shapes {
+            if let egui::Shape::Rect(rect) = shape
+                && [89, 148].contains(&rect.fill.a())
+                && rect.fill.r() == 0
+                && rect.fill.g() == 0
+                && rect.fill.b() == 0
+            {
+                result.push((index, rect.rect.intersect(clipped.clip_rect), rect.fill.a()));
+            }
+        }
+    }
+    result
+}
+
+fn catalog_backdrop_assert_coverage(
+    harness: &Harness<'_, CatalogScene>,
+    size: egui::Vec2,
+    versions: bool,
+) {
+    let top = crate::ui::shared::redesign_tokens::REDESIGN_TITLEBAR_HEIGHT_PX;
+    let expected = egui::Rect::from_min_max(egui::pos2(0.0, top), size.to_pos2());
+    let rects = catalog_backdrop_rects(harness);
+    let (index, covered, _) = rects
+        .iter()
+        .find(|(_, rect, _)| rect.contains_rect(expected.shrink(1.0)))
+        .unwrap_or_else(|| panic!("missing full-app backdrop: {rects:?}"));
+    assert!((covered.top() - top).abs() < 1.0, "{covered:?}");
+    for label in ["Home", "connected"] {
+        let text_index = harness
+            .output()
+            .shapes
+            .iter()
+            .position(|shape| text_bounds(&shape.shape, label).is_some())
+            .unwrap_or_else(|| panic!("missing actual shell {label}"));
+        assert!(*index > text_index, "backdrop precedes {label}");
+    }
+    if !versions {
+        for point in [egui::pos2(80.0, 200.0), egui::pos2(size.x - 650.0, 200.0)] {
+            assert_eq!(
+                rects
+                    .iter()
+                    .filter(|(_, rect, _)| rect.contains(point))
+                    .count(),
+                1,
+                "overlapping backdrop band at {point:?}"
+            );
+        }
+    }
+}
+
+fn catalog_backdrop_assert_panel(
+    harness: &Harness<'_, CatalogScene>,
+    size: egui::Vec2,
+    _surface: &str,
+) {
+    source_sheet_assert_flush_bounds(harness, size);
+}
+
+fn catalog_forks_panel_rect(harness: &Harness<'_, CatalogScene>, size: egui::Vec2) -> egui::Rect {
+    let mut shapes = Vec::new();
+    for clipped in &harness.output().shapes {
+        catalog_shapes(&clipped.shape, &mut shapes);
+    }
+    shapes
+        .iter()
+        .filter_map(|shape| match shape {
+            egui::Shape::Rect(rect)
+                if (rect.rect.width() - 600.0).abs() < 1.0 && rect.rect.height() > size.y * 0.6 =>
+            {
+                Some(rect.rect)
+            }
+            _ => None,
+        })
+        .max_by(|a, b| a.height().total_cmp(&b.height()))
+        .expect("actual Forks sheet panel")
+}
+
+#[test]
+fn catalog_forks_panel_matches_actual_versions_forks() {
+    let _lock = mod_downloads::AMBIENT_TEST_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let _guard = AmbientGuard(mod_downloads::active_modlist_dir());
+    for (theme, palette) in [("dark", ThemePalette::Dark), ("light", ThemePalette::Light)] {
+        for (width, size) in [
+            ("normal", egui::vec2(1570.0, 1002.0)),
+            ("narrow", egui::vec2(1100.0, 760.0)),
+        ] {
+            let mut versions = catalog_backdrop_scene(size, palette, "versions-forks");
+            let mut catalog = catalog_backdrop_scene(size, palette, "forks");
+            let original = catalog_forks_panel_rect(&versions, size);
+            let actual = catalog_forks_panel_rect(&catalog, size);
+            assert_eq!(
+                actual, original,
+                "Catalog Forks must match actual Versions Forks"
+            );
+            for (name, harness, is_versions) in [
+                ("versions", &mut versions, true),
+                ("catalog", &mut catalog, false),
+            ] {
+                source_sheet_assert_flush_bounds(harness, size);
+                catalog_backdrop_assert_coverage(harness, size, is_versions);
+                assert_visible_text(harness, "Use as new source", size);
+                assert_visible_text(harness, "Community/The_Darkest_Day", size);
+                source_categories_sheet_capture(
+                    harness,
+                    &format!("forks-panel-{name}-{theme}-{width}"),
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn catalog_backdrop_full_shell_matches_versions_coverage() {
+    let _lock = mod_downloads::AMBIENT_TEST_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let _guard = AmbientGuard(mod_downloads::active_modlist_dir());
+    for (theme, palette) in [("dark", ThemePalette::Dark), ("light", ThemePalette::Light)] {
+        for (width, size) in [
+            ("normal", egui::vec2(1570.0, 1002.0)),
+            ("narrow", egui::vec2(1100.0, 760.0)),
+        ] {
+            for name in ["versions", "source-editor", "forks"] {
+                let mut harness = catalog_backdrop_scene(size, palette, name);
+                catalog_backdrop_assert_panel(&harness, size, name);
+                catalog_backdrop_assert_coverage(&harness, size, name == "versions");
+                source_categories_sheet_capture(
+                    &mut harness,
+                    &format!("full-backdrop-{name}-{theme}-{width}"),
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn catalog_backdrop_sidebar_click_closes_without_navigation() {
+    let _lock = mod_downloads::AMBIENT_TEST_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let _guard = AmbientGuard(mod_downloads::active_modlist_dir());
+    for surface in ["source-editor", "forks"] {
+        let mut harness =
+            catalog_backdrop_scene(egui::vec2(1570.0, 1002.0), ThemePalette::Dark, surface);
+        source_categories_sheet_click(&mut harness, "Home");
+        assert_eq!(harness.state().app.nav, NavDestination::Catalog);
+        assert!(
+            harness
+                .state()
+                .app
+                .catalog_screen_state
+                .editor_step2
+                .versions_ui
+                .sheet
+                .is_none()
+        );
+    }
+}
+
+fn custom_tag_text_rects(harness: &Harness<'_, CatalogScene>, value: &str) -> Vec<egui::Rect> {
+    let mut shapes = Vec::new();
+    for clipped in &harness.output().shapes {
+        catalog_shapes(&clipped.shape, &mut shapes);
+    }
+    shapes
+        .iter()
+        .filter_map(|shape| text_bounds(shape, value))
+        .collect()
+}
+
+#[test]
+fn custom_tag_suggestion_click_preview() {
+    let _lock = mod_downloads::AMBIENT_TEST_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let _guard = AmbientGuard(mod_downloads::active_modlist_dir());
+    let mut harness = catalog_scene(
+        egui::vec2(1570.0, 1002.0),
+        ThemePalette::Dark,
+        "source-editor",
+    );
+    source_tag_type_query(&mut harness, "Live custom tag");
+    assert!(!source_categories_catalog_form(&harness).categories_changed());
+    let rects = custom_tag_text_rects(&harness, "Live custom tag");
+    assert_eq!(rects.len(), 2, "input text and a separate plain custom tag");
+    let preview = rects
+        .iter()
+        .max_by(|a, b| a.top().total_cmp(&b.top()))
+        .unwrap();
+    catalog_pointer_click(&mut harness, preview.center());
+    let form = source_categories_catalog_form(&harness);
+    assert_eq!(form.kept.categories, vec!["Live custom tag"]);
+    assert_eq!(form.category_editor.input, "");
+}
+
+fn custom_tag_form(scene: &CatalogScene, versions: bool) -> &source_form::SourceForm {
+    let step2 = if versions {
+        &scene.app.wizard_state.step2
+    } else {
+        &scene.app.catalog_screen_state.editor_step2
+    };
+    step2.versions_ui.source_form.as_ref().unwrap()
+}
+
+fn custom_tag_prepare(harness: &mut Harness<'_, CatalogScene>, versions: bool) {
+    harness
+        .state_mut()
+        .app
+        .catalog_screen_state
+        .category_options = BTreeMap::from([
+        ("audio".to_owned(), "Audio".to_owned()),
+        ("eet".to_owned(), "EET".to_owned()),
+        ("difficulty".to_owned(), "Difficulty".to_owned()),
+    ]);
+    let app = &mut harness.state_mut().app;
+    let step2 = if versions {
+        &mut app.wizard_state.step2
+    } else {
+        &mut app.catalog_screen_state.editor_step2
+    };
+    let form = step2.versions_ui.source_form.as_mut().unwrap();
+    form.kept.categories = vec!["Audio".to_owned()];
+    form.category_editor.original = form.kept.categories.clone();
+    harness.run();
+}
+
+fn custom_tag_click_candidate(harness: &mut Harness<'_, CatalogScene>, value: &str) {
+    let rect = custom_tag_text_rects(harness, value)
+        .into_iter()
+        .max_by(|a, b| a.top().total_cmp(&b.top()))
+        .unwrap_or_else(|| panic!("missing candidate {value}"));
+    catalog_pointer_click(harness, rect.center());
+}
+
+fn custom_tag_surface_case(size: egui::Vec2, palette: ThemePalette, surface: &str, name: &str) {
+    let versions = surface == "versions";
+    let mut harness = catalog_backdrop_scene(size, palette, surface);
+    custom_tag_prepare(&mut harness, versions);
+    source_tag_type_query(&mut harness, "Fresh");
+    assert_eq!(custom_tag_text_rects(&harness, "Fresh").len(), 2);
+    harness
+        .input_mut()
+        .events
+        .push(egui::Event::Text(" tag".to_owned()));
+    harness.run();
+    let form = custom_tag_form(harness.state(), versions);
+    assert!(!form.categories_changed());
+    assert_eq!(form.kept.categories, vec!["Audio"]);
+    assert_eq!(custom_tag_text_rects(&harness, "Fresh").len(), 0);
+    assert_eq!(custom_tag_text_rects(&harness, "Fresh tag").len(), 2);
+    source_categories_sheet_scroll(&mut harness, size, -1000.0);
+    let rects = custom_tag_text_rects(&harness, "Fresh tag");
+    assert_eq!(rects.len(), 2);
+    assert!(rects[1].top() > rects[0].bottom());
+    assert_visible_text(&harness, "Audio  ×", size);
+    source_categories_sheet_capture(&mut harness, &format!("custom-preview-{surface}-{name}"));
+    custom_tag_click_candidate(&mut harness, "Fresh tag");
+    let form = custom_tag_form(harness.state(), versions);
+    assert_eq!(form.kept.categories, vec!["Audio", "Fresh tag"]);
+    assert_eq!(form.category_editor.input, "");
+    harness
+        .input_mut()
+        .events
+        .push(egui::Event::Text("Next tag".to_owned()));
+    harness.run();
+    assert_eq!(
+        custom_tag_form(harness.state(), versions)
+            .category_editor
+            .input,
+        "Next tag"
+    );
+    harness.press_key(egui::Key::Enter);
+    harness.run();
+    let form = custom_tag_form(harness.state(), versions);
+    assert_eq!(form.kept.categories, vec!["Audio", "Fresh tag", "Next tag"]);
+    assert_eq!(form.category_editor.input, "");
+}
+
+#[test]
+fn custom_tag_suggestion_both_surfaces_live_click_and_enter() {
+    let _lock = mod_downloads::AMBIENT_TEST_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let _guard = AmbientGuard(mod_downloads::active_modlist_dir());
+    for (theme, palette) in [("dark", ThemePalette::Dark), ("light", ThemePalette::Light)] {
+        for (width, size) in [
+            ("normal", egui::vec2(1570.0, 1002.0)),
+            ("narrow", egui::vec2(1100.0, 760.0)),
+        ] {
+            for surface in ["source-editor", "versions"] {
+                custom_tag_surface_case(size, palette, surface, &format!("{theme}-{width}"));
+            }
+        }
+    }
+}
+
+#[test]
+fn custom_tag_suggestion_blank_known_partial_and_trimmed_values() {
+    let _lock = mod_downloads::AMBIENT_TEST_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let _guard = AmbientGuard(mod_downloads::active_modlist_dir());
+    for query in ["   ", "eEt", "audio", "Dif", "  Quest, \"Überblick\"  "] {
+        let mut harness = catalog_backdrop_scene(
+            egui::vec2(1570.0, 1002.0),
+            ThemePalette::Dark,
+            "source-editor",
+        );
+        custom_tag_prepare(&mut harness, false);
+        source_tag_type_query(&mut harness, query);
+        assert!(!custom_tag_form(harness.state(), false).categories_changed());
+        if ["   ", "eEt", "audio"].contains(&query) {
+            assert_eq!(custom_tag_text_rects(&harness, query).len(), 1);
+        } else {
+            let value = query.trim();
+            let rects = custom_tag_text_rects(&harness, value);
+            assert_eq!(rects.len(), if value == query { 2 } else { 1 });
+            if query == "Dif" {
+                assert_visible_text(&harness, "Difficulty", egui::vec2(1570.0, 1002.0));
+            }
+            custom_tag_click_candidate(&mut harness, value);
+            assert_eq!(
+                custom_tag_form(harness.state(), false).kept.categories,
+                vec!["Audio", value]
+            );
+            assert_eq!(
+                custom_tag_form(harness.state(), false)
+                    .category_editor
+                    .input,
+                ""
+            );
+            continue;
+        }
+        harness.press_key(egui::Key::Enter);
+        harness.run();
+        let expected = if query == "eEt" {
+            vec!["Audio", "EET"]
+        } else {
+            vec!["Audio"]
+        };
+        assert_eq!(
+            custom_tag_form(harness.state(), false).kept.categories,
+            expected
+        );
+    }
 }

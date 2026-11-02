@@ -9620,7 +9620,7 @@ config_files = []
 
 [[mods]]
 categories = ["Quests", "Encounters", "BGEE", "SoD", "EET"]
-name = "Bonus Pack in Baldur's Gate"
+name = "Black Pits in Baldur's Gate"
 tp2 = "BP_in_BG"
 aliases = []
 config_files = []

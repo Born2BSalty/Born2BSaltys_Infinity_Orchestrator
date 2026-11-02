@@ -31,9 +31,11 @@ pub(crate) fn apply_step2_scan_mismatch(step1: &Step1State, tab: &str, mods: &mu
             .or_insert_with(|| load_component_guards(&mod_state.tp2_path));
 
         for component in &mut mod_state.components {
+            let component_context =
+                context.for_component(&mod_state.tp_file, &component.component_id);
             let Some(hit) = component_guards
                 .get(component.component_id.trim())
-                .and_then(|guards| preferred_guard_hit(guards, &context))
+                .and_then(|guards| preferred_guard_hit(guards, &component_context))
             else {
                 continue;
             };

@@ -3,6 +3,7 @@
 
 use std::collections::HashSet;
 use std::path::Path;
+use std::sync::Arc;
 
 use crate::app::game_authority::{self, GameSlot};
 use crate::app::state::Step1State;
@@ -44,7 +45,8 @@ fn build_iwdee_context(checked_components: HashSet<(String, String)>) -> Mismatc
         active_engines,
         active_includes,
         uncertain_includes: HashSet::new(),
-        checked_components,
+        checked_components: Arc::new(checked_components),
+        current_component: None,
     }
 }
 
@@ -78,7 +80,8 @@ fn build_bgee_context(
         active_engines,
         active_includes,
         uncertain_includes,
-        checked_components,
+        checked_components: Arc::new(checked_components),
+        current_component: None,
     }
 }
 
@@ -111,7 +114,8 @@ fn build_bg2ee_context(
         active_engines,
         active_includes,
         uncertain_includes: HashSet::new(),
-        checked_components,
+        checked_components: Arc::new(checked_components),
+        current_component: None,
     }
 }
 
@@ -119,23 +123,32 @@ fn is_eet_core_selected(checked_components: &HashSet<(String, String)>) -> bool 
     checked_components.contains(&(normalize_mod_key("EET.TP2"), "0".to_string()))
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 pub(in crate::app) struct MismatchContext {
     active_games: HashSet<String>,
     active_engines: HashSet<String>,
     active_includes: HashSet<String>,
     uncertain_includes: HashSet<String>,
-    checked_components: HashSet<(String, String)>,
+    checked_components: Arc<HashSet<(String, String)>>,
+    current_component: Option<(String, String)>,
 }
 
 impl MismatchContext {
+    pub(in crate::app) fn for_component(&self, mod_name: &str, component_id: &str) -> Self {
+        Self {
+            current_component: Some((normalize_mod_key(mod_name), component_id.trim().to_string())),
+            ..self.clone()
+        }
+    }
+
     pub(in crate::app) fn has_checked_component(&self, mod_name: &str, component_id: &str) -> bool {
         let component_id = component_id.trim();
         if component_id.is_empty() {
             return false;
         }
-        self.checked_components
-            .contains(&(normalize_mod_key(mod_name), component_id.to_string()))
+        let target = (normalize_mod_key(mod_name), component_id.to_string());
+        self.current_component.as_ref() != Some(&target)
+            && self.checked_components.contains(&target)
     }
 
     pub(super) fn eval_game_is(&self, values: &[String]) -> TriState {

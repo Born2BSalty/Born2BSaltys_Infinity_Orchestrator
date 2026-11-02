@@ -31,6 +31,7 @@ pub(crate) struct EditSourceEnv {
     pub(crate) release_list: ReleaseListState,
     pub(crate) has_modlist_destination: bool,
     pub(crate) id_salt: &'static str,
+    pub(crate) categories: Vec<String>,
 }
 
 #[derive(Default)]
@@ -91,18 +92,19 @@ fn render_sheet_shell(
     palette: ThemePalette,
     id_salt: &'static str,
     drawer_rect: egui::Rect,
+    backdrop_rect: egui::Rect,
     body: impl FnOnce(&mut egui::Ui, &mut SheetOutcome),
 ) -> SheetOutcome {
     let mut outcome = SheetOutcome::default();
     let panel = panel_rect(drawer_rect);
     egui::Area::new(egui::Id::new(id_salt))
         .order(egui::Order::Tooltip)
-        .fixed_pos(drawer_rect.min)
+        .fixed_pos(backdrop_rect.min)
         .interactable(true)
         .show(ctx, |ui| {
-            let backdrop = ui.allocate_rect(drawer_rect, egui::Sense::click());
+            let backdrop = ui.allocate_rect(backdrop_rect, egui::Sense::click());
             ui.painter()
-                .rect_filled(drawer_rect, 0.0, egui::Color32::from_black_alpha(89));
+                .rect_filled(backdrop_rect, 0.0, egui::Color32::from_black_alpha(89));
             ui.allocate_new_ui(egui::UiBuilder::new().max_rect(panel), |ui| {
                 egui::Frame::default()
                     .fill(redesign_shell_bg(palette))
@@ -316,6 +318,7 @@ pub(crate) fn render_edit_source_unready(
         palette,
         "versions_sheet_edit",
         drawer_rect,
+        drawer_rect,
         |ui, outcome| {
             egui::Frame::default()
                 .inner_margin(egui::Margin::symmetric(22, 18))
@@ -373,6 +376,26 @@ pub(crate) fn render_edit_source(
     env: &EditSourceEnv,
     escape_active: bool,
 ) -> SheetOutcome {
+    render_edit_source_with_backdrop(
+        ctx,
+        palette,
+        drawer_rect,
+        drawer_rect,
+        step2,
+        env,
+        escape_active,
+    )
+}
+
+pub(crate) fn render_edit_source_with_backdrop(
+    ctx: &egui::Context,
+    palette: ThemePalette,
+    drawer_rect: egui::Rect,
+    backdrop_rect: egui::Rect,
+    step2: &mut Step2State,
+    env: &EditSourceEnv,
+    escape_active: bool,
+) -> SheetOutcome {
     let popover_open = step2
         .versions_ui
         .source_form
@@ -385,34 +408,45 @@ pub(crate) fn render_edit_source(
         .source_form
         .as_ref()
         .map_or_else(String::new, sheet_mod_name);
-    let mut outcome = render_sheet_shell(ctx, palette, env.id_salt, drawer_rect, |ui, outcome| {
-        egui::Frame::default()
-            .inner_margin(egui::Margin::symmetric(22, 18))
-            .show(ui, |ui| {
-                render_header(ui, palette, "Download source", &mod_name, outcome);
-                ui.add_space(12.0);
-                let footer_reserve = ui
-                    .spacing()
-                    .item_spacing
-                    .y
-                    .mul_add(2.0, redesign_btn_height(ui, true) + 12.0);
-                let body_h = (ui.available_height() - footer_reserve).max(0.0);
-                egui::ScrollArea::vertical()
-                    .auto_shrink([false, false])
-                    .max_height(body_h)
-                    .show(ui, |ui| {
-                        if let Some(action) = render_edit_source_body(ctx, ui, palette, step2, env)
-                            && outcome.action.is_none()
-                        {
-                            outcome.action = Some(action);
-                        }
+    let mut outcome = render_sheet_shell(
+        ctx,
+        palette,
+        env.id_salt,
+        drawer_rect,
+        backdrop_rect,
+        |ui, outcome| {
+            egui::Frame::default()
+                .inner_margin(egui::Margin::symmetric(22, 18))
+                .show(ui, |ui| {
+                    render_header(ui, palette, "Download source", &mod_name, outcome);
+                    ui.add_space(12.0);
+                    let footer_reserve = ui
+                        .spacing()
+                        .item_spacing
+                        .y
+                        .mul_add(2.0, redesign_btn_height(ui, true) + 12.0);
+                    let body_h = (ui.available_height() - footer_reserve).max(0.0);
+                    ui.scope(|ui| {
+                        ui.spacing_mut().scroll.floating = false;
+                        egui::ScrollArea::vertical()
+                            .auto_shrink([false, false])
+                            .max_height(body_h)
+                            .show(ui, |ui| {
+                                if let Some(action) =
+                                    render_edit_source_body(ctx, ui, palette, step2, env)
+                                    && outcome.action.is_none()
+                                {
+                                    outcome.action = Some(action);
+                                }
+                            });
                     });
-                ui.add_space(12.0);
-                ui.horizontal(|ui| {
-                    render_edit_source_footer(ui, palette, step2, env.busy, outcome);
+                    ui.add_space(12.0);
+                    ui.horizontal(|ui| {
+                        render_edit_source_footer(ui, palette, step2, env.busy, outcome);
+                    });
                 });
-            });
-    });
+        },
+    );
     if escape_close {
         outcome.close = true;
     }
@@ -435,6 +469,7 @@ fn render_edit_source_body(
         has_modlist_destination,
         logged_in: env.logged_in,
         release_list: &env.release_list,
+        category_options: &env.categories,
     };
     let outcome = versions_form::render(ctx, ui, palette, form, &form_env);
     outcome
@@ -534,12 +569,24 @@ pub(crate) fn render_forks(
     step2: &Step2State,
     escape_active: bool,
 ) -> SheetOutcome {
+    render_forks_with_backdrop(ctx, palette, drawer_rect, drawer_rect, step2, escape_active)
+}
+
+pub(crate) fn render_forks_with_backdrop(
+    ctx: &egui::Context,
+    palette: ThemePalette,
+    drawer_rect: egui::Rect,
+    backdrop_rect: egui::Rect,
+    step2: &Step2State,
+    escape_active: bool,
+) -> SheetOutcome {
     let escape_close = escape_active && ctx.input(|i| i.key_pressed(egui::Key::Escape));
     let mut outcome = render_sheet_shell(
         ctx,
         palette,
         "versions_sheet_forks",
         drawer_rect,
+        backdrop_rect,
         |ui, outcome| {
             egui::Frame::default()
                 .inner_margin(egui::Margin::symmetric(22, 18))
@@ -727,6 +774,7 @@ pub(crate) fn render_note(
         ctx,
         palette,
         "versions_sheet_note",
+        drawer_rect,
         drawer_rect,
         |ui, outcome| {
             egui::Frame::default()

@@ -51,6 +51,14 @@ pub(crate) struct SourceFormIdentity {
     pub(crate) is_new_mod: bool,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct SourceCategoryEditor {
+    pub(crate) original: Vec<String>,
+    pub(crate) clear_requested: bool,
+    pub(crate) open: bool,
+    pub(crate) input: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct SourceForm {
     pub(crate) tp2: String,
@@ -85,6 +93,27 @@ pub(crate) struct SourceForm {
     pub(crate) note: String,
     pub(crate) note_seed: String,
     pub(crate) note_who: String,
+    pub(crate) category_editor: SourceCategoryEditor,
+}
+
+impl SourceForm {
+    pub(crate) fn categories_changed(&self) -> bool {
+        self.category_editor.clear_requested
+            || self.kept.categories != self.category_editor.original
+    }
+
+    pub(crate) fn add_category(&mut self, value: &str) {
+        let value = value.trim();
+        if !value.is_empty()
+            && !self
+                .kept
+                .categories
+                .iter()
+                .any(|existing| existing.trim().to_lowercase() == value.to_lowercase())
+        {
+            self.kept.categories.push(value.to_string());
+        }
+    }
 }
 
 const PREONLY_NOTICE: &str =
@@ -220,6 +249,10 @@ pub(crate) fn from_source(
         note: String::new(),
         note_seed: String::new(),
         note_who: String::new(),
+        category_editor: SourceCategoryEditor {
+            original: source.categories.clone(),
+            ..SourceCategoryEditor::default()
+        },
         kept: KeptFields {
             categories: source.categories.clone(),
             exact_github: source.exact_github.clone(),
@@ -524,6 +557,7 @@ mod tests {
                 source_default: true,
                 ..KeptFields::default()
             },
+            category_editor: SourceCategoryEditor::default(),
         }
     }
 

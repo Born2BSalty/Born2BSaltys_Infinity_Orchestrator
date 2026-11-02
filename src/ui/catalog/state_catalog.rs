@@ -84,24 +84,7 @@ impl CatalogRow {
             .filter_map(|category| {
                 let label = category.trim();
                 let key = label.to_lowercase();
-                if key.is_empty()
-                    || matches!(
-                        key.as_str(),
-                        "bg1"
-                            | "bg2"
-                            | "bgee"
-                            | "sod"
-                            | "bg2ee"
-                            | "eet"
-                            | "tutu"
-                            | "bgt"
-                            | "iwd"
-                            | "iwdee"
-                            | "iwd2"
-                            | "pst"
-                            | "pstee"
-                    )
-                {
+                if key.is_empty() {
                     return None;
                 }
                 options
