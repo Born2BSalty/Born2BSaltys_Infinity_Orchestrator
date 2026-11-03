@@ -311,7 +311,8 @@ fn scan_predicate_marker_for_item(
     let tp2_path = tp2_paths
         .get(&tp2_lookup_key(&item.tp_file, &item.mod_name))
         .filter(|value| !value.trim().is_empty())?;
-    let hit = scan_predicate_guard_hit(tp2_path, &item.component_id, predicate_context)?;
+    let component_context = predicate_context.for_component(&item.tp_file, &item.component_id);
+    let hit = scan_predicate_guard_hit(tp2_path, &item.component_id, &component_context)?;
     if !hit.kind.eq_ignore_ascii_case("conflict") {
         return None;
     }

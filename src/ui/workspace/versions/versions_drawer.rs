@@ -1499,6 +1499,7 @@ fn render_open_sheet(
                         .trim()
                         .is_empty(),
                     release_list,
+                    categories: cached_source_tiers(ctx).category_options(),
                 };
                 let result = versions_sheets::render_edit_source(
                     ctx,

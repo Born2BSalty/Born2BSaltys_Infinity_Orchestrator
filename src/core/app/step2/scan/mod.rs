@@ -19,7 +19,7 @@ pub use worker::detect_preferred_game_locale;
 
 pub const ENABLE_TWO_PHASE_PREVIEW: bool = true;
 pub const SCAN_CACHE_FILE: &str = "bio_scan_cache.json";
-pub const SCAN_CACHE_VERSION: u32 = 7;
+pub const SCAN_CACHE_VERSION: u32 = 8;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScannedComponent {

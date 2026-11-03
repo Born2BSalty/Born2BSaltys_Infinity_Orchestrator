@@ -61,6 +61,10 @@ use crate::ui::workspace::step5::state_workspace_step5::WorkspaceStep5State;
 
 const BIO_SETTINGS_DEBOUNCE_MS: u64 = 1000;
 
+#[cfg(test)]
+#[path = "orchestrator_mod_language_tests.rs"]
+mod mod_language_tests;
+
 struct RegistryLoad {
     registry: ModlistRegistry,
     registry_error: Option<RegistryError>,
@@ -281,6 +285,8 @@ pub struct OrchestratorApp {
     pub(crate) step5_pending_start: Option<PendingInstallStart>,
     pub(crate) step5_preparation_workspace: Option<Step5PreparationWorkspace>,
 
+    pub(crate) mod_language_rescan_required: bool,
+
     pub(crate) step2_scan_rx: Option<Receiver<Step2ScanEvent>>,
     pub(crate) step2_cancel: Option<Arc<AtomicBool>>,
     pub(crate) step2_progress_queue: VecDeque<(usize, usize, String)>,
@@ -352,6 +358,58 @@ struct AddedModSeedWatch {
 }
 
 impl OrchestratorApp {
+    pub(crate) const fn mod_installation_language_change_available(&self) -> bool {
+        !crate::ui::orchestrator::page_router::step5_attempt_in_progress(
+            &self.wizard_state,
+            self.step5_prep_rx.is_some()
+                || self.step5_pending_start.is_some()
+                || self.workspace_destination_prep_rx.is_some()
+                || self.install_destination_prep_rx.is_some(),
+        )
+    }
+
+    pub(crate) fn select_mod_installation_language(&mut self, value: &str) -> bool {
+        use crate::settings::installation_language::{
+            INSTALLATION_LANGUAGES, normalize_installation_locale,
+        };
+        if !self.mod_installation_language_change_available() {
+            return false;
+        }
+        let selected = normalize_installation_locale(value);
+        if !INSTALLATION_LANGUAGES
+            .iter()
+            .any(|(locale, _)| *locale == selected)
+            || self.wizard_state.step1.language == selected
+        {
+            return false;
+        }
+        if normalize_installation_locale(&self.wizard_state.step1.language) != selected {
+            if let Some(cancel) = self.step2_cancel.take() {
+                cancel.store(true, std::sync::atomic::Ordering::Relaxed);
+            }
+            self.step2_scan_rx = None;
+            self.step2_progress_queue.clear();
+            self.wizard_state.step2.is_scanning = false;
+            self.wizard_state.step2.last_scan_report = None;
+            let ordered_workspace = self
+                .workspace_state
+                .get(&self.workspace_view.modlist_id)
+                .is_some_and(|workspace| {
+                    !workspace.order_bgee.is_empty()
+                        || !workspace.order_bg2ee.is_empty()
+                        || !workspace.order_iwdee.is_empty()
+                });
+            self.mod_language_rescan_required |= !self.wizard_state.step2.bgee_mods.is_empty()
+                || !self.wizard_state.step2.bg2ee_mods.is_empty()
+                || !self.wizard_state.step3.bgee_items.is_empty()
+                || !self.wizard_state.step3.bg2ee_items.is_empty()
+                || ordered_workspace;
+            self.wizard_state.step2.scan_status = "Language changed — rescan mods".to_string();
+        }
+        self.wizard_state.step1.language = selected;
+        true
+    }
+
     #[must_use]
     pub fn new(dev_mode: bool) -> Self {
         let bootstrap = app_bootstrap_init::initialize(dev_mode);
@@ -436,6 +494,7 @@ impl OrchestratorApp {
             step5_pending_start: None,
             step5_preparation_workspace: None,
 
+            mod_language_rescan_required: false,
             step2_scan_rx: None,
             step2_cancel: None,
             step2_progress_queue: VecDeque::new(),

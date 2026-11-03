@@ -345,6 +345,16 @@ fn register_new_install_start_modlist(
 fn persist_new_install_workspace(orchestrator: &mut OrchestratorApp, entry: &ModlistEntry) {
     let canonical_store = WorkspaceStore::new_for_id(&entry.id);
     let empty = ModlistWorkspaceState {
+        parser_recognition_rules: Some(
+            orchestrator
+                .install_screen_state
+                .parsed_preview
+                .as_ref()
+                .map_or_else(
+                    || orchestrator.wizard_state.parser_recognition_rules.clone(),
+                    |preview| preview.parser_recognition_rules.clone(),
+                ),
+        ),
         parser_choice_phrases: Some(
             orchestrator
                 .install_screen_state
@@ -423,6 +433,7 @@ mod tests {
     ) -> ModlistSharePreview {
         ModlistSharePreview {
             parser_choice_phrases: Vec::new(),
+            parser_recognition_rules: std::collections::BTreeMap::default(),
             bio_version: "x".to_string(),
             game_install: game.to_string(),
             game_version: None,
@@ -1110,5 +1121,34 @@ mod tests {
         );
         assert!(app.pending_replaced_entry.is_none());
         drop(guard);
+    }
+}
+
+#[cfg(test)]
+mod parser_rules_registration_tests {
+    use super::*;
+
+    #[test]
+    fn parser_rules_install_registration_saves_selected_preview_not_another_wizard() {
+        let mut app = OrchestratorApp::new_isolated_for_test("parser-rules-registration");
+        let root = app.isolated_test_config_root.as_ref().unwrap().clone();
+        let rules = serde_json::json!({"in_progress_words":["installiere"],"useful_status_words":["copiado"],"choice_words":["auswählen"],"choice_phrase":["¿desea continuar?"],"completed_with_warnings":["con advertencias"],"failed_with_error":["ist fehlgeschlagen"],"finished":["instalado correctamente"]});
+        let code = crate::app::modlist_share::encode_share_payload_text(&serde_json::json!({"format_version":1,"game_install":"BGEE","install_mode":"start_from_scratch","weidu_logs":{"bgee":"~MOD/MOD.TP2~ #0 #0 // Component"},"parser_recognition_rules":rules}).to_string()).unwrap();
+        app.install_screen_state.parsed_preview =
+            Some(crate::app::modlist_share::preview_modlist_share_code(&code).unwrap());
+        app.wizard_state.parser_recognition_rules =
+            std::iter::once(("choice_words".to_string(), vec!["wrong wizard".to_string()]))
+                .collect();
+        let destination = root
+            .join("registration-target")
+            .to_string_lossy()
+            .into_owned();
+        let id = register_new_install_start_modlist(&mut app, &destination).unwrap();
+        let stored = app.workspace_stores[&id].load().unwrap();
+        assert_eq!(
+            serde_json::to_value(stored.parser_recognition_rules.unwrap()).unwrap(),
+            rules
+        );
+        assert_eq!(stored.parser_choice_phrases.unwrap(), ["¿desea continuar?"]);
     }
 }

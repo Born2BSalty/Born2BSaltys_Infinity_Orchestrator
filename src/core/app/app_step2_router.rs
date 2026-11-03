@@ -411,7 +411,7 @@ fn save_source_form(
     };
     let saved_to = history_saved_to(form.save_to, &form.note_who);
 
-    match save_source_block_recording_history(state, &request, form.save_to, saved_to, None) {
+    match save_form_source_block_recording_history(state, &request, &form, saved_to) {
         Ok(()) => {
             state.step2.versions_ui.sheet = None;
             state.step2.versions_ui.source_form = None;
@@ -475,13 +475,7 @@ pub(crate) fn save_global_source_form(
         target_path: None,
         new_source: Some(&source),
     };
-    save_source_block_recording_history(
-        state,
-        &request,
-        ModSourceEditDestination::GlobalDefault,
-        "My default",
-        None,
-    )?;
+    save_form_source_block_recording_history(state, &request, form, "My default")?;
     save_form_note(state, form, &source);
     Ok(())
 }
@@ -654,23 +648,70 @@ fn save_source_block_recording_history(
     saved_to: &str,
     replaced: Option<&mod_downloads::ModDownloadSource>,
 ) -> Result<(), String> {
+    save_source_block_with_category_history(state, request, destination, saved_to, replaced, None)
+}
+
+fn save_form_source_block_recording_history(
+    state: &mut WizardState,
+    request: &SourceSaveRequest<'_>,
+    form: &super::source_form::SourceForm,
+    saved_to: &str,
+) -> Result<(), String> {
+    let categories = form
+        .categories_changed()
+        .then_some(form.kept.categories.as_slice());
+    save_source_block_with_category_history(
+        state,
+        request,
+        form.save_to,
+        saved_to,
+        None,
+        categories,
+    )
+}
+
+fn save_source_block_with_category_history(
+    state: &mut WizardState,
+    request: &SourceSaveRequest<'_>,
+    destination: ModSourceEditDestination,
+    saved_to: &str,
+    replaced: Option<&mod_downloads::ModDownloadSource>,
+    categories: Option<&[String]>,
+) -> Result<(), String> {
     let old_source = replaced
         .cloned()
         .or_else(|| read_replaced_user_source(request.tp2, request.source_id, destination));
-    let save = match destination {
-        ModSourceEditDestination::GlobalDefault => {
-            mod_downloads::save_global_mod_download_source_block
-        }
-        ModSourceEditDestination::ThisModlist => mod_downloads::save_user_mod_download_source_block,
-    };
-    save(
-        request.tp2,
-        request.name,
-        request.source_id,
-        request.allow_id_change,
-        request.text,
-        request.target_path,
-    )?;
+    if categories.is_some() {
+        mod_downloads::save_source_block_with_context(
+            request.tp2,
+            request.name,
+            request.source_id,
+            request.allow_id_change,
+            request.text,
+            request.target_path,
+            mod_downloads::SourceBlockSaveContext {
+                global: destination == ModSourceEditDestination::GlobalDefault,
+                categories,
+            },
+        )?;
+    } else {
+        let save = match destination {
+            ModSourceEditDestination::GlobalDefault => {
+                mod_downloads::save_global_mod_download_source_block
+            }
+            ModSourceEditDestination::ThisModlist => {
+                mod_downloads::save_user_mod_download_source_block
+            }
+        };
+        save(
+            request.tp2,
+            request.name,
+            request.source_id,
+            request.allow_id_change,
+            request.text,
+            request.target_path,
+        )?;
+    }
     let new_source = request
         .new_source
         .cloned()

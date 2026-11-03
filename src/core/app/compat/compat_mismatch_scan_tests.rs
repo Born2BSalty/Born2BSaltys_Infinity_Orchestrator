@@ -701,3 +701,372 @@ fn subcomponent_without_condition_followed_by_unlisted_action_keeps_family() {
 
 #[path = "compat_three_fixes_corpus_tests.rs"]
 mod corpus;
+
+const CDTWEAKS_SELF_FAMILY: &str = "BEGIN @349001 DESIGNATED 3490\nGROUP @4\nSUBCOMPONENT @349000\nREQUIRE_PREDICATE GAME_IS ~bg2ee eet soa tob bgt~ @25\nREQUIRE_PREDICATE !MOD_IS_INSTALLED ~cdtweaks/setup-cdtweaks.tp2~ ~3491~ @349001\nLABEL ~cd_tweaks_better_soa_start_300k~\nBEGIN @349100 DESIGNATED 3491\nGROUP @4\nSUBCOMPONENT @349000\nREQUIRE_PREDICATE GAME_IS ~bg2ee eet soa tob bgt~ @25\nREQUIRE_PREDICATE !MOD_IS_INSTALLED ~cdtweaks/setup-cdtweaks.tp2~ ~3490~ @349101\nLABEL ~cd_tweaks_better_soa_start_500k~\nBEGIN @349200 DESIGNATED 3492\nGROUP @4\nSUBCOMPONENT @349000\nREQUIRE_PREDICATE GAME_IS ~bg2ee eet soa tob bgt~ @25\nREQUIRE_PREDICATE !MOD_IS_INSTALLED ~cdtweaks/setup-cdtweaks.tp2~ ~3491~ @349001\nLABEL ~cd_tweaks_better_soa_start_300k_all_items~\nBEGIN @349300 DESIGNATED 3493\nGROUP @4\nSUBCOMPONENT @349000\nREQUIRE_PREDICATE GAME_IS ~bg2ee eet soa tob bgt~ @25\nREQUIRE_PREDICATE !MOD_IS_INSTALLED ~cdtweaks/setup-cdtweaks.tp2~ ~3490~ @349101\nLABEL ~cd_tweaks_better_soa_start_500k_all_items~\n";
+
+struct SelfConflictFixture(std::path::PathBuf);
+
+impl Drop for SelfConflictFixture {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+fn self_conflict_fixture(text: &str) -> SelfConflictFixture {
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let directory = std::env::temp_dir().join(format!(
+        "bio-self-conflict-{}-{}",
+        std::process::id(),
+        NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    ));
+    std::fs::create_dir_all(&directory).expect("fixture directory");
+    std::fs::write(directory.join("setup-cdtweaks.tp2"), text).expect("fixture TP2");
+    SelfConflictFixture(directory)
+}
+
+fn self_conflict_plan(
+    fixture: &SelfConflictFixture,
+    tp_file: &str,
+    selected: &[&str],
+    eet: bool,
+) -> Vec<crate::app::state::Step2ModState> {
+    let choices = selected.iter().map(|id| (*id, true)).collect::<Vec<_>>();
+    let mut current = scs_mod_state(tp_file, &choices);
+    current.tp2_path = fixture
+        .0
+        .join("setup-cdtweaks.tp2")
+        .to_string_lossy()
+        .into_owned();
+    let mut mods = vec![current];
+    if eet {
+        mods.insert(0, scs_mod_state("eet", &[("0", true)]));
+    }
+    mods
+}
+
+fn self_conflict_items(
+    mods: &[crate::app::state::Step2ModState],
+) -> Vec<crate::app::state::Step3ItemState> {
+    mods.iter()
+        .flat_map(|mod_state| {
+            mod_state
+                .components
+                .iter()
+                .map(|component| crate::app::state::Step3ItemState {
+                    tp_file: mod_state.tp_file.clone(),
+                    component_id: component.component_id.clone(),
+                    mod_name: mod_state.name.clone(),
+                    component_label: component.label.clone(),
+                    raw_line: String::new(),
+                    prompt_summary: None,
+                    prompt_events: Vec::new(),
+                    selected_order: 1,
+                    block_id: String::new(),
+                    is_parent: false,
+                    parent_placeholder: false,
+                })
+        })
+        .collect()
+}
+
+fn self_conflict_step2(
+    step1: &Step1State,
+    tab: &str,
+    mods: &mut [crate::app::state::Step2ModState],
+) {
+    if tab == "BG2EE" {
+        crate::app::compat_logic::apply_step2_compat_rules(step1, &mut [], mods);
+    } else {
+        crate::app::compat_logic::apply_step2_compat_rules(step1, mods, &mut []);
+    }
+}
+
+fn self_conflict_primary(eet: bool, step3: bool) {
+    let fixture = self_conflict_fixture(CDTWEAKS_SELF_FAMILY);
+    let mut mods = self_conflict_plan(&fixture, "cdtweaks", &["3491"], eet);
+    let guards = super::load_component_guards(&mods[usize::from(eet)].tp2_path);
+    assert!(
+        guards["3491"]
+            .iter()
+            .any(|guard| guard.inherited_provenance().is_some())
+    );
+    let step1 = Step1State {
+        game_install: if eet { "EET" } else { "BG2EE" }.to_string(),
+        ..Step1State::default()
+    };
+    if step3 {
+        let items = self_conflict_items(&mods);
+        let markers = crate::app::compat_step3_rules::collect_step3_compat_markers(
+            &step1,
+            "BG2EE",
+            &mods,
+            &items,
+            &[],
+        );
+        let key = crate::app::compat_step3_rules::marker_key(items.last().expect("current"));
+        assert!(
+            !markers.contains_key(&key),
+            "self marker: {:?}",
+            markers.get(&key)
+        );
+    } else {
+        self_conflict_step2(&step1, "BG2EE", &mut mods);
+        let current = &mods[usize::from(eet)].components[0];
+        assert_eq!(
+            current.compat_kind, None,
+            "self reason: {:?}",
+            current.disabled_reason
+        );
+        assert!(!current.disabled);
+        assert!(current.disabled_reason.is_none());
+        assert!(current.compat_related_component.is_none());
+        assert!(current.compat_evidence.is_none());
+    }
+}
+
+#[test]
+fn self_conflict_3491_only_bg2ee_step2() {
+    self_conflict_primary(false, false);
+}
+
+#[test]
+fn self_conflict_3491_only_bg2ee_step3() {
+    self_conflict_primary(false, true);
+}
+
+#[test]
+fn self_conflict_3491_only_eet_step2() {
+    self_conflict_primary(true, false);
+}
+
+#[test]
+fn self_conflict_3491_only_eet_step3() {
+    self_conflict_primary(true, true);
+}
+
+fn self_conflict_assert_both(
+    text: &str,
+    tp_file: &str,
+    selected: &[&str],
+    current: &str,
+    expected: Option<&str>,
+) {
+    let fixture = self_conflict_fixture(text);
+    let mut mods = self_conflict_plan(&fixture, tp_file, selected, false);
+    let step1 = Step1State {
+        game_install: "BG2EE".to_string(),
+        ..Step1State::default()
+    };
+    let items = self_conflict_items(&mods);
+    let markers = crate::app::compat_step3_rules::collect_step3_compat_markers(
+        &step1,
+        "BG2EE",
+        &mods,
+        &items,
+        &[],
+    );
+    let item = items
+        .iter()
+        .find(|item| item.component_id == current)
+        .expect("current item");
+    let marker = markers.get(&crate::app::compat_step3_rules::marker_key(item));
+    let step3_expected =
+        expected.filter(|kind| matches!(*kind, "conflict" | "missing_dep" | "order_block"));
+    assert_eq!(
+        marker.map(|marker| marker.kind.as_str()),
+        step3_expected,
+        "Step3: {marker:?}"
+    );
+    self_conflict_step2(&step1, "BG2EE", &mut mods);
+    let component = mods[0]
+        .components
+        .iter()
+        .find(|component| component.component_id == current)
+        .expect("current component");
+    assert_eq!(
+        component.compat_kind.as_deref(),
+        expected,
+        "Step2: {:?}",
+        component.disabled_reason
+    );
+    if expected == Some("conflict") {
+        assert_ne!(component.compat_related_component.as_deref(), Some(current));
+        assert!(
+            component
+                .compat_evidence
+                .as_ref()
+                .is_some_and(|evidence| evidence.contains("MOD_IS_INSTALLED"))
+        );
+        assert_ne!(
+            marker.and_then(|marker| marker.related_component.as_deref()),
+            Some(current)
+        );
+    }
+}
+
+#[test]
+fn self_conflict_other_family_singles_remain_valid() {
+    for id in ["3490", "3492", "3493"] {
+        self_conflict_assert_both(CDTWEAKS_SELF_FAMILY, "cdtweaks", &[id], id, None);
+    }
+}
+
+#[test]
+fn self_conflict_real_family_pairs_and_reversed_scope_remain_conflicts() {
+    for selected in [["3490", "3491"], ["3491", "3490"]] {
+        for id in selected {
+            self_conflict_assert_both(
+                CDTWEAKS_SELF_FAMILY,
+                "cdtweaks",
+                &selected,
+                id,
+                Some("conflict"),
+            );
+        }
+    }
+    for selected in [["3491", "3492"], ["3492", "3491"]] {
+        self_conflict_assert_both(
+            CDTWEAKS_SELF_FAMILY,
+            "cdtweaks",
+            &selected,
+            "3492",
+            Some("conflict"),
+        );
+        self_conflict_assert_both(CDTWEAKS_SELF_FAMILY, "cdtweaks", &selected, "3491", None);
+    }
+}
+
+#[test]
+fn self_conflict_normalized_tp2_identities() {
+    for tp_file in [
+        "CDTWEAKS",
+        "SETUP-CDTWEAKS.TP2",
+        "mods\\CdTweaks\\Setup-CdTweaks.Tp2",
+    ] {
+        self_conflict_assert_both(CDTWEAKS_SELF_FAMILY, tp_file, &["3491"], "3491", None);
+    }
+}
+
+#[test]
+fn self_conflict_unsupported_game_keeps_inherited_mismatch() {
+    let fixture = self_conflict_fixture(CDTWEAKS_SELF_FAMILY);
+    for game in ["BGEE", "IWDEE"] {
+        let mut mods = self_conflict_plan(&fixture, "cdtweaks", &["3491"], false);
+        let step1 = Step1State {
+            game_install: game.to_string(),
+            ..Step1State::default()
+        };
+        self_conflict_step2(&step1, game, &mut mods);
+        let component = &mods[0].components[0];
+        assert_eq!(component.compat_kind.as_deref(), Some("mismatch"));
+        assert!(component.disabled);
+        let context = mismatch_context(game, game, &[("cdtweaks", "3491")]);
+        let hit = super::scan_predicate_guard_hit(&mods[0].tp2_path, "3492", &context)
+            .expect("inherited game guard");
+        assert_eq!(hit.kind, "mismatch");
+        let guards = super::load_component_guards(&mods[0].tp2_path);
+        assert!(guards["3492"].iter().any(|guard| {
+            guard
+                .inherited_provenance()
+                .is_some_and(|origin| origin.contains("3490"))
+        }));
+    }
+}
+
+#[test]
+fn self_conflict_compound_polarity_and_cross_targets() {
+    for (expression, selected, expected) in [
+        (
+            "GAME_IS ~bg2ee~ AND MOD_IS_INSTALLED ~cdtweaks.tp2~ ~1~",
+            vec!["1"],
+            Some("conditional"),
+        ),
+        (
+            "GAME_IS ~bg2ee~ AND (MOD_IS_INSTALLED ~cdtweaks.tp2~ ~1~)=0",
+            vec!["1"],
+            None,
+        ),
+        (
+            "!(MOD_IS_INSTALLED ~cdtweaks.tp2~ ~1~ OR MOD_IS_INSTALLED ~cdtweaks.tp2~ ~2~)",
+            vec!["1"],
+            None,
+        ),
+        (
+            "!(MOD_IS_INSTALLED ~cdtweaks.tp2~ ~1~ OR MOD_IS_INSTALLED ~cdtweaks.tp2~ ~2~)",
+            vec!["1", "2"],
+            Some("conditional"),
+        ),
+        (
+            "!MOD_IS_INSTALLED ~cdtweaks.tp2~ ~1~ AND !MOD_IS_INSTALLED ~cdtweaks.tp2~ ~2~",
+            vec!["1", "2"],
+            Some("conflict"),
+        ),
+        (
+            "GAME_IS ~bg2ee~ AND (MOD_IS_INSTALLED ~cdtweaks.tp2~ ~1~ OR MOD_IS_INSTALLED ~cdtweaks.tp2~ ~2~)",
+            vec!["1", "2"],
+            None,
+        ),
+        (
+            "!MOD_IS_INSTALLED ~cdtweaks.tp2~ ~1~ OR MOD_IS_INSTALLED ~missing.tp2~ ~0~",
+            vec!["1"],
+            None,
+        ),
+    ] {
+        let text = format!(
+            "BEGIN ~Current~ DESIGNATED 1\nREQUIRE_PREDICATE {expression} ~Required~\nBEGIN ~Other~ DESIGNATED 2\n"
+        );
+        self_conflict_assert_both(&text, "cdtweaks", &selected, "1", expected);
+    }
+}
+
+#[test]
+fn self_conflict_positive_dependency_ownership_is_preserved() {
+    let text = "BEGIN ~First~ DESIGNATED 1 SUBCOMPONENT @9\nREQUIRE_PREDICATE MOD_IS_INSTALLED ~cdtweaks.tp2~ ~2~ ~Required~\nBEGIN ~Second~ DESIGNATED 2 SUBCOMPONENT @9\n";
+    self_conflict_assert_both(text, "cdtweaks", &["1"], "1", Some("missing_dep"));
+    self_conflict_assert_both(text, "cdtweaks", &["2", "1"], "1", None);
+    self_conflict_assert_both(text, "cdtweaks", &["2"], "2", None);
+}
+
+#[test]
+fn self_conflict_same_number_in_different_mod_remains_visible() {
+    let text = "BEGIN ~Current~ DESIGNATED 1\nREQUIRE_PREDICATE !MOD_IS_INSTALLED ~other.tp2~ ~1~ ~Conflict~\n";
+    let fixture = self_conflict_fixture(text);
+    let mut mods = self_conflict_plan(&fixture, "cdtweaks", &["1"], false);
+    mods.insert(0, scs_mod_state("other", &[("1", true)]));
+    let step1 = Step1State {
+        game_install: "BG2EE".to_string(),
+        ..Step1State::default()
+    };
+    let items = self_conflict_items(&mods);
+    let markers = crate::app::compat_step3_rules::collect_step3_compat_markers(
+        &step1,
+        "BG2EE",
+        &mods,
+        &items,
+        &[],
+    );
+    let marker = &markers[&crate::app::compat_step3_rules::marker_key(&items[1])];
+    assert_eq!(marker.kind, "conflict");
+    assert_eq!(marker.related_mod.as_deref(), Some("other"));
+    self_conflict_step2(&step1, "BG2EE", &mut mods);
+    assert_eq!(
+        mods[1].components[0].compat_kind.as_deref(),
+        Some("conflict")
+    );
+    assert_eq!(
+        mods[1].components[0].compat_related_mod.as_deref(),
+        Some("other")
+    );
+}
+
+#[test]
+fn self_conflict_eet_core_scope_retains_global_game_identity() {
+    for expression in [
+        "GAME_IS ~eet~ AND ENGINE_IS ~bg2ee~ AND !MOD_IS_INSTALLED ~eet.tp2~ ~0~",
+        "!GAME_IS ~bg2ee~ AND !MOD_IS_INSTALLED ~eet.tp2~ ~0~",
+    ] {
+        let text =
+            format!("BEGIN ~Core~ DESIGNATED 0\nREQUIRE_PREDICATE {expression} ~Required~\n");
+        self_conflict_assert_both(&text, "eet", &["0"], "0", None);
+    }
+}

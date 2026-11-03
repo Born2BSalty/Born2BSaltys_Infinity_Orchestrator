@@ -14,7 +14,6 @@ pub fn is_rar_archive(path: &Path) -> bool {
 
 pub(super) fn extract_rar_archive(archive_path: &Path, out_dir: &Path) -> Result<(), String> {
     let mut archive = Archive::new(archive_path)
-        .as_first_part()
         .open_for_processing()
         .map_err(|err| err.to_string())?;
     loop {
@@ -27,3 +26,7 @@ pub(super) fn extract_rar_archive(archive_path: &Path, out_dir: &Path) -> Result
     }
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "rar_extract_tests.rs"]
+mod tests;

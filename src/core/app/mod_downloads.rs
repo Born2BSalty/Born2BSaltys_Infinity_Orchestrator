@@ -265,7 +265,10 @@ pub(crate) fn save_user_mod_download_source_block(
         allow_source_id_change,
         source_block,
         target_path,
-        false,
+        SourceBlockSaveContext {
+            global: false,
+            categories: None,
+        },
     )
 }
 pub(crate) fn save_global_mod_download_source_block(
@@ -283,18 +286,28 @@ pub(crate) fn save_global_mod_download_source_block(
         allow_source_id_change,
         source_block,
         target_path,
-        true,
+        SourceBlockSaveContext {
+            global: true,
+            categories: None,
+        },
     )
 }
-fn save_source_block_with_context(
+#[derive(Clone, Copy)]
+pub(crate) struct SourceBlockSaveContext<'a> {
+    pub(crate) global: bool,
+    pub(crate) categories: Option<&'a [String]>,
+}
+
+pub(crate) fn save_source_block_with_context(
     tp2: &str,
     label: &str,
     source_id: &str,
     allow_source_id_change: bool,
     source_block: &str,
     target_path: Option<&Path>,
-    global: bool,
+    save_options: SourceBlockSaveContext<'_>,
 ) -> Result<(), String> {
+    let global = save_options.global;
     if !global {
         ensure_mod_downloads_files().map_err(|err| err.to_string())?;
     }
@@ -374,8 +387,40 @@ fn save_source_block_with_context(
         source_id,
         &source_input.source_block,
     );
+    let updated = apply_category_update(updated, &source_input.tp2, save_options.categories)?;
     toml::from_str::<ModDownloadsFile>(&updated).map_err(|err| err.to_string())?;
     fs::write(&path, updated).map_err(|err| err.to_string())
+}
+
+fn apply_category_update(
+    content: String,
+    tp2: &str,
+    categories: Option<&[String]>,
+) -> Result<String, String> {
+    let Some(categories) = categories else {
+        return Ok(content);
+    };
+    let mut document = content
+        .parse::<toml_edit::DocumentMut>()
+        .map_err(|err| err.to_string())?;
+    if let Some(parents) = document["mods"].as_array_of_tables_mut() {
+        for parent in parents.iter_mut().filter(|parent| {
+            parent
+                .get("tp2")
+                .and_then(toml_edit::Item::as_str)
+                .is_some_and(|value| {
+                    normalize_mod_download_tp2(value) == normalize_mod_download_tp2(tp2)
+                })
+        }) {
+            parent["categories"] = toml_edit::value(
+                categories
+                    .iter()
+                    .map(String::as_str)
+                    .collect::<toml_edit::Array>(),
+            );
+        }
+    }
+    Ok(document.to_string())
 }
 
 pub(crate) fn load_two_tier_sources() -> ModDownloadsLoad {
@@ -552,6 +597,29 @@ pub(crate) struct SourceTiers {
 }
 
 impl SourceTiers {
+    pub(crate) fn category_options(&self) -> Vec<String> {
+        let mut options = BTreeMap::<String, String>::new();
+        for label in self
+            .resolved
+            .categories
+            .values()
+            .flatten()
+            .map(|value| value.trim())
+        {
+            if !label.is_empty() {
+                options
+                    .entry(label.to_lowercase())
+                    .and_modify(|current| {
+                        if label < current.as_str() {
+                            label.clone_into(current);
+                        }
+                    })
+                    .or_insert_with(|| label.to_string());
+            }
+        }
+        options.into_values().collect()
+    }
+
     pub(crate) fn resolve(&self, tp2: &str) -> Option<(ModDownloadSource, SourceTier)> {
         let source = self.resolved.resolve_source(tp2, None)?;
         let tier = self.tier_of(&source.tp2, &source.source_id);

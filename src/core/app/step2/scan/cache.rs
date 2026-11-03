@@ -89,7 +89,8 @@ pub fn cache_context(
         normalize_context_path(weidu),
         normalize_context_path(game_dir),
         normalize_context_path(mods_root),
-        preferred_locale.to_lowercase()
+        crate::settings::installation_language::normalize_installation_locale(preferred_locale)
+            .to_ascii_lowercase()
     )
 }
 
@@ -437,6 +438,11 @@ mod tests {
     #[test]
     fn old_cache_version_is_rescanned() {
         let path = Path::new("bio_scan_cache_version_probe_never_written.json");
+        assert_eq!(SCAN_CACHE_VERSION, 8);
+        let stale_prompts = inspect_and_parse_cache_text(path, "test", &cache_text(7))
+            .expect_err("schema 7 prompt summaries must be regenerated");
+        assert_eq!(stale_prompts.load_status, "version_mismatch");
+        assert_eq!(stale_prompts.file_version, Some(7));
         let old = inspect_and_parse_cache_text(path, "test", &cache_text(6))
             .expect_err("a version 6 cache is not served");
         assert_eq!(old.load_status, "version_mismatch");

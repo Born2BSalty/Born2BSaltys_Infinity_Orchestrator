@@ -6301,6 +6301,28 @@ config_files = []
 #////////////////////////////////////////////////#
 
 [[mods]]
+categories = ["Quests", "BG2", "BG2EE", "EET", "BGT"]
+name = "Fishing for Trouble"
+tp2 = "FishingForTrouble"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Source"
+  type = "github"
+  url = "https://github.com/Spellhold-Studios/FishingForTrouble"
+  repo = "Spellhold-Studios/FishingForTrouble"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
 categories = ["Soundsets", "Audio", "BGT"]
 name = "Baldurs Gate Trilogy NPC Sound"
 tp2 = "Setup-BGT-NPCSound"
@@ -9598,7 +9620,7 @@ config_files = []
 
 [[mods]]
 categories = ["Quests", "Encounters", "BGEE", "SoD", "EET"]
-name = "Bonus Pack in Baldur's Gate"
+name = "Black Pits in Baldur's Gate"
 tp2 = "BP_in_BG"
 aliases = []
 config_files = []
@@ -28363,28 +28385,6 @@ config_files = []
   label = "Source"
   type = "url"
   url = "https://www.shsforums.net/files/file/1271-spellfix-visual-effects/"
-  repo = ""
-  commit = ""
-  tag = ""
-  branch = ""
-  channel = ""
-  asset = ""
-  pkg_windows = "wzp,rar,7z,zip"
-  pkg_linux = "lin,rar,7z,zip"
-  pkg_macos = "mac,rar,7z,zip"
-
-[[mods]]
-categories = ["Quests", "BG2", "BG2EE", "EET", "BGT"]
-name = "Fishing for Trouble"
-tp2 = "FishingForTrouble"
-aliases = []
-config_files = []
-
-  [[mods.sources]]
-  id = "primary"
-  label = "Source"
-  type = "url"
-  url = "http://www.shsforums.net/files/file/1084-fishing-for-trouble/"
   repo = ""
   commit = ""
   tag = ""

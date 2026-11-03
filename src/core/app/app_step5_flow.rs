@@ -121,7 +121,8 @@ fn finish_prepared_start<F>(
                     .basic_install_mod_installer_version
                     .clone_from(&parser.preparation.version.display);
                 term.append_marker(&format!(
-                    "Installer parser ready: {} phrases",
+                    "Installer parser ready: {} recognition categories, {} choice phrases",
+                    parser.preparation.recognition_rules.len(),
                     parser.preparation.phrases.len()
                 ));
                 if let Some(path) = parser.preparation.backup_path.as_ref() {
@@ -182,7 +183,7 @@ fn start_if_requested_with<F>(
 where
     F: FnOnce(
         crate::app::state::Step1State,
-        Vec<String>,
+        crate::app::mod_installer_parser::ParserRecognitionRules,
         bool,
         u64,
     ) -> Receiver<Result<InstallPreparation, String>>,
@@ -215,12 +216,13 @@ where
         return false;
     };
 
+    let rules = pending.preparation_rules();
     state.step5.prep_running = true;
     state.step5.last_status_text = "Preparing installer parser...".to_string();
     term.append_marker("Preparing installer parser...");
     *step5_prep_rx = Some(spawn(
         pending.preparation_step1(),
-        state.parser_choice_phrases.clone(),
+        rules,
         needs_prep,
         pending.run_token,
     ));
@@ -525,5 +527,48 @@ mod parser_sharing_tests {
             }
         }
         std::fs::remove_dir_all(root).expect("fixture cleanup");
+    }
+}
+
+#[cfg(test)]
+mod parser_rules_completion_tests {
+    use super::*;
+    use crate::app::step5::install_flow::parser_sharing_pending_for_test;
+
+    #[test]
+    fn parser_rules_changed_nonphrase_array_discards_real_preparation_completion() {
+        let mut state = WizardState::default();
+        state.step1.mod_installer_binary.clear();
+        state.step5.prep_running = true;
+        state.parser_recognition_rules =
+            std::iter::once(("choice_words".to_string(), vec!["old".to_string()])).collect();
+        let pending = parser_sharing_pending_for_test(&state);
+        let token = pending.run_token;
+        state
+            .parser_recognition_rules
+            .insert("choice_words".to_string(), vec!["new".to_string()]);
+        let (sender, receiver) = std::sync::mpsc::channel();
+        sender
+            .send(Ok(InstallPreparation {
+                run_token: token,
+                parser: None,
+                target: None,
+                parser_warning: None,
+            }))
+            .unwrap_or_else(|_| panic!("fixture send"));
+        let mut receiver = Some(receiver);
+        let mut pending = Some(pending);
+        assert!(poll_step5_prep_with(
+            &mut state,
+            &mut receiver,
+            &mut None,
+            &mut None,
+            &mut pending,
+            |_, _, _| panic!("stale rules must not spawn")
+        ));
+        assert!(receiver.is_none());
+        assert!(pending.is_none());
+        assert!(!state.step5.prep_running);
+        assert!(!state.step5.install_running);
     }
 }

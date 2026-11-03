@@ -36,7 +36,7 @@ fn fixture() -> (WizardState, WorkspaceViewState) {
 #[test]
 fn next_with_missing_inputs_opens_editor_without_completing_step3() {
     let (mut state, mut workspace) = fixture();
-    assert!(!request_step3_next(&mut state, &mut workspace));
+    assert!(!request_step3_next(&mut state, &mut workspace, false));
     assert_eq!(workspace.current_step, WorkspaceStep::Step3);
     assert!(!workspace.completed_steps.contains(&WorkspaceStep::Step3));
     assert_eq!(
@@ -60,7 +60,7 @@ fn next_with_saved_inputs_proceeds_to_step4_without_opening_editor() {
             .unwrap();
         item.raw_line = wlb_inputs::replace_marker(&item.raw_line, &spec).unwrap();
     }
-    assert!(request_step3_next(&mut state, &mut workspace));
+    assert!(request_step3_next(&mut state, &mut workspace, false));
     assert_eq!(workspace.current_step, WorkspaceStep::Step4);
     assert!(workspace.completed_steps.contains(&WorkspaceStep::Step3));
     assert_eq!(state.step3.installer_answers, None);
@@ -69,9 +69,9 @@ fn next_with_saved_inputs_proceeds_to_step4_without_opening_editor() {
 #[test]
 fn closing_an_unanswered_queue_does_not_allow_the_next_attempt_through() {
     let (mut state, mut workspace) = fixture();
-    assert!(!request_step3_next(&mut state, &mut workspace));
+    assert!(!request_step3_next(&mut state, &mut workspace, false));
     state.step3.installer_answers = None;
-    assert!(!request_step3_next(&mut state, &mut workspace));
+    assert!(!request_step3_next(&mut state, &mut workspace, false));
     assert_eq!(workspace.current_step, WorkspaceStep::Step3);
     assert!(!workspace.completed_steps.contains(&WorkspaceStep::Step3));
 }
@@ -80,7 +80,7 @@ fn closing_an_unanswered_queue_does_not_allow_the_next_attempt_through() {
 fn an_unrelated_game_tree_does_not_block_next() {
     let (mut state, mut workspace) = fixture();
     state.step1.game_install = "BG2EE".to_string();
-    assert!(request_step3_next(&mut state, &mut workspace));
+    assert!(request_step3_next(&mut state, &mut workspace, false));
     assert_eq!(workspace.current_step, WorkspaceStep::Step4);
 }
 
@@ -123,7 +123,7 @@ fn scene_harness() -> Harness<'static, Scene> {
                         None,
                     );
                     if outcome.next_clicked {
-                        request_step3_next(&mut scene.state, &mut scene.workspace);
+                        request_step3_next(&mut scene.state, &mut scene.workspace, false);
                     }
                 });
                 if crate::ui::step3::installer_answers_panel_step3::render(
@@ -282,7 +282,7 @@ fn scanning_or_running_install_cannot_advance_from_step3() {
             } else {
                 state.step2.is_scanning = true;
             }
-            assert!(!request_step3_next(&mut state, &mut workspace));
+            assert!(!request_step3_next(&mut state, &mut workspace, false));
             assert_eq!(workspace.current_step, WorkspaceStep::Step3);
             assert!(!workspace.completed_steps.contains(&WorkspaceStep::Step3));
             assert_eq!(state.step3.installer_answers, None);
@@ -296,7 +296,7 @@ fn ordinary_exact_log_navigation_preserves_the_immutable_plan() {
     state.step1.install_mode =
         crate::app::state::Step1State::INSTALL_MODE_EXACT_WEIDU_LOGS.to_string();
     let original = state.step3.bgee_items.clone();
-    assert!(request_step3_next(&mut state, &mut workspace));
+    assert!(request_step3_next(&mut state, &mut workspace, false));
     assert_eq!(workspace.current_step, WorkspaceStep::Step4);
     assert!(workspace.completed_steps.contains(&WorkspaceStep::Step3));
     assert_eq!(state.step3.installer_answers, None);
@@ -307,7 +307,7 @@ fn ordinary_exact_log_navigation_preserves_the_immutable_plan() {
 fn next_binds_queue_to_workspace_before_a_later_render_can_switch_owner() {
     let (mut state, mut workspace) = fixture();
     workspace.loaded_workspace_id = Some("first-workspace".to_string());
-    assert!(!request_step3_next(&mut state, &mut workspace));
+    assert!(!request_step3_next(&mut state, &mut workspace, false));
     assert_eq!(
         state.step3.installer_answers_workspace.as_deref(),
         Some("first-workspace")
@@ -352,6 +352,39 @@ fn workspace_harness()
             },
             app,
         )
+}
+
+#[test]
+fn stale_language_scan_blocks_next_without_opening_answers_or_dirtying_workspace() {
+    for exact_log in [false, true] {
+        for saved_answers in [false, true] {
+            let mut harness = workspace_harness();
+            let app = harness.state_mut();
+            if exact_log {
+                app.wizard_state.step1.install_mode =
+                    crate::app::state::Step1State::INSTALL_MODE_EXACT_WEIDU_LOGS.to_string();
+            }
+            if saved_answers {
+                for item in &mut app.wizard_state.step3.bgee_items {
+                    item.raw_line = wlb_inputs::replace_marker(&item.raw_line, "2").unwrap();
+                }
+            }
+            let original = app.wizard_state.step3.bgee_items.clone();
+            let completed = app.workspace_view.completed_steps.clone();
+            assert!(!app.workspace_state_dirty);
+            assert!(!request_step3_next(
+                &mut app.wizard_state,
+                &mut app.workspace_view,
+                true,
+            ));
+            assert_eq!(app.workspace_view.current_step, WorkspaceStep::Step3);
+            assert_eq!(app.workspace_view.completed_steps, completed);
+            assert_eq!(app.wizard_state.step3.installer_answers, None);
+            assert_eq!(app.wizard_state.step3.installer_answers_workspace, None);
+            assert_eq!(app.wizard_state.step3.bgee_items, original);
+            assert!(!app.workspace_state_dirty);
+        }
+    }
 }
 
 #[test]

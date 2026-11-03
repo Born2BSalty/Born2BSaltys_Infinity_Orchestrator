@@ -17,7 +17,7 @@ use crate::ui::shared::redesign_tokens::{
     redesign_text_muted, redesign_text_primary, redesign_warning,
 };
 
-use super::versions_icons;
+use super::{versions_categories, versions_icons};
 
 const FIELD_H: f32 = 36.0;
 const FIELD_MARGIN: egui::Margin = egui::Margin {
@@ -36,6 +36,7 @@ pub(crate) struct FormEnv<'a> {
     pub(crate) has_modlist_destination: bool,
     pub(crate) logged_in: bool,
     pub(crate) release_list: &'a ReleaseListState,
+    pub(crate) category_options: &'a [String],
 }
 
 #[derive(Default)]
@@ -78,6 +79,8 @@ pub(crate) fn render(
     }
 
     render_note_row(ui, palette, form);
+    ui.add_space(ROW_GAP);
+    versions_categories::render(ui, palette, form, env.category_options);
     ui.add_space(ROW_GAP);
     render_advanced(ui, palette, form);
     ui.add_space(ROW_GAP);
@@ -297,7 +300,7 @@ fn dropdown_button(
     (rect, response)
 }
 
-fn text_field(
+pub(super) fn text_field(
     ui: &mut egui::Ui,
     palette: ThemePalette,
     value: &mut String,

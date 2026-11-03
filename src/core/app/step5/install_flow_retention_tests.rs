@@ -236,6 +236,7 @@ fn process_attempt(success: bool) {
         run_token: 0,
         step1: state.step1.clone(),
         phrases: Vec::new(),
+        recognition_rules: std::collections::BTreeMap::new(),
         diagnostics_run_id: state.step5.diagnostics_run_id.clone(),
         executable_identity: None,
         program: if success {

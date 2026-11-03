@@ -103,6 +103,10 @@ pub struct ModlistWorkspaceState {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) parser_choice_phrases: Option<Vec<String>>,
 
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) parser_recognition_rules:
+        Option<crate::app::mod_installer_parser::ParserRecognitionRules>,
+
     #[serde(skip_serializing_if = "Option::is_none")]
     pub scratch_mods_folder: Option<String>,
 
@@ -135,6 +139,10 @@ impl ModlistWorkspaceState {
                 .parser_choice_phrases
                 .as_ref()
                 .is_none_or(Vec::is_empty)
+            && self
+                .parser_recognition_rules
+                .as_ref()
+                .is_none_or(std::collections::BTreeMap::is_empty)
             && self.scratch_mods_folder.is_none()
             && self.dev_scanned_mods_folder.is_none()
             && self.pending_destination_prep.is_none()

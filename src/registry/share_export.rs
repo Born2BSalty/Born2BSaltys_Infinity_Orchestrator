@@ -9,6 +9,7 @@ use flate2::write::ZlibEncoder;
 use serde_json::Value;
 use tracing::debug;
 
+use crate::app::mod_installer_parser::{self, ParserRecognitionRules};
 use crate::app::modlist_share::ForkAncestor;
 use crate::app::share_answers::ShareAnswers;
 use crate::app::state::WizardState;
@@ -115,6 +116,7 @@ fn pack_meta_onto_base(base: &str, meta: &ShareMeta) -> Result<String, String> {
     })
 }
 
+#[cfg(test)]
 pub(crate) fn enrich_share_code_with_phrases(
     code: &str,
     phrases: &[String],
@@ -143,17 +145,163 @@ pub(crate) fn enrich_share_code_with_phrases(
     Ok(code)
 }
 
+fn unguarded_workspace_recognition_rules(
+    code: &str,
+    workspace: &crate::registry::workspace_model::ModlistWorkspaceState,
+) -> Result<ParserRecognitionRules, String> {
+    if let Some(rules) = workspace.parser_recognition_rules.as_ref() {
+        return Ok(mod_installer_parser::merge_recognition_rules(&[rules]));
+    }
+    let mut rules = if code.trim().is_empty() {
+        ParserRecognitionRules::new()
+    } else {
+        unguarded_recognition_rules_from_code(code)?
+    };
+    if let Some(phrases) = workspace.parser_choice_phrases.as_ref() {
+        if phrases.is_empty() {
+            rules.remove("choice_phrase");
+        } else {
+            rules = mod_installer_parser::merge_recognition_rules(&[
+                &rules,
+                &mod_installer_parser::legacy_choice_rules(phrases),
+            ]);
+        }
+    }
+    Ok(rules)
+}
+
+pub(crate) fn checked_workspace_recognition_rules(
+    code: &str,
+    workspace: &crate::registry::workspace_model::ModlistWorkspaceState,
+) -> Result<(ParserRecognitionRules, Vec<String>), String> {
+    unguarded_workspace_recognition_rules(code, workspace)
+        .map(|rules| mod_installer_parser::sanitize_recognition_rules(&rules))
+}
+
+pub(crate) fn workspace_recognition_rules(
+    code: &str,
+    workspace: &crate::registry::workspace_model::ModlistWorkspaceState,
+) -> Result<ParserRecognitionRules, String> {
+    unguarded_workspace_recognition_rules(code, workspace)
+        .map(|rules| mod_installer_parser::guarded_recognition_rules(&[&rules]))
+}
+
+pub(crate) fn active_workspace_recognition_rules(
+    code: &str,
+    workspace: &crate::registry::workspace_model::ModlistWorkspaceState,
+    current: &ParserRecognitionRules,
+) -> Result<ParserRecognitionRules, String> {
+    if workspace.parser_recognition_rules.is_some() {
+        return Ok(mod_installer_parser::guarded_recognition_rules(&[current]));
+    }
+    let mut prior = workspace.clone();
+    if prior
+        .parser_choice_phrases
+        .as_ref()
+        .is_some_and(|phrases| !phrases.is_empty())
+    {
+        prior.parser_choice_phrases = None;
+    }
+    let embedded = unguarded_workspace_recognition_rules(code, &prior)?;
+    Ok(mod_installer_parser::guarded_recognition_rules(&[
+        &embedded, current,
+    ]))
+}
+
+pub(crate) fn enrich_share_code_with_recognition_rules(
+    code: &str,
+    rules: &ParserRecognitionRules,
+) -> Result<String, String> {
+    let existing = unguarded_recognition_rules_from_code(code)?;
+    let combined = mod_installer_parser::guarded_recognition_rules(&[&existing, rules]);
+    rewrite_payload(code, |obj| stamp_recognition_rules(obj, &combined))
+}
+
+pub(crate) fn unguarded_recognition_rules_from_code(
+    code: &str,
+) -> Result<ParserRecognitionRules, String> {
+    let payload = decode_payload_object(code)?;
+    let rules = payload.get("parser_recognition_rules").map_or_else(
+        || Ok(ParserRecognitionRules::new()),
+        |value| {
+            mod_installer_parser::recognition_rules_from_json(value)
+                .map_err(|err| format!("Invalid parser recognition rules: {err}"))
+        },
+    )?;
+    let phrases: Vec<String> = payload.get("parser_choice_phrases").map_or_else(
+        || Ok(Vec::new()),
+        |value| {
+            serde_json::from_value(value.clone())
+                .map_err(|err| format!("Invalid parser phrases: {err}"))
+        },
+    )?;
+    Ok(mod_installer_parser::merge_recognition_rules(&[
+        &rules,
+        &mod_installer_parser::legacy_choice_rules(&phrases),
+    ]))
+}
+
+pub(crate) fn replace_share_code_recognition_rules(
+    code: &str,
+    rules: &ParserRecognitionRules,
+) -> Result<String, String> {
+    let rules = mod_installer_parser::guarded_recognition_rules(&[rules]);
+    rewrite_payload(code, |obj| stamp_recognition_rules(obj, &rules))
+}
+
+fn stamp_recognition_rules(
+    obj: &mut serde_json::Map<String, Value>,
+    rules: &ParserRecognitionRules,
+) {
+    if rules.is_empty() {
+        obj.remove("parser_recognition_rules");
+    } else {
+        obj.insert(
+            "parser_recognition_rules".to_string(),
+            serde_json::json!(rules),
+        );
+    }
+    if let Some(phrases) = rules
+        .get("choice_phrase")
+        .filter(|phrases| !phrases.is_empty())
+    {
+        obj.insert(
+            "parser_choice_phrases".to_string(),
+            serde_json::json!(phrases),
+        );
+    } else {
+        obj.remove("parser_choice_phrases");
+    }
+}
+
 pub(crate) fn overlay_workspace_wlb(
     code: &str,
     workspace: &crate::registry::workspace_model::ModlistWorkspaceState,
 ) -> Result<String, String> {
+    let current = workspace.parser_recognition_rules.as_ref().map_or_else(
+        || {
+            mod_installer_parser::guarded_rules_with_legacy(
+                &ParserRecognitionRules::new(),
+                workspace
+                    .parser_choice_phrases
+                    .as_deref()
+                    .unwrap_or_default(),
+            )
+        },
+        |rules| mod_installer_parser::guarded_recognition_rules(&[rules]),
+    );
+    let base = if current.is_empty() {
+        code.to_string()
+    } else {
+        enrich_share_code_with_recognition_rules(code, &current)?
+    };
     let mut changed = false;
-    let output = rewrite_payload(code, |obj| {
+    let output = rewrite_payload(&base, |obj| {
         let original = obj.clone();
         overlay_workspace_logs(obj, workspace);
         changed = *obj != original;
     })?;
-    Ok(if changed { output } else { code.to_string() })
+    Ok(if changed { output } else { base })
 }
 
 fn overlay_workspace_logs(
@@ -262,23 +410,27 @@ fn overlay_slot_lines(
     }
 }
 
-fn rewrite_payload(
-    code: &str,
-    edit: impl FnOnce(&mut serde_json::Map<String, Value>),
-) -> Result<String, String> {
+fn decode_payload_object(code: &str) -> Result<serde_json::Map<String, Value>, String> {
     let encoded = code
         .trim()
         .strip_prefix(SHARE_CODE_PREFIX)
         .ok_or_else(|| "share code did not start with BIO-MODLIST-V1:".to_string())?;
     let compressed = base64url_decode(encoded)?;
     let json_bytes = zlib_decompress(&compressed)?;
-    let mut payload: Value = serde_json::from_slice(&json_bytes)
+    let payload: Value = serde_json::from_slice(&json_bytes)
         .map_err(|err| format!("share payload was not valid JSON: {err}"))?;
+    match payload {
+        Value::Object(obj) => Ok(obj),
+        _ => Err("share payload was not a JSON object".to_string()),
+    }
+}
 
-    let obj = payload
-        .as_object_mut()
-        .ok_or_else(|| "share payload was not a JSON object".to_string())?;
-    edit(obj);
+fn rewrite_payload(
+    code: &str,
+    edit: impl FnOnce(&mut serde_json::Map<String, Value>),
+) -> Result<String, String> {
+    let mut payload = decode_payload_object(code)?;
+    edit(&mut payload);
 
     let out_bytes =
         serde_json::to_vec(&payload).map_err(|err| format!("re-serialize failed: {err}"))?;

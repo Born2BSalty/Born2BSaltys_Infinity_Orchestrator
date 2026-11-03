@@ -310,6 +310,7 @@ mod tests {
     fn preview(name: Option<&str>, author: Option<&str>, game: &str) -> ModlistSharePreview {
         ModlistSharePreview {
             parser_choice_phrases: Vec::new(),
+            parser_recognition_rules: std::collections::BTreeMap::default(),
             bio_version: "x".to_string(),
             game_install: game.to_string(),
             game_version: None,

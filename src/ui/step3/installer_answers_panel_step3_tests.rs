@@ -555,3 +555,53 @@ fn single_language_editor_shows_no_language_tabs() {
         "Save closes this window. With no answers, it clears this component's saved inputs."
     ));
 }
+
+#[test]
+fn language_tabs_drawer_palette_snapshots() {
+    let Some(directory) = std::env::var_os("BIO_TEST_SCREENSHOT_DIR") else {
+        return;
+    };
+    let directory = std::path::PathBuf::from(directory);
+    std::fs::create_dir_all(&directory).unwrap();
+    for (theme, palette) in [("light", ThemePalette::Light), ("dark", ThemePalette::Dark)] {
+        for (layout, width) in [("wide", 1280.0), ("narrow", 960.0)] {
+            let mut fonts_installed = false;
+            let mut harness = Harness::builder()
+                .with_size(egui::vec2(width, 820.0))
+                .with_max_steps(12)
+                .build_state(
+                    move |ctx, state| {
+                        if !fonts_installed {
+                            crate::ui::shared::redesign_fonts::install_redesign_fonts(ctx);
+                            fonts_installed = true;
+                            ctx.request_repaint();
+                            return;
+                        }
+                        ctx.set_visuals(redesign_visuals::build_for(palette));
+                        egui::CentralPanel::default().show(ctx, |ui| {
+                            ui.heading("Step 3 — Reorder and Resolve");
+                            let mut jump = false;
+                            crate::ui::step3::list_step3::render(
+                                ui,
+                                state,
+                                &mut jump,
+                                &std::collections::HashMap::new(),
+                            );
+                        });
+                        render(ctx, state, palette);
+                    },
+                    drawer_fixture(),
+                );
+            polish_install_with_english_book(harness.state_mut());
+            harness.run();
+            assert!(label_painted(&harness, "Polish"));
+            assert!(label_painted(&harness, "English"));
+            assert!(label_painted(&harness, "installs"));
+            harness
+                .render()
+                .unwrap()
+                .save(directory.join(format!("step3-answer-tabs-{theme}-{layout}.png")))
+                .unwrap();
+        }
+    }
+}

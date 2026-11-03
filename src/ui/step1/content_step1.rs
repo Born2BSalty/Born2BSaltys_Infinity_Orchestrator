@@ -5,6 +5,7 @@ use eframe::egui;
 use rfd::FileDialog;
 
 use crate::app::state::Step1State;
+use crate::settings::installation_language::{INSTALLATION_LANGUAGES, installation_language_label};
 use crate::ui::layout::{
     BROWSE_BUTTON_WIDTH, PATH_FIELD_MIN_WIDTH, PATH_INPUT_HEIGHT, PATH_LABEL_WIDTH,
     PATH_ROW_INNER_GAP,
@@ -31,37 +32,13 @@ pub fn render_game_selection_content(ui: &mut egui::Ui, s: &mut Step1State) {
         ui.add_space(12.0);
         ui.label("Language");
         egui::ComboBox::from_id_salt("install_language")
-            .selected_text(step1_language_label(&s.language))
+            .selected_text(installation_language_label(&s.language))
             .show_ui(ui, |ui| {
-                for (value, label) in step1_language_options() {
+                for (value, label) in INSTALLATION_LANGUAGES {
                     ui.selectable_value(&mut s.language, value.to_string(), *label);
                 }
             });
     });
-}
-
-const fn step1_language_options() -> &'static [(&'static str, &'static str)] {
-    &[
-        ("en_US", "English"),
-        ("de_DE", "German"),
-        ("fr_FR", "French"),
-        ("es_ES", "Spanish"),
-        ("it_IT", "Italian"),
-        ("pl_PL", "Polish"),
-        ("pt_BR", "Portuguese"),
-        ("cs_CZ", "Czech"),
-        ("tr_TR", "Turkish"),
-        ("uk_UA", "Ukrainian"),
-        ("ru_RU", "Russian"),
-    ]
-}
-
-fn step1_language_label(value: &str) -> String {
-    step1_language_options()
-        .iter()
-        .find_map(|(locale, label)| locale.eq_ignore_ascii_case(value).then_some(*label))
-        .unwrap_or(value)
-        .to_string()
 }
 
 pub fn render_advanced_options_content(ui: &mut egui::Ui, s: &mut Step1State, dev_mode: bool) {
