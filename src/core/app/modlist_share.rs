@@ -81,11 +81,11 @@ fn build_and_export_share_code(
     state: &WizardState,
     log_source: ExportLogSource,
 ) -> Result<String, String> {
-    let parser_recognition_rules = mod_installer_parser::capture_local_recognition_rules()
-        .unwrap_or_else(|err| {
-            warn!("Share code exported without local parser recognition rules: {err}");
-            ParserRecognitionRules::new()
-        });
+    let captured = mod_installer_parser::capture_local_recognition_rules().unwrap_or_else(|err| {
+        warn!("Share code exported without local parser recognition rules: {err}");
+        ParserRecognitionRules::new()
+    });
+    let parser_recognition_rules = mod_installer_parser::guarded_recognition_rules(&[&captured]);
     let parser_choice_phrases = parser_recognition_rules
         .get("choice_phrase")
         .cloned()
@@ -147,14 +147,11 @@ pub(crate) fn export_modlist_share_code_with(
 ) -> Result<String, String> {
     let legacy =
         union_valid_phrases(&[&state.parser_choice_phrases, &sources.parser_choice_phrases]);
-    let state_rules = mod_installer_parser::recognition_rules_with_legacy(
+    let rules = mod_installer_parser::guarded_recognition_rules(&[
         &state.parser_recognition_rules,
-        &legacy,
-    )?;
-    let rules = mod_installer_parser::union_recognition_rules(&[
-        &state_rules,
+        &mod_installer_parser::legacy_choice_rules(&legacy),
         &sources.parser_recognition_rules,
-    ])?;
+    ]);
     let phrases = rules.get("choice_phrase").cloned().unwrap_or_default();
     let weidu_logs = export_weidu_logs(state, sources.log_source)?;
     let first_slot_export_text = weidu_logs.bgee.as_deref().or(weidu_logs.iwdee.as_deref());
@@ -463,7 +460,7 @@ fn warn_on_unresolved_mods(preview: &ModlistSharePreview) {
 pub(crate) struct ModlistSharePayload {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub(crate) parser_choice_phrases: Vec<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_recognition_rules")]
     pub(crate) parser_recognition_rules: ParserRecognitionRules,
     pub(crate) format_version: u64,
     #[serde(default)]
@@ -492,6 +489,16 @@ pub(crate) struct ModlistSharePayload {
     pub(crate) forked_from: Vec<ForkAncestor>,
     #[serde(default)]
     pub(crate) answers: serde_json::Value,
+}
+
+fn deserialize_recognition_rules<'de, D>(
+    deserializer: D,
+) -> Result<ParserRecognitionRules, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = serde_json::Value::deserialize(deserializer)?;
+    mod_installer_parser::recognition_rules_from_json(&value).map_err(serde::de::Error::custom)
 }
 
 const fn default_true() -> bool {
@@ -552,12 +559,16 @@ pub(crate) fn decode_share_payload(code: &str) -> Result<ModlistSharePayload, St
         .ok_or_else(|| "Share code must start with BIO-MODLIST-V1:".to_string())?;
     let bytes = base64url_decode(encoded)?;
     let bytes = zlib_decompress(&bytes)?;
-    let payload: ModlistSharePayload =
+    let mut payload: ModlistSharePayload =
         serde_json::from_slice(&bytes).map_err(|err| err.to_string())?;
-    mod_installer_parser::recognition_rules_with_legacy(
-        &payload.parser_recognition_rules,
+    payload.parser_recognition_rules =
+        mod_installer_parser::guarded_recognition_rules(&[&payload.parser_recognition_rules]);
+    payload.parser_choice_phrases = mod_installer_parser::guarded_rules_with_legacy(
+        &ParserRecognitionRules::new(),
         &payload.parser_choice_phrases,
-    )?;
+    )
+    .remove("choice_phrase")
+    .unwrap_or_default();
     if payload.format_version != 1 {
         return Err(format!(
             "Unsupported modlist share format version: {}",
@@ -593,10 +604,10 @@ fn share_preview(payload: &ModlistSharePayload) -> Result<ModlistSharePreview, S
         })
         .collect::<Vec<_>>()
         .join("\n");
-    let rules = mod_installer_parser::recognition_rules_with_legacy(
+    let rules = mod_installer_parser::guarded_rules_with_legacy(
         &payload.parser_recognition_rules,
         &payload.parser_choice_phrases,
-    )?;
+    );
     Ok(ModlistSharePreview {
         parser_choice_phrases: rules.get("choice_phrase").cloned().unwrap_or_default(),
         parser_recognition_rules: rules,

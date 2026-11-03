@@ -44,10 +44,7 @@ impl OrchestratorApp {
         id: &str,
         local: &[String],
     ) -> Result<Option<String>, String> {
-        let rules = mod_installer_parser::recognition_rules_with_legacy(
-            &mod_installer_parser::ParserRecognitionRules::new(),
-            local,
-        )?;
+        let rules = mod_installer_parser::legacy_choice_rules(local);
         self.code_for_share_with_rules(id, &rules)
     }
 
@@ -56,7 +53,7 @@ impl OrchestratorApp {
         id: &str,
         local: &mod_installer_parser::ParserRecognitionRules,
     ) -> Result<Option<String>, String> {
-        mod_installer_parser::validate_recognition_rules(local)?;
+        let local = &mod_installer_parser::guarded_recognition_rules(&[local]);
         let Some(mut candidate) = self.registry.find(id).cloned() else {
             return Ok(None);
         };
@@ -68,17 +65,10 @@ impl OrchestratorApp {
             return Ok(None);
         };
         if let Err(err) = crate::app::modlist_share::decode_share_payload(&original_code) {
-            let workspace = self
-                .workspace_state
-                .get(id)
-                .cloned()
-                .or_else(|| WorkspaceStore::new_for_id(id).load().ok())
-                .unwrap_or_default();
-            share_export::workspace_recognition_rules("", &workspace)?;
             warn!(target = "orchestrator", "Share keeps stored code: {err}");
             return Ok(Some(original_code));
         }
-        let (workspace, is_active) = self.workspace_for_share(id, &original_code, local)?;
+        let (workspace, is_active) = self.workspace_for_share(id, &original_code)?;
         let mut code = merge_workspace_into_code(&original_code, workspace.as_ref(), local)?;
         let typed = self.share_name_buffer.trim().to_string();
         let save_name =
@@ -123,7 +113,6 @@ impl OrchestratorApp {
         &mut self,
         id: &str,
         code: &str,
-        local: &mod_installer_parser::ParserRecognitionRules,
     ) -> Result<
         (
             Option<crate::registry::workspace_model::ModlistWorkspaceState>,
@@ -143,10 +132,10 @@ impl OrchestratorApp {
             .or(self.active_install_modlist_id.as_deref());
         let is_active = active_id == Some(id);
         let selected_rules = if is_active {
-            let current = mod_installer_parser::recognition_rules_with_legacy(
+            let current = mod_installer_parser::guarded_rules_with_legacy(
                 &self.wizard_state.parser_recognition_rules,
                 &self.wizard_state.parser_choice_phrases,
-            )?;
+            );
             share_export::active_workspace_recognition_rules(
                 code,
                 &workspace.clone().unwrap_or_default(),
@@ -155,7 +144,6 @@ impl OrchestratorApp {
         } else {
             share_export::workspace_recognition_rules(code, &workspace.clone().unwrap_or_default())?
         };
-        mod_installer_parser::union_recognition_rules(&[&selected_rules, local])?;
         if is_active {
             crate::ui::workspace::workspace_state_loader::sync_step3_from_step2_if_changed(
                 &mut self.wizard_state,
@@ -187,10 +175,10 @@ impl OrchestratorApp {
         is_active: bool,
     ) -> Result<(), String> {
         let payload = crate::app::modlist_share::decode_share_payload(code)?;
-        let rules = mod_installer_parser::recognition_rules_with_legacy(
+        let rules = mod_installer_parser::guarded_rules_with_legacy(
             &payload.parser_recognition_rules,
             &payload.parser_choice_phrases,
-        )?;
+        );
         let phrases = rules.get("choice_phrase").cloned().unwrap_or_default();
         workspace.parser_recognition_rules = Some(rules.clone());
         workspace.parser_choice_phrases = Some(phrases.clone());
@@ -226,7 +214,7 @@ fn merge_workspace_into_code(
         original_code,
         &workspace.cloned().unwrap_or_default(),
     )?;
-    let rules = mod_installer_parser::union_recognition_rules(&[&selected, local])?;
+    let rules = mod_installer_parser::guarded_recognition_rules(&[&selected, local]);
     let overlaid = workspace
         .map_or_else(
             || Ok(original_code.to_string()),
@@ -239,11 +227,7 @@ fn merge_workspace_into_code(
             );
             original_code.to_string()
         });
-    let payload = crate::app::modlist_share::decode_share_payload(&overlaid)?;
-    let embedded = mod_installer_parser::recognition_rules_with_legacy(
-        &payload.parser_recognition_rules,
-        &payload.parser_choice_phrases,
-    )?;
+    let embedded = share_export::unguarded_recognition_rules_from_code(&overlaid)?;
     if rules == embedded {
         Ok(overlaid)
     } else {
@@ -661,28 +645,32 @@ mod tests {
     }
 
     #[test]
-    fn parser_rules_home_share_rejects_invalid_capture_before_mutating_selected_code() {
+    fn parser_rules_home_share_drops_an_unsafe_capture_and_still_shares() {
         let mut app = app_with_entry("parser-rules-home-invalid", "RULEHOME0002", Some("@owner"));
-        let before = app
-            .registry
-            .find("RULEHOME0002")
-            .unwrap()
-            .latest_share_code
-            .clone();
         let invalid =
             std::iter::once(("bell_character".to_string(), vec!["!".to_string()])).collect();
+        let code = app
+            .code_for_share_with_rules("RULEHOME0002", &invalid)
+            .expect("an unsafe capture does not fail Share")
+            .expect("a code to share");
         assert!(
-            app.code_for_share_with_rules("RULEHOME0002", &invalid)
-                .is_err()
+            preview_modlist_share_code(&code)
+                .unwrap()
+                .parser_recognition_rules
+                .is_empty()
         );
         assert_eq!(
-            app.registry.find("RULEHOME0002").unwrap().latest_share_code,
-            before
+            app.registry
+                .find("RULEHOME0002")
+                .unwrap()
+                .latest_share_code
+                .as_deref(),
+            Some(code.as_str())
         );
     }
 
     #[test]
-    fn parser_rules_home_share_rejects_invalid_selected_workspace_without_rewriting_disk() {
+    fn parser_rules_home_share_drops_an_invalid_selected_workspace_list_and_still_shares() {
         let mut app = app_with_entry(
             "parser-rules-invalid-selected",
             "RULEHOME0003",
@@ -697,24 +685,129 @@ mod tests {
         };
         let store = isolated_store(&app, "RULEHOME0003");
         store.save(&invalid).unwrap();
-        let before_disk = std::fs::read(store.path()).unwrap();
-        let before_code = app
-            .registry
-            .find("RULEHOME0003")
-            .unwrap()
-            .latest_share_code
-            .clone();
-        assert!(
-            app.code_for_share_with_rules(
+        let code = app
+            .code_for_share_with_rules(
                 "RULEHOME0003",
-                &crate::app::mod_installer_parser::ParserRecognitionRules::new()
+                &crate::app::mod_installer_parser::ParserRecognitionRules::new(),
             )
-            .is_err()
+            .expect("invalid stored rules do not fail Share")
+            .expect("a code to share");
+        assert!(
+            preview_modlist_share_code(&code)
+                .unwrap()
+                .parser_recognition_rules
+                .is_empty()
         );
-        assert_eq!(std::fs::read(store.path()).unwrap(), before_disk);
+        let reopened = store.load().unwrap();
+        assert!(
+            !reopened
+                .parser_recognition_rules
+                .unwrap_or_default()
+                .contains_key("unknown_field")
+        );
+    }
+
+    #[test]
+    fn invalid_stored_rules_do_not_fail_share() {
+        let mut app = app_with_entry("parser-rules-invalid-active", "RULEHOME0004", None);
+        app.workspace_view.loaded_workspace_id = Some("RULEHOME0004".to_string());
+        app.wizard_state.parser_recognition_rules = [
+            ("unknown_field".to_string(), vec!["opaque".to_string()]),
+            (
+                "finished".to_string(),
+                vec!["ok".to_string(), "all done now".to_string()],
+            ),
+        ]
+        .into_iter()
+        .collect();
+        app.workspace_state.insert(
+            "RULEHOME0004".to_string(),
+            ModlistWorkspaceState {
+                parser_recognition_rules: Some(
+                    std::iter::once(("bell_character".to_string(), vec!["!".to_string()]))
+                        .collect(),
+                ),
+                ..Default::default()
+            },
+        );
+        let expected: crate::app::mod_installer_parser::ParserRecognitionRules =
+            std::iter::once(("finished".to_string(), vec!["all done now".to_string()])).collect();
+        let code = app
+            .code_for_share_with_rules(
+                "RULEHOME0004",
+                &crate::app::mod_installer_parser::ParserRecognitionRules::new(),
+            )
+            .expect("invalid stored rules do not fail Share")
+            .expect("a code to share");
         assert_eq!(
-            app.registry.find("RULEHOME0003").unwrap().latest_share_code,
-            before_code
+            preview_modlist_share_code(&code)
+                .unwrap()
+                .parser_recognition_rules,
+            expected
+        );
+        assert_eq!(app.wizard_state.parser_recognition_rules, expected);
+        assert_eq!(
+            isolated_store(&app, "RULEHOME0004")
+                .load()
+                .unwrap()
+                .parser_recognition_rules,
+            Some(expected)
+        );
+    }
+
+    #[test]
+    fn local_parser_words_failing_the_guard_are_not_written_into_the_code() {
+        let mut app = app_with_entry("parser-rules-local-guard", "RULEHOME0005", None);
+        let root = app.isolated_test_config_root.as_ref().unwrap().clone();
+        std::fs::create_dir_all(&root).unwrap();
+        let parser = root.join("parser.toml");
+        let local = "choice_phrase = ['Continue?', '?']\nchoice_words = ['ok', 'local word']\nfinished = ['done', 'successfully installed      ']\nfailed_with_error = ['error']\n";
+        std::fs::write(&parser, local).unwrap();
+        isolated_store(&app, "RULEHOME0005")
+            .save(&ModlistWorkspaceState::default())
+            .unwrap();
+        let code = fixture_capture(&mut app, "RULEHOME0005", &parser)
+            .unwrap()
+            .unwrap();
+        let expected: crate::app::mod_installer_parser::ParserRecognitionRules = [
+            ("choice_phrase", "Continue?"),
+            ("choice_words", "local word"),
+            ("finished", "successfully installed      "),
+        ]
+        .into_iter()
+        .map(|(key, value)| (key.to_string(), vec![value.to_string()]))
+        .collect();
+        assert_eq!(
+            preview_modlist_share_code(&code)
+                .unwrap()
+                .parser_recognition_rules,
+            expected
+        );
+        assert_eq!(std::fs::read_to_string(&parser).unwrap(), local);
+    }
+
+    #[test]
+    fn share_restamps_a_stored_code_whose_rules_fail_the_guard() {
+        let mut payload: serde_json::Value = serde_json::from_str(
+            r#"{"format_version":1,"game_install":"BGEE","install_mode":"start_from_scratch","weidu_logs":{"bgee":"~MOD/MOD.TP2~ #0 #0 // A component"}}"#,
+        )
+        .unwrap();
+        payload["parser_recognition_rules"] =
+            serde_json::json!({"finished": ["ok"], "choice_phrase": ["line\nbreak here"]});
+        payload["parser_choice_phrases"] = serde_json::json!(["line\nbreak here"]);
+        let stored = encode_share_payload_text(&payload.to_string()).unwrap();
+        let none = super::mod_installer_parser::ParserRecognitionRules::new();
+        let shared = super::merge_workspace_into_code(&stored, None, &none).unwrap();
+        assert_ne!(shared, stored);
+        assert!(
+            super::share_export::unguarded_recognition_rules_from_code(&shared)
+                .unwrap()
+                .is_empty()
+        );
+        let clean = code_by(None);
+        assert_eq!(
+            super::merge_workspace_into_code(&clean, None, &none).unwrap(),
+            clean
         );
     }
 }

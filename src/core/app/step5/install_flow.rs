@@ -13,8 +13,8 @@ use super::log_files::{
 use crate::app::compat_step3_rules;
 use crate::app::game_authority::{self, GameSlot};
 use crate::app::mod_installer_parser::{
-    ParserRecognitionRules, PreparedParser, prepare_local_parser_with_rules,
-    recognition_rules_with_legacy,
+    ParserRecognitionRules, PreparedParser, guarded_rules_with_legacy,
+    prepare_local_parser_with_rules,
 };
 use crate::app::state::{Step1State, WizardState};
 use crate::app::step5::basic_install_report;
@@ -127,8 +127,8 @@ impl PendingInstallStart {
             executable_identity,
         }
     }
-    pub(crate) fn preparation_rules(&self) -> Result<ParserRecognitionRules, String> {
-        recognition_rules_with_legacy(&self.recognition_rules, &self.phrases)
+    pub(crate) fn preparation_rules(&self) -> ParserRecognitionRules {
+        guarded_rules_with_legacy(&self.recognition_rules, &self.phrases)
     }
 
     pub(crate) fn preparation_step1(&self) -> Step1State {
@@ -238,17 +238,6 @@ pub fn prepare_start_request(
     state.step5.resolved_bg1_game_dir.clear();
     state.step5.resolved_bg2_game_dir.clear();
     state.step5.resolved_game_dir.clear();
-
-    if let Err(error) = recognition_rules_with_legacy(
-        &state.parser_recognition_rules,
-        &state.parser_choice_phrases,
-    ) {
-        let reason = format!("Invalid installer parser recognition rules: {error}");
-        state.step5.last_status_text.clone_from(&reason);
-        term.append_marker(&reason);
-        basic_install_report::update(state, "blocked", Some(term));
-        return None;
-    }
 
     if let Some(reason) = step3_install_block_reason(state) {
         state.step5.last_status_text.clone_from(&reason);
@@ -759,7 +748,7 @@ mod parser_rules_runtime_tests {
         state.parser_choice_phrases = vec!["legacy snapshot".to_string()];
         let pending = parser_sharing_pending_for_test(&state);
         assert!(pending.matches(&state));
-        let snapshot = pending.preparation_rules().unwrap();
+        let snapshot = pending.preparation_rules();
         assert_eq!(snapshot["choice_words"], ["auswählen", "elige"]);
         assert_eq!(snapshot["choice_phrase"], ["legacy snapshot"]);
         for key in [
@@ -775,8 +764,76 @@ mod parser_rules_runtime_tests {
                 .parser_recognition_rules
                 .insert(key.to_string(), vec!["different".to_string()]);
             assert!(!pending.matches(&changed), "{key}");
-            assert_eq!(pending.preparation_rules().unwrap(), snapshot);
+            assert_eq!(pending.preparation_rules(), snapshot);
         }
+    }
+
+    struct TempRoot(std::path::PathBuf);
+
+    impl Drop for TempRoot {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn invalid_stored_rules_do_not_block_install_start() {
+        static NEXT: AtomicU64 = AtomicU64::new(0);
+        let root = TempRoot(std::env::temp_dir().join(format!(
+            "bio-invalid-rules-start-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, Ordering::Relaxed)
+        )));
+        let source = root.0.join("source");
+        let target = root.0.join("target");
+        for directory in [&source, &target] {
+            std::fs::create_dir_all(directory).expect("fixture directory");
+        }
+        std::fs::write(source.join("chitin.key"), b"fixture").expect("fixture game marker");
+        let source = source.to_string_lossy().into_owned();
+        let mut state = WizardState {
+            step1: Step1State {
+                game_install: "BGEE".to_string(),
+                mod_installer_binary: root
+                    .0
+                    .join("never-executed.exe")
+                    .to_string_lossy()
+                    .into_owned(),
+                weidu_binary: String::new(),
+                bgee_game_folder: source.clone(),
+                bg2ee_game_folder: source,
+                generate_directory: target.to_string_lossy().into_owned(),
+                generate_directory_enabled: true,
+                prepare_target_dirs_before_install: false,
+                mods_folder: String::new(),
+                bgee_log_file: String::new(),
+                bg2ee_log_file: String::new(),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        state.parser_recognition_rules = [
+            ("unknown_field".to_string(), vec!["opaque".to_string()]),
+            ("choice_words".to_string(), vec![" ".to_string()]),
+            (
+                "finished".to_string(),
+                vec!["ok".to_string(), "all done now".to_string()],
+            ),
+        ]
+        .into_iter()
+        .collect();
+        state.parser_choice_phrases = vec!["line\nbreak".to_string(), "Continue?".to_string()];
+        let mut term = EmbeddedTerminal::new().expect("embedded terminal");
+        let (pending, _) = prepare_start_request(&mut state, &mut term)
+            .expect("invalid stored rules do not block the install start");
+        assert!(!term.output_text().contains("Invalid installer parser"));
+        let expected: ParserRecognitionRules = [
+            ("choice_phrase".to_string(), vec!["Continue?".to_string()]),
+            ("finished".to_string(), vec!["all done now".to_string()]),
+        ]
+        .into_iter()
+        .collect();
+        assert_eq!(pending.preparation_rules(), expected);
     }
 
     #[test]

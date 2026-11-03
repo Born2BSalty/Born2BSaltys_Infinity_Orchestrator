@@ -21,28 +21,30 @@ fn restore_parser_rules(
         .as_deref()
         .or(entry.latest_share_code.as_deref())
         .unwrap_or_default();
-    let rules_result = crate::registry::share_export::workspace_recognition_rules(code, workspace);
-    let failure = rules_result.as_ref().err().cloned();
-    if let Ok(rules) = rules_result {
-        wizard_state.parser_choice_phrases =
-            rules.get("choice_phrase").cloned().unwrap_or_default();
-        wizard_state.parser_recognition_rules = rules;
-    } else {
-        wizard_state.parser_recognition_rules = workspace
-            .parser_recognition_rules
-            .clone()
-            .unwrap_or_default();
-        wizard_state.parser_choice_phrases = workspace
-            .parser_choice_phrases
-            .clone()
-            .or_else(|| {
-                wizard_state
-                    .parser_recognition_rules
-                    .get("choice_phrase")
-                    .cloned()
-            })
-            .unwrap_or_default();
-    }
+    let (rules, dropped, failure) =
+        match crate::registry::share_export::checked_workspace_recognition_rules(code, workspace) {
+            Ok((rules, dropped)) => (rules, dropped, None),
+            Err(err) => {
+                let stored = crate::app::mod_installer_parser::merge_recognition_rules(&[
+                    &workspace
+                        .parser_recognition_rules
+                        .clone()
+                        .unwrap_or_default(),
+                    &crate::app::mod_installer_parser::legacy_choice_rules(
+                        workspace
+                            .parser_choice_phrases
+                            .as_deref()
+                            .unwrap_or_default(),
+                    ),
+                ]);
+                let (rules, dropped) =
+                    crate::app::mod_installer_parser::sanitize_recognition_rules(&stored);
+                (rules, dropped, Some(err))
+            }
+        };
+    crate::app::mod_installer_parser::log_dropped_recognition_rules(&dropped);
+    wizard_state.parser_choice_phrases = rules.get("choice_phrase").cloned().unwrap_or_default();
+    wizard_state.parser_recognition_rules = rules;
     failure
 }
 
@@ -1840,50 +1842,74 @@ mod parser_rules_workspace_tests {
         std::fs::remove_dir_all(root).unwrap();
     }
 
+    struct TempRoot(std::path::PathBuf);
+
+    impl Drop for TempRoot {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn temp_root(prefix: &str) -> TempRoot {
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        TempRoot(std::env::temp_dir().join(format!(
+            "bio-{prefix}-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        )))
+    }
+
     #[test]
-    fn parser_rules_invalid_stored_map_is_warned_and_retained_for_review_not_silently_cleared() {
-        let root = std::env::temp_dir().join(format!(
-            "bio-parser-rules-invalid-store-{}",
-            std::process::id()
-        ));
-        let settings = SettingsStore::new_with_path(root.join("settings.json"));
+    fn parser_rules_invalid_stored_map_is_logged_and_sanitized_not_retained() {
+        let root = temp_root("parser-rules-invalid-store");
+        let settings = SettingsStore::new_with_path(root.0.join("settings.json"));
         let store = crate::registry::store_workspace::WorkspaceStore::new_with_path(
-            root.join("workspace.json"),
+            root.0.join("workspace.json"),
         );
-        for (key, value) in [("unknown_field", "opaque"), ("choice_words", " ")] {
-            let raw = std::iter::once((key.to_string(), vec![value.to_string()])).collect();
+        let entry = ModlistEntry {
+            game: Game::BGEE,
+            ..Default::default()
+        };
+        for (key, value) in [
+            ("unknown_field", "opaque"),
+            ("choice_words", " "),
+            ("finished", "ok"),
+        ] {
+            let raw = [
+                (key.to_string(), vec![value.to_string()]),
+                (
+                    "in_progress_words".to_string(),
+                    vec!["installing".to_string()],
+                ),
+            ]
+            .into_iter()
+            .collect();
             let workspace = ModlistWorkspaceState {
                 parser_recognition_rules: Some(raw),
-                parser_choice_phrases: Some(vec!["legacy retained".to_string()]),
                 ..Default::default()
             };
-            let entry = ModlistEntry {
-                game: Game::BGEE,
-                ..Default::default()
-            };
-            let mut wizard = WizardState::default();
-            let warning =
-                populate_wizard_state_from_workspace(&workspace, &entry, &settings, &mut wizard);
-            assert!(warning.is_some());
-            assert_eq!(wizard.parser_recognition_rules[key], [value]);
-            let extracted = extract_workspace_state_from_wizard(&wizard, &workspace);
-            assert_eq!(
-                extracted.parser_recognition_rules.as_ref().unwrap()[key],
-                [value]
+            assert!(
+                restore_parser_rules(&workspace, &entry, &mut WizardState::default()).is_none(),
+                "{key}"
             );
+            let mut wizard = WizardState::default();
+            let _ =
+                populate_wizard_state_from_workspace(&workspace, &entry, &settings, &mut wizard);
+            assert!(!wizard.parser_recognition_rules.contains_key(key), "{key}");
+            assert_eq!(
+                wizard.parser_recognition_rules["in_progress_words"],
+                ["installing"]
+            );
+            let extracted = extract_workspace_state_from_wizard(&wizard, &workspace);
             store.save(&extracted).unwrap();
             let reopened = store.load().unwrap();
-            assert_eq!(
-                reopened.parser_recognition_rules.as_ref().unwrap()[key],
-                [value]
-            );
+            let reopened_rules = reopened.parser_recognition_rules.as_ref().unwrap();
+            assert!(!reopened_rules.contains_key(key), "{key}");
             assert!(
-                crate::app::mod_installer_parser::validate_recognition_rules(
-                    reopened.parser_recognition_rules.as_ref().unwrap()
-                )
-                .is_err()
+                crate::app::mod_installer_parser::validate_recognition_rules(reopened_rules)
+                    .is_ok()
             );
+            assert!(restore_parser_rules(&reopened, &entry, &mut WizardState::default()).is_none());
         }
-        std::fs::remove_dir_all(root).unwrap();
     }
 }

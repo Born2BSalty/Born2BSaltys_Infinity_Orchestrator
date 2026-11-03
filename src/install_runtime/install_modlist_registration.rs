@@ -1132,7 +1132,7 @@ mod parser_rules_registration_tests {
     fn parser_rules_install_registration_saves_selected_preview_not_another_wizard() {
         let mut app = OrchestratorApp::new_isolated_for_test("parser-rules-registration");
         let root = app.isolated_test_config_root.as_ref().unwrap().clone();
-        let rules = serde_json::json!({"in_progress_words":["installiere"],"useful_status_words":["copiado"],"choice_words":["auswählen"],"choice_phrase":["¿desea continuar?"],"completed_with_warnings":["advertencia"],"failed_with_error":["fehlgeschlagen"],"finished":["instalado"]});
+        let rules = serde_json::json!({"in_progress_words":["installiere"],"useful_status_words":["copiado"],"choice_words":["auswählen"],"choice_phrase":["¿desea continuar?"],"completed_with_warnings":["con advertencias"],"failed_with_error":["ist fehlgeschlagen"],"finished":["instalado correctamente"]});
         let code = crate::app::modlist_share::encode_share_payload_text(&serde_json::json!({"format_version":1,"game_install":"BGEE","install_mode":"start_from_scratch","weidu_logs":{"bgee":"~MOD/MOD.TP2~ #0 #0 // Component"},"parser_recognition_rules":rules}).to_string()).unwrap();
         app.install_screen_state.parsed_preview =
             Some(crate::app::modlist_share::preview_modlist_share_code(&code).unwrap());

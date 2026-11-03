@@ -48,10 +48,10 @@ pub fn build_biolist(code: &str) -> Result<Vec<u8>, String> {
     write_entry(&mut writer, "reference/README.txt", README_TEXT.as_bytes())?;
     write_reference_modlist(&mut writer, &payload)?;
     if !payload.parser_recognition_rules.is_empty() {
-        let rules = crate::app::mod_installer_parser::recognition_rules_with_legacy(
+        let rules = crate::app::mod_installer_parser::guarded_rules_with_legacy(
             &payload.parser_recognition_rules,
             &payload.parser_choice_phrases,
-        )?;
+        );
         let text = toml::to_string_pretty(&rules).map_err(|err| err.to_string())?;
         write_entry(
             &mut writer,
@@ -626,8 +626,11 @@ mod tests {
     fn parser_rules_biolist_authoritative_code_and_readable_reference_roundtrip() {
         let mut payload: serde_json::Value =
             serde_json::from_str(&minimal_bgee_only_payload_json()).unwrap();
-        let rules = serde_json::json!({"choice_words":["choose","auswählen","elige"],"choice_phrase":["would you like","möchten Sie","¿desea continuar?"],"finished":["instalado"]});
-        payload["parser_recognition_rules"] = rules.clone();
+        let rules = serde_json::json!({"choice_words":["choose","auswählen","elige"],"choice_phrase":["would you like","möchten Sie","¿desea continuar?"],"finished":["instalado correctamente"]});
+        let mut carried = rules.clone();
+        carried["finished"] = serde_json::json!(["instalado correctamente", "ok"]);
+        carried["bell_character"] = serde_json::json!(["!"]);
+        payload["parser_recognition_rules"] = carried;
         let code =
             crate::app::modlist_share::encode_share_payload_text(&payload.to_string()).unwrap();
         let bytes = build_biolist(&code).unwrap();
