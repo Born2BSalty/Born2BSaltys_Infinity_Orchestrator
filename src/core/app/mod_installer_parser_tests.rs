@@ -1434,6 +1434,108 @@ fn parser_rules_validation_rejects_unknown_fields_and_aggregate_excess() {
 }
 
 #[test]
+fn guard_drops_control_characters_short_values_and_unknown_lists() {
+    let rules = [
+        ("bell_character", strings(&["!", "a long safe value"])),
+        (
+            "choice_words",
+            strings(&[
+                "line\nbreak",
+                "carriage\rreturn",
+                "nul\0value",
+                "tab\tvalue",
+                "ab",
+                "  ab  ",
+                " ",
+                "choose",
+            ]),
+        ),
+        ("in_progress_words", strings(&["é", "世界"])),
+        ("choice_phrase", strings(&[&"x".repeat(8193), "abc"])),
+    ]
+    .into_iter()
+    .map(|(key, values)| (key.to_string(), values))
+    .collect();
+    let (kept, dropped) = super::sanitize_recognition_rules(&rules);
+    let expected: super::ParserRecognitionRules = [
+        ("choice_phrase".to_string(), strings(&["abc"])),
+        ("choice_words".to_string(), strings(&["choose"])),
+    ]
+    .into_iter()
+    .collect();
+    assert_eq!(kept, expected);
+    assert_eq!(dropped.len(), 11);
+    assert!(dropped.iter().all(|line| !line.contains('\n')));
+    let values = (0..40)
+        .map(|index| format!("{index:04}{}", "x".repeat(8188)))
+        .collect::<Vec<_>>();
+    let crowded = [
+        ("choice_phrase".to_string(), values.clone()),
+        ("choice_words".to_string(), values),
+    ]
+    .into_iter()
+    .collect();
+    let (kept, dropped) = super::sanitize_recognition_rules(&crowded);
+    assert!(kept.is_empty());
+    assert_eq!(dropped.len(), 1);
+}
+
+#[test]
+fn guard_requires_two_words_in_outcome_lists() {
+    for key in ["failed_with_error", "completed_with_warnings", "finished"] {
+        let rules = std::iter::once((
+            key.to_string(),
+            strings(&[
+                "error",
+                "  finished  ",
+                "not installed",
+                " two\u{3000}words ",
+            ]),
+        ))
+        .collect();
+        let (kept, dropped) = super::sanitize_recognition_rules(&rules);
+        assert_eq!(kept[key], ["not installed", " two\u{3000}words "], "{key}");
+        assert_eq!(dropped.len(), 2, "{key}");
+    }
+    for key in [
+        "in_progress_words",
+        "useful_status_words",
+        "choice_words",
+        "choice_phrase",
+    ] {
+        let rules = std::iter::once((key.to_string(), strings(&["installing"]))).collect();
+        let (kept, dropped) = super::sanitize_recognition_rules(&rules);
+        assert_eq!(kept[key], ["installing"], "{key}");
+        assert!(dropped.is_empty(), "{key}");
+    }
+}
+
+#[test]
+fn guard_keeps_values_byte_for_byte() {
+    let rules: super::ParserRecognitionRules = [
+        (
+            "finished",
+            strings(&["successfully installed      ", "Fertig 世界"]),
+        ),
+        (
+            "choice_phrase",
+            strings(&["  Would You Like  ", "¿desea continuar?"]),
+        ),
+        ("choice_words", strings(&["CHOOSE", "auswählen"])),
+    ]
+    .into_iter()
+    .map(|(key, values)| (key.to_string(), values))
+    .collect();
+    let (kept, dropped) = super::sanitize_recognition_rules(&rules);
+    assert_eq!(dropped, [] as [String; 0]);
+    assert_eq!(kept, rules);
+    assert_eq!(
+        kept["finished"][0].as_bytes(),
+        b"successfully installed      "
+    );
+}
+
+#[test]
 fn parser_rules_merge_is_field_specific_additive_and_preserves_local_control_settings() {
     let initialized_rules = parser_rules_samples();
     let mut original_rules = initialized_rules.clone();

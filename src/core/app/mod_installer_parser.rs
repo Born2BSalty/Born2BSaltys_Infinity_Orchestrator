@@ -25,11 +25,55 @@ pub(crate) fn union_recognition_rules(
     recognition::union_recognition_rules(groups)
 }
 
+#[cfg(test)]
 pub(crate) fn recognition_rules_with_legacy(
     rules: &ParserRecognitionRules,
     phrases: &[String],
 ) -> Result<ParserRecognitionRules, String> {
     recognition::recognition_rules_with_legacy(rules, phrases)
+}
+
+pub(crate) fn sanitize_recognition_rules(
+    rules: &ParserRecognitionRules,
+) -> (ParserRecognitionRules, Vec<String>) {
+    recognition::sanitize_recognition_rules(rules)
+}
+
+pub(crate) fn merge_recognition_rules(
+    groups: &[&ParserRecognitionRules],
+) -> ParserRecognitionRules {
+    recognition::merge_recognition_rules(groups)
+}
+
+pub(crate) fn recognition_rules_from_json(
+    value: &serde_json::Value,
+) -> Result<ParserRecognitionRules, String> {
+    recognition::rules_from_json(value)
+}
+
+pub(crate) fn legacy_choice_rules(phrases: &[String]) -> ParserRecognitionRules {
+    recognition::legacy_choice_rules(phrases)
+}
+
+pub(crate) fn log_dropped_recognition_rules(dropped: &[String]) {
+    for line in dropped {
+        tracing::warn!("Installer parser rule dropped from the modlist: {line}");
+    }
+}
+
+pub(crate) fn guarded_recognition_rules(
+    groups: &[&ParserRecognitionRules],
+) -> ParserRecognitionRules {
+    let (kept, dropped) = sanitize_recognition_rules(&merge_recognition_rules(groups));
+    log_dropped_recognition_rules(&dropped);
+    kept
+}
+
+pub(crate) fn guarded_rules_with_legacy(
+    rules: &ParserRecognitionRules,
+    phrases: &[String],
+) -> ParserRecognitionRules {
+    guarded_recognition_rules(&[rules, &legacy_choice_rules(phrases)])
 }
 
 const MAX_BYTES: u64 = 2 * 1024 * 1024;

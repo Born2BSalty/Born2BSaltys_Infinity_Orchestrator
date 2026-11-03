@@ -401,10 +401,10 @@ fn rebake_share_code_after_save_draft(
                     );
                     crate::app::mod_installer_parser::ParserRecognitionRules::new()
                 });
-            let imported = crate::app::mod_installer_parser::recognition_rules_with_legacy(
+            let imported = crate::app::mod_installer_parser::guarded_rules_with_legacy(
                 &orchestrator.wizard_state.parser_recognition_rules,
                 &orchestrator.wizard_state.parser_choice_phrases,
-            )?;
+            );
             let prior = orchestrator
                 .workspace_state
                 .get(id)
@@ -413,7 +413,7 @@ fn rebake_share_code_after_save_draft(
             let imported =
                 share_export::active_workspace_recognition_rules(code, &prior, &imported)?;
             let rules =
-                crate::app::mod_installer_parser::union_recognition_rules(&[&imported, &local])?;
+                crate::app::mod_installer_parser::guarded_recognition_rules(&[&imported, &local]);
             let workspace = workspace_state_loader::extract_workspace_state_from_wizard(
                 &orchestrator.wizard_state,
                 &prior,
@@ -429,10 +429,10 @@ fn rebake_share_code_after_save_draft(
         .cloned()
         .unwrap_or_default();
     let payload = crate::app::modlist_share::decode_share_payload(&code)?;
-    let rules = crate::app::mod_installer_parser::recognition_rules_with_legacy(
+    let rules = crate::app::mod_installer_parser::guarded_rules_with_legacy(
         &payload.parser_recognition_rules,
         &payload.parser_choice_phrases,
-    )?;
+    );
     let phrases = rules.get("choice_phrase").cloned().unwrap_or_default();
     workspace.parser_recognition_rules = Some(rules.clone());
     workspace.parser_choice_phrases = Some(phrases.clone());

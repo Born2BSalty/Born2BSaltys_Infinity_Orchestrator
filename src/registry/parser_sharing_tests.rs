@@ -85,7 +85,7 @@ fn parser_rules_registry_map() -> crate::app::mod_installer_parser::ParserRecogn
             "choice_phrase".to_string(),
             vec!["embedded phrase".to_string()],
         ),
-        ("finished".to_string(), vec!["fertig".to_string()]),
+        ("finished".to_string(), vec!["ist fertig".to_string()]),
     ]
     .into_iter()
     .collect()
@@ -101,7 +101,10 @@ fn parser_rules_enrichment_and_rewrites_keep_opaque_payload_and_per_field_union(
             "choice_words".to_string(),
             vec!["elige".to_string(), "choose".to_string()],
         ),
-        ("failed_with_error".to_string(), vec!["falló".to_string()]),
+        (
+            "failed_with_error".to_string(),
+            vec!["instalación falló".to_string()],
+        ),
     ]
     .into_iter()
     .collect();
@@ -122,7 +125,7 @@ fn parser_rules_enrichment_and_rewrites_keep_opaque_payload_and_per_field_union(
     );
     assert_eq!(
         decoded.parser_recognition_rules["failed_with_error"],
-        ["falló"]
+        ["instalación falló"]
     );
     assert_eq!(
         decoded.parser_choice_phrases,

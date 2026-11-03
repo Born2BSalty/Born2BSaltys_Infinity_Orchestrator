@@ -145,28 +145,45 @@ pub(crate) fn enrich_share_code_with_phrases(
     Ok(code)
 }
 
-pub(crate) fn workspace_recognition_rules(
+fn unguarded_workspace_recognition_rules(
     code: &str,
     workspace: &crate::registry::workspace_model::ModlistWorkspaceState,
 ) -> Result<ParserRecognitionRules, String> {
     if let Some(rules) = workspace.parser_recognition_rules.as_ref() {
-        return mod_installer_parser::union_recognition_rules(&[rules]);
+        return Ok(mod_installer_parser::merge_recognition_rules(&[rules]));
     }
     let mut rules = if code.trim().is_empty() {
         ParserRecognitionRules::new()
     } else {
-        recognition_rules_from_code(code)?
+        unguarded_recognition_rules_from_code(code)?
     };
     if let Some(phrases) = workspace.parser_choice_phrases.as_ref() {
-        mod_installer_parser::validate_phrases(phrases)?;
         if phrases.is_empty() {
             rules.remove("choice_phrase");
         } else {
-            rules = mod_installer_parser::recognition_rules_with_legacy(&rules, phrases)?;
+            rules = mod_installer_parser::merge_recognition_rules(&[
+                &rules,
+                &mod_installer_parser::legacy_choice_rules(phrases),
+            ]);
         }
     }
-    mod_installer_parser::validate_recognition_rules(&rules)?;
     Ok(rules)
+}
+
+pub(crate) fn checked_workspace_recognition_rules(
+    code: &str,
+    workspace: &crate::registry::workspace_model::ModlistWorkspaceState,
+) -> Result<(ParserRecognitionRules, Vec<String>), String> {
+    unguarded_workspace_recognition_rules(code, workspace)
+        .map(|rules| mod_installer_parser::sanitize_recognition_rules(&rules))
+}
+
+pub(crate) fn workspace_recognition_rules(
+    code: &str,
+    workspace: &crate::registry::workspace_model::ModlistWorkspaceState,
+) -> Result<ParserRecognitionRules, String> {
+    unguarded_workspace_recognition_rules(code, workspace)
+        .map(|rules| mod_installer_parser::guarded_recognition_rules(&[&rules]))
 }
 
 pub(crate) fn active_workspace_recognition_rules(
@@ -175,7 +192,7 @@ pub(crate) fn active_workspace_recognition_rules(
     current: &ParserRecognitionRules,
 ) -> Result<ParserRecognitionRules, String> {
     if workspace.parser_recognition_rules.is_some() {
-        return mod_installer_parser::union_recognition_rules(&[current]);
+        return Ok(mod_installer_parser::guarded_recognition_rules(&[current]));
     }
     let mut prior = workspace.clone();
     if prior
@@ -185,25 +202,29 @@ pub(crate) fn active_workspace_recognition_rules(
     {
         prior.parser_choice_phrases = None;
     }
-    let embedded = workspace_recognition_rules(code, &prior)?;
-    mod_installer_parser::union_recognition_rules(&[&embedded, current])
+    let embedded = unguarded_workspace_recognition_rules(code, &prior)?;
+    Ok(mod_installer_parser::guarded_recognition_rules(&[
+        &embedded, current,
+    ]))
 }
 
 pub(crate) fn enrich_share_code_with_recognition_rules(
     code: &str,
     rules: &ParserRecognitionRules,
 ) -> Result<String, String> {
-    let existing = recognition_rules_from_code(code)?;
-    let combined = mod_installer_parser::union_recognition_rules(&[&existing, rules])?;
-    replace_share_code_recognition_rules(code, &combined)
+    let existing = unguarded_recognition_rules_from_code(code)?;
+    let combined = mod_installer_parser::guarded_recognition_rules(&[&existing, rules]);
+    rewrite_payload(code, |obj| stamp_recognition_rules(obj, &combined))
 }
 
-fn recognition_rules_from_code(code: &str) -> Result<ParserRecognitionRules, String> {
+pub(crate) fn unguarded_recognition_rules_from_code(
+    code: &str,
+) -> Result<ParserRecognitionRules, String> {
     let payload = decode_payload_object(code)?;
     let rules = payload.get("parser_recognition_rules").map_or_else(
         || Ok(ParserRecognitionRules::new()),
         |value| {
-            serde_json::from_value(value.clone())
+            mod_installer_parser::recognition_rules_from_json(value)
                 .map_err(|err| format!("Invalid parser recognition rules: {err}"))
         },
     )?;
@@ -214,15 +235,18 @@ fn recognition_rules_from_code(code: &str) -> Result<ParserRecognitionRules, Str
                 .map_err(|err| format!("Invalid parser phrases: {err}"))
         },
     )?;
-    mod_installer_parser::recognition_rules_with_legacy(&rules, &phrases)
+    Ok(mod_installer_parser::merge_recognition_rules(&[
+        &rules,
+        &mod_installer_parser::legacy_choice_rules(&phrases),
+    ]))
 }
 
 pub(crate) fn replace_share_code_recognition_rules(
     code: &str,
     rules: &ParserRecognitionRules,
 ) -> Result<String, String> {
-    mod_installer_parser::validate_recognition_rules(rules)?;
-    rewrite_payload(code, |obj| stamp_recognition_rules(obj, rules))
+    let rules = mod_installer_parser::guarded_recognition_rules(&[rules]);
+    rewrite_payload(code, |obj| stamp_recognition_rules(obj, &rules))
 }
 
 fn stamp_recognition_rules(
@@ -256,7 +280,7 @@ pub(crate) fn overlay_workspace_wlb(
 ) -> Result<String, String> {
     let current = workspace.parser_recognition_rules.as_ref().map_or_else(
         || {
-            mod_installer_parser::recognition_rules_with_legacy(
+            mod_installer_parser::guarded_rules_with_legacy(
                 &ParserRecognitionRules::new(),
                 workspace
                     .parser_choice_phrases
@@ -264,8 +288,8 @@ pub(crate) fn overlay_workspace_wlb(
                     .unwrap_or_default(),
             )
         },
-        |rules| mod_installer_parser::union_recognition_rules(&[rules]),
-    )?;
+        |rules| mod_installer_parser::guarded_recognition_rules(&[rules]),
+    );
     let base = if current.is_empty() {
         code.to_string()
     } else {

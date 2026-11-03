@@ -216,16 +216,7 @@ where
         return false;
     };
 
-    let rules = match pending.preparation_rules() {
-        Ok(rules) => rules,
-        Err(error) => {
-            state.step5.last_status_text =
-                format!("Invalid installer parser recognition rules: {error}");
-            term.append_marker(&state.step5.last_status_text);
-            basic_install_report::update(state, "start_failed", Some(term));
-            return false;
-        }
-    };
+    let rules = pending.preparation_rules();
     state.step5.prep_running = true;
     state.step5.last_status_text = "Preparing installer parser...".to_string();
     term.append_marker("Preparing installer parser...");
