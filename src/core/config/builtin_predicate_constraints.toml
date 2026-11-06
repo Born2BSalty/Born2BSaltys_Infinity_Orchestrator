@@ -1,0 +1,13 @@
+schema_version = 1
+
+[[constraints]]
+id = "continuous-end-before-eet-end-v1"
+provenance = "Continuous_End 1.1 REQUIRE_PREDICATE before EET_End"
+source_aliases = ["Continuous_End.tp2", "setup-Continuous_End.tp2"]
+components = ["0", "1", "2", "3", "4", "5", "7", "8", "9", "10"]
+mode = "EET"
+tab = "BG2EE"
+semantics = "install_before"
+guard = "NOT MOD_IS_INSTALLED ~EET_End.TP2~ ~0~ AND NOT MOD_IS_INSTALLED ~EET_End.TP2~ ~1~"
+target_aliases = ["EET_End.tp2", "setup-EET_End.tp2"]
+target_components = ["0", "1"]

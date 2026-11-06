@@ -19,24 +19,86 @@ use classify::preferred_guard_hit;
 use classify::{classify_guard, preferred_failing_guard};
 #[cfg(test)]
 use guards::collect_requirement_guards;
-use guards::{RequirementGuard, load_component_guards};
+use guards::load_component_guards;
+pub(in crate::app) use guards::{
+    RequirementGuard, guards_from_loaded_text, ordinary_guards_from_text,
+};
 
+#[cfg(test)]
 pub(crate) fn apply_step2_scan_mismatch(step1: &Step1State, tab: &str, mods: &mut [Step2ModState]) {
+    apply_step2_scan_mismatch_with_metadata(
+        step1,
+        tab,
+        mods,
+        &super::compat_predicate_constraints::builtin_metadata(),
+    );
+}
+
+pub(in crate::app) fn apply_step2_scan_mismatch_with_metadata(
+    step1: &Step1State,
+    tab: &str,
+    mods: &mut [Step2ModState],
+    metadata: &super::compat_predicate_constraints::ConstraintMetadata,
+) -> Vec<String> {
+    use super::compat_predicate_constraints::{LoadedSources, covered_records, resolve_source};
     let context = build_mismatch_context(step1, tab, collect_checked_components(mods));
     let mut guard_cache = HashMap::<String, HashMap<String, Vec<RequirementGuard>>>::new();
+    let mut loaded = LoadedSources::new();
+    let mut covered = HashMap::new();
+    let mut diagnostics = metadata.diagnostics.clone();
+    for (mod_index, mod_state) in mods.iter().enumerate() {
+        for (component_index, component) in mod_state.components.iter().enumerate() {
+            let records = covered_records(
+                metadata,
+                step1,
+                tab,
+                &mod_state.tp_file,
+                &component.component_id,
+            );
+            if records.is_empty() {
+                continue;
+            }
+            let source = resolve_source(
+                &records,
+                &mod_state.tp_file,
+                &component.component_id,
+                mods,
+                &mut loaded,
+            );
+            if let Some(error) = &source.error {
+                diagnostics.push(format!(
+                    "source_unverified: {} #{}: {error}",
+                    source.path, component.component_id
+                ));
+            }
+            covered.insert((mod_index, component_index), source);
+        }
+    }
+    for mod_state in mods.iter() {
+        if let Ok(path) = std::path::Path::new(&mod_state.tp2_path).canonicalize()
+            && let Some(source) = loaded.get(&path)
+        {
+            guard_cache.insert(mod_state.tp2_path.clone(), source.guards.clone());
+        }
+    }
 
-    for mod_state in mods {
+    for (mod_index, mod_state) in mods.iter_mut().enumerate() {
         let component_guards = guard_cache
             .entry(mod_state.tp2_path.clone())
             .or_insert_with(|| load_component_guards(&mod_state.tp2_path));
 
-        for component in &mut mod_state.components {
+        for (component_index, component) in mod_state.components.iter_mut().enumerate() {
             let component_context =
                 context.for_component(&mod_state.tp_file, &component.component_id);
-            let Some(hit) = component_guards
-                .get(component.component_id.trim())
-                .and_then(|guards| preferred_guard_hit(guards, &component_context))
-            else {
+            let hit = covered.get(&(mod_index, component_index)).map_or_else(
+                || {
+                    component_guards
+                        .get(component.component_id.trim())
+                        .and_then(|guards| preferred_guard_hit(guards, &component_context))
+                },
+                |source| scan_loaded_predicate_hit(source, &component_context),
+            );
+            let Some(hit) = hit else {
                 continue;
             };
             if hit.kind.eq_ignore_ascii_case("conflict") && !component.checked {
@@ -56,6 +118,21 @@ pub(crate) fn apply_step2_scan_mismatch(step1: &Step1State, tab: &str, mods: &mu
             component.disabled_reason = Some(hit.message);
         }
     }
+    diagnostics
+}
+
+pub(in crate::app) fn scan_loaded_predicate_hit(
+    source: &super::compat_predicate_constraints::CoveredSource,
+    context: &super::compat_mismatch_eval::MismatchContext,
+) -> Option<PredicateGuardHit> {
+    let guards = source
+        .guards
+        .iter()
+        .enumerate()
+        .filter(|(index, _)| !source.matched.contains(index))
+        .map(|(_, guard)| guard.clone())
+        .collect::<Vec<_>>();
+    preferred_guard_hit(&guards, context)
 }
 
 pub(in crate::app) fn scan_predicate_guard_hit(

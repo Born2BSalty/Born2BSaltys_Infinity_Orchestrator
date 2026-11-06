@@ -82,6 +82,8 @@ pub mod compat_path_scan;
 pub mod compat_popup_nav;
 #[path = "compat/compat_popup_targets.rs"]
 pub mod compat_popup_targets;
+#[path = "compat/compat_predicate_constraints.rs"]
+pub(crate) mod compat_predicate_constraints;
 #[path = "compat/compat_rule_runtime.rs"]
 pub mod compat_rule_runtime;
 #[path = "compat/compat_rules.rs"]
@@ -98,6 +100,9 @@ pub(crate) mod compat_text;
 pub mod compat_tp2_blocks;
 pub mod component_block_preview;
 pub mod component_details;
+#[cfg(test)]
+#[path = "compat/continuous_order_tests.rs"]
+mod continuous_order_tests;
 pub mod controller;
 pub mod game_authority;
 pub mod game_version;
