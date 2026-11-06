@@ -8,7 +8,7 @@ mod flags;
 
 pub(super) use flags::{
     ComponentFlags, FamilyIdentity, ForbidFlag, PredicateFlag, PredicateFlagKind,
-    collect_component_flags,
+    collect_component_flags, collect_verified_component_flags,
 };
 
 #[derive(Clone, Copy, PartialEq, Eq)]

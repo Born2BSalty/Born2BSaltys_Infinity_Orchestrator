@@ -35,25 +35,30 @@ pub(crate) fn build_toolbar_summary(state: &WizardState) -> Step3ToolbarSummary 
     let first_tab = game_authority::first_slot_tab(&state.step1.game_install);
     let has_first_game_tab = game_authority::has_slot(&state.step1.game_install, GameSlot::First);
     let has_second_game_tab = game_authority::has_slot(&state.step1.game_install, GameSlot::Second);
+    let mut compat_diagnostics = Vec::new();
     let first_game_markers = if has_first_game_tab {
-        crate::app::compat_step3_rules::collect_step3_compat_markers(
+        let result = crate::app::compat_step3_rules::collect_step3_compat_result(
             &state.step1,
             first_tab,
             &state.step2.bgee_mods,
             &state.step3.bgee_items,
             &state.step3.bgee_items,
-        )
+        );
+        compat_diagnostics.extend(result.diagnostics);
+        result.markers
     } else {
         std::collections::HashMap::new()
     };
     let second_game_markers = if has_second_game_tab {
-        crate::app::compat_step3_rules::collect_step3_compat_markers(
+        let result = crate::app::compat_step3_rules::collect_step3_compat_result(
             &state.step1,
             "BG2EE",
             &state.step2.bg2ee_mods,
             &state.step3.bg2ee_items,
             &state.step3.bgee_items,
-        )
+        );
+        compat_diagnostics.extend(result.diagnostics);
+        result.markers
     } else {
         std::collections::HashMap::new()
     };
@@ -76,6 +81,9 @@ pub(crate) fn build_toolbar_summary(state: &WizardState) -> Step3ToolbarSummary 
     } else {
         0
     };
+    compat_diagnostics.extend(crate::app::compat_rules::load_rules().error);
+    compat_diagnostics.sort();
+    compat_diagnostics.dedup();
     Step3ToolbarSummary {
         show_bgee: has_first_game_tab,
         show_bg2ee: has_second_game_tab,
@@ -95,7 +103,7 @@ pub(crate) fn build_toolbar_summary(state: &WizardState) -> Step3ToolbarSummary 
         ),
         bgee_markers: first_game_markers,
         bg2ee_markers: second_game_markers,
-        compat_rules_error: crate::app::compat_rules::load_rules().error,
+        compat_rules_error: (!compat_diagnostics.is_empty()).then(|| compat_diagnostics.join("\n")),
     }
 }
 

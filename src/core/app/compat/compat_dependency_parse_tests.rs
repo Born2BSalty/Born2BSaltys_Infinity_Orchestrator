@@ -13,21 +13,27 @@ use crate::parser::compat_dependency_expr::{
 
 static NEXT_ROOT: AtomicU64 = AtomicU64::new(0);
 
-struct TestRoot(PathBuf);
+struct TestRoot(PathBuf, bool);
 
 impl Drop for TestRoot {
     fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
+        if self.1 {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
     }
 }
 
 fn test_root() -> TestRoot {
-    let root = TestRoot(std::env::temp_dir().join(format!(
-        "bio_dependency_parse_{}_{}",
-        std::process::id(),
-        NEXT_ROOT.fetch_add(1, Ordering::Relaxed)
-    )));
-    std::fs::create_dir_all(&root.0).expect("create test root");
+    let mut root = TestRoot(
+        std::env::temp_dir().join(format!(
+            "bio_dependency_parse_{}_{}",
+            std::process::id(),
+            NEXT_ROOT.fetch_add(1, Ordering::Relaxed)
+        )),
+        false,
+    );
+    std::fs::create_dir(&root.0).expect("create test root");
+    root.1 = true;
     root
 }
 
@@ -476,4 +482,23 @@ fn compat_three_fixes_binary_literal_does_not_hide_header_or_fabricate_flags() {
         crate::app::compat_conflict_parse::load_component_conflicts(blob.to_str().expect("path"))
             .is_empty()
     );
+}
+
+#[test]
+fn continuous_regression_dependency_fixture_cleans_normal_and_partial_setup_unwind() {
+    let owned = test_root();
+    let root = owned.0.clone();
+    let collision = TestRoot(root.clone(), false);
+    drop(collision);
+    assert!(root.exists());
+    drop(owned);
+    assert!(!root.exists());
+    let owned = test_root();
+    let root = owned.0.clone();
+    let result = std::panic::catch_unwind(move || {
+        std::fs::write(owned.0.join("missing/file.tp2"), "failure")
+            .expect("controlled partial setup failure");
+    });
+    assert!(result.is_err());
+    assert!(!root.exists());
 }
