@@ -40,11 +40,7 @@ eframe = "0.31.1"
 egui-toast = "=0.17.0"
 image = { version = "0.25", default-features = false, features = ["png"] }
 rfd = "0.15.2"
-egui_term = "0.1.0"
 lapdu_parser_rust = { package = "lapdu-parser-rust", path = "vendor/lapdu-parser-rust-master" }
-
-[patch.crates-io]
-egui_term = { path = "third_party/egui_term" }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem"] }
@@ -62,9 +58,6 @@ winres = "0.1"
 # Dev-only: headless rendered-snapshot gate for the redesign egui UI.
 # `wgpu` adds the wgpu test renderer (`Harness::render() -> RgbaImage`);
 # `snapshot` adds the dify-based image-snapshot utility (the permanent gate).
-# `image` is used directly to encode the rendered frame to deterministic
-# PNG paths. Purely additive — does not change/upgrade any runtime
-# dependency and does not touch the `[patch.crates-io]` egui_term entry.
 [dev-dependencies]
 egui_kittest = { version = "0.31", features = ["wgpu", "snapshot"] }
 image = { version = "0.25", features = ["png"] }
