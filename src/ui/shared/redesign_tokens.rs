@@ -568,6 +568,9 @@ pub const REDESIGN_BORDER_RADIUS_U8: u8 = 3;
 pub const REDESIGN_PANEL_RADIUS_U8: u8 = 11;
 pub const REDESIGN_SHADOW_OFFSET_PX: f32 = 6.0;
 pub const REDESIGN_SHADOW_OFFSET_I8: i8 = 6;
+#[cfg(target_os = "windows")]
+pub const REDESIGN_TITLEBAR_HEIGHT_PX: f32 = 0.0;
+#[cfg(not(target_os = "windows"))]
 pub const REDESIGN_TITLEBAR_HEIGHT_PX: f32 = 34.0;
 pub const REDESIGN_STATUSBAR_HEIGHT_PX: f32 = 26.0;
 pub const REDESIGN_NAV_WIDTH_PX: f32 = 200.0;
@@ -637,7 +640,14 @@ mod tests {
         const {
             assert!(REDESIGN_BORDER_WIDTH_PX.to_bits() == 1.5_f32.to_bits());
             assert!(REDESIGN_SHELL_BORDER_WIDTH_PX.to_bits() == 2.0_f32.to_bits());
-            assert!(REDESIGN_TITLEBAR_HEIGHT_PX.to_bits() == 34.0_f32.to_bits());
+            assert!(
+                REDESIGN_TITLEBAR_HEIGHT_PX.to_bits()
+                    == if cfg!(target_os = "windows") {
+                        0.0_f32.to_bits()
+                    } else {
+                        34.0_f32.to_bits()
+                    }
+            );
             assert!(REDESIGN_STATUSBAR_HEIGHT_PX.to_bits() == 26.0_f32.to_bits());
             assert!(REDESIGN_NAV_WIDTH_PX.to_bits() == 200.0_f32.to_bits());
         }

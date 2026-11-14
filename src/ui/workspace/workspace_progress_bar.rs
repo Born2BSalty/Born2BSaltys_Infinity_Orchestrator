@@ -42,8 +42,9 @@ const fn stacked_needed(inline_widths: &[f32], seg_w: f32) -> bool {
 
 #[must_use]
 const fn label_max_width(seg_w: f32, completed: bool, check_w: f32) -> f32 {
+    const HORIZONTAL_PADDING: f32 = 2.0 * SEG_PAD_X;
     let reserved = if completed { SEG_GAP + check_w } else { 0.0 };
-    seg_w - 2.0 * SEG_PAD_X - reserved
+    seg_w - HORIZONTAL_PADDING - reserved
 }
 
 fn label_font_for(kind: SegKind) -> egui::FontId {

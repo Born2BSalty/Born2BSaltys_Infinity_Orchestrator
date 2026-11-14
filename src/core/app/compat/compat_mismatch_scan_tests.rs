@@ -225,12 +225,14 @@ fn with_scs_tp2<T>(text: &str, check: impl FnOnce(&str) -> T) -> T {
         "bio-scs-requirements-{}-{unique}",
         std::process::id()
     ));
-    std::fs::create_dir_all(&directory).expect("fixture directory");
-    let path = directory.join("fixture.tp2");
+    let mut fixture = SelfConflictFixture(directory, false);
+    std::fs::create_dir(&fixture.0).expect("fixture directory");
+    fixture.1 = true;
+    let path = fixture.0.join("fixture.tp2");
     std::fs::write(&path, text).expect("fixture TP2");
     let result = check(path.to_str().expect("fixture path"));
     std::fs::remove_file(&path).expect("remove fixture");
-    std::fs::remove_dir(&directory).expect("remove fixture directory");
+    std::fs::remove_dir(&fixture.0).expect("remove fixture directory");
     result
 }
 
@@ -704,11 +706,13 @@ mod corpus;
 
 const CDTWEAKS_SELF_FAMILY: &str = "BEGIN @349001 DESIGNATED 3490\nGROUP @4\nSUBCOMPONENT @349000\nREQUIRE_PREDICATE GAME_IS ~bg2ee eet soa tob bgt~ @25\nREQUIRE_PREDICATE !MOD_IS_INSTALLED ~cdtweaks/setup-cdtweaks.tp2~ ~3491~ @349001\nLABEL ~cd_tweaks_better_soa_start_300k~\nBEGIN @349100 DESIGNATED 3491\nGROUP @4\nSUBCOMPONENT @349000\nREQUIRE_PREDICATE GAME_IS ~bg2ee eet soa tob bgt~ @25\nREQUIRE_PREDICATE !MOD_IS_INSTALLED ~cdtweaks/setup-cdtweaks.tp2~ ~3490~ @349101\nLABEL ~cd_tweaks_better_soa_start_500k~\nBEGIN @349200 DESIGNATED 3492\nGROUP @4\nSUBCOMPONENT @349000\nREQUIRE_PREDICATE GAME_IS ~bg2ee eet soa tob bgt~ @25\nREQUIRE_PREDICATE !MOD_IS_INSTALLED ~cdtweaks/setup-cdtweaks.tp2~ ~3491~ @349001\nLABEL ~cd_tweaks_better_soa_start_300k_all_items~\nBEGIN @349300 DESIGNATED 3493\nGROUP @4\nSUBCOMPONENT @349000\nREQUIRE_PREDICATE GAME_IS ~bg2ee eet soa tob bgt~ @25\nREQUIRE_PREDICATE !MOD_IS_INSTALLED ~cdtweaks/setup-cdtweaks.tp2~ ~3490~ @349101\nLABEL ~cd_tweaks_better_soa_start_500k_all_items~\n";
 
-struct SelfConflictFixture(std::path::PathBuf);
+struct SelfConflictFixture(std::path::PathBuf, bool);
 
 impl Drop for SelfConflictFixture {
     fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
+        if self.1 {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
     }
 }
 
@@ -719,9 +723,11 @@ fn self_conflict_fixture(text: &str) -> SelfConflictFixture {
         std::process::id(),
         NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     ));
-    std::fs::create_dir_all(&directory).expect("fixture directory");
-    std::fs::write(directory.join("setup-cdtweaks.tp2"), text).expect("fixture TP2");
-    SelfConflictFixture(directory)
+    let mut fixture = SelfConflictFixture(directory, false);
+    std::fs::create_dir(&fixture.0).expect("fixture directory");
+    fixture.1 = true;
+    std::fs::write(fixture.0.join("setup-cdtweaks.tp2"), text).expect("fixture TP2");
+    fixture
 }
 
 fn self_conflict_plan(
@@ -1069,4 +1075,26 @@ fn self_conflict_eet_core_scope_retains_global_game_identity() {
             format!("BEGIN ~Core~ DESIGNATED 0\nREQUIRE_PREDICATE {expression} ~Required~\n");
         self_conflict_assert_both(&text, "eet", &["0"], "0", None);
     }
+}
+
+#[test]
+fn continuous_regression_reused_scanner_fixture_cleans_success_and_unwind() {
+    let root = with_scs_tp2("BEGIN ~Test~ DESIGNATED 0\n", |path| {
+        std::path::Path::new(path)
+            .parent()
+            .expect("fixture parent")
+            .to_path_buf()
+    });
+    assert!(!root.exists());
+    let mut unwind_root = None;
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        with_scs_tp2("BEGIN ~Test~ DESIGNATED 0\n", |path| {
+            unwind_root = std::path::Path::new(path)
+                .parent()
+                .map(std::path::Path::to_path_buf);
+            panic!("controlled reused scanner fixture unwind");
+        });
+    }));
+    assert!(result.is_err());
+    assert!(!unwind_root.expect("captured owned root").exists());
 }

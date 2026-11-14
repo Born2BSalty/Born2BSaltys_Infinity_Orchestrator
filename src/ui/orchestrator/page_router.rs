@@ -444,8 +444,8 @@ fn fork_meta_from_entry(entry: &ModlistEntry) -> Option<ForkMeta> {
     }
     let parent = entry.forked_from.last();
     Some(ForkMeta {
-        parent_name: parent.map(|p| p.name.clone()).unwrap_or_default(),
-        parent_author: parent.map(|p| p.author.clone()).unwrap_or_default(),
+        parent_name: parent.map_or_else(Default::default, |p| p.name.clone()),
+        parent_author: parent.map_or_else(Default::default, |p| p.author.clone()),
         mods: entry.mod_count,
         components: entry.component_count,
         forked_from: entry.forked_from.clone(),

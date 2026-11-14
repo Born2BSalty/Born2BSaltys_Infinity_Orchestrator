@@ -287,6 +287,50 @@ mod parser_sharing_tests {
     use super::*;
     use crate::app::step5::install_flow::parser_sharing_pending_for_test;
 
+    struct ParserLeaseFixture(std::path::PathBuf);
+
+    impl ParserLeaseFixture {
+        fn new() -> Self {
+            let root = std::env::temp_dir().join(format!(
+                "bio_parser_lease_{}_{}",
+                std::process::id(),
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .expect("clock")
+                    .as_nanos()
+            ));
+            assert!(!root.exists(), "unique parser lease fixture");
+            let fixture = Self(root);
+            std::fs::create_dir(&fixture.0).expect("fixture");
+            fixture
+        }
+    }
+
+    impl Drop for ParserLeaseFixture {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn parser_sharing_lease_fixture_cleans_on_return_and_unwind() {
+        let normal_path = {
+            let fixture = ParserLeaseFixture::new();
+            std::fs::write(fixture.0.join("parser.toml"), "fixture").expect("fixture write");
+            fixture.0.clone()
+        };
+        assert!(!normal_path.exists());
+        let mut unwind_path = None;
+        let failure = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let fixture = ParserLeaseFixture::new();
+            unwind_path = Some(fixture.0.clone());
+            std::fs::write(fixture.0.join("parser.toml"), "fixture").expect("fixture write");
+            panic!("controlled parser lease fixture unwind");
+        }));
+        assert!(failure.is_err());
+        assert!(!unwind_path.expect("unwind fixture created").exists());
+    }
+
     #[test]
     fn parser_sharing_cancel_and_stale_completions_never_spawn() {
         for stale in 0..5 {
@@ -376,15 +420,9 @@ mod parser_sharing_tests {
                 })
             }
         }
-        let root = std::env::temp_dir().join(format!(
-            "bio_parser_lease_{}_{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .expect("clock")
-                .as_nanos()
-        ));
-        std::fs::create_dir(&root).expect("fixture");
+        let _parser_guard = crate::app::mod_installer_parser::coordinate_parser_test();
+        let fixture = ParserLeaseFixture::new();
+        let root = &fixture.0;
         let parser_path = root.join("parser.toml");
         let parser = prepare_parser_at(
             &parser_path,
@@ -427,6 +465,7 @@ mod parser_sharing_tests {
         assert!(spawned.get());
         assert!(pending.is_none());
         std::fs::remove_dir_all(root).expect("cleanup");
+        assert!(!root.exists());
     }
     #[test]
     fn parser_sharing_all_accepted_start_modes_use_injected_common_preparation() {

@@ -49,8 +49,9 @@ pub(crate) struct RemoteFileFacts {
 pub(crate) fn installed_archive_record(archive_path: &Path) -> io::Result<InstalledArchiveRecord> {
     let name = archive_path
         .file_name()
-        .map(|value| value.to_string_lossy().to_string())
-        .unwrap_or_default();
+        .map_or_else(Default::default, |value| {
+            value.to_string_lossy().to_string()
+        });
     let size = fs::metadata(archive_path)?.len();
     let hash = crate::install_runtime::archive_store::hash_file(archive_path)?;
     Ok(InstalledArchiveRecord {

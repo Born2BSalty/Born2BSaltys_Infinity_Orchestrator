@@ -278,11 +278,9 @@ impl CatalogRuntime {
             self.accept_transfer(state, run_id, event);
         }
         if disconnected && self.running {
-            let keys = self
-                .snapshot
-                .as_ref()
-                .map(|s| s.sources.iter().map(|s| s.tp2.clone()).collect::<Vec<_>>())
-                .unwrap_or_default();
+            let keys = self.snapshot.as_ref().map_or_else(Default::default, |s| {
+                s.sources.iter().map(|s| s.tp2.clone()).collect::<Vec<_>>()
+            });
             for key in keys {
                 if !self
                     .outcomes

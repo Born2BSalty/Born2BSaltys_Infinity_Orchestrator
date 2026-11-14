@@ -1715,6 +1715,7 @@ mod tests {
         let _lock = crate::app::mod_downloads::AMBIENT_TEST_LOCK
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _parser_guard = crate::app::mod_installer_parser::coordinate_parser_test();
         let guard = ConfigDirGuard::new("unreadable_parser");
         let parser = guard.0.join("parser.toml");
         std::fs::write(&parser, "choice_phrase = 42").expect("malformed parser fixture");

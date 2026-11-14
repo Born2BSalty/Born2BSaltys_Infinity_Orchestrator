@@ -689,8 +689,7 @@ fn push_update_check_failure(
                     .get(&tp2_key)
                     .map(String::as_str),
             )
-            .map(|source| source.declared_tp2_names())
-            .unwrap_or_default();
+            .map_or_else(Default::default, |source| source.declared_tp2_names());
         push_manual_download_request(
             &mut state.step2.update_selected_manual_downloads,
             ManualDownloadRequest {

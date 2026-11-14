@@ -54,8 +54,7 @@ pub(crate) fn render(
     let active_game = inside
         .sections
         .get(drawer.mods_tab)
-        .map(|section| section.game.clone())
-        .unwrap_or_default();
+        .map_or_else(Default::default, |section| section.game.clone());
     let footer_line = footer_text(&active_game);
 
     let spec = DrawerSpec {

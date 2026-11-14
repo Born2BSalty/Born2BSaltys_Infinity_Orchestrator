@@ -227,13 +227,9 @@ mod utils {
     pub(super) fn has_level_token(line: &str, token: &str) -> bool {
         let u = line.to_ascii_uppercase();
         let t = token.to_ascii_uppercase();
-        if u.contains(&format!(" {t} "))
+        u.contains(&format!(" {t} "))
             || u.contains(&format!("] {t} "))
             || u.ends_with(&format!(" {t}"))
-        {
-            return true;
-        }
-        false
     }
 
     pub(super) fn recent_lines(output: &str, max_lines: usize) -> Vec<&str> {

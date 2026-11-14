@@ -855,15 +855,14 @@ fn render_note_kebab_item(
         return;
     }
     let signature = versions_sheets::resolve_current_source(tiers, card)
-        .map(|source| mod_source_history::rule_signature(&source))
-        .unwrap_or_default();
+        .map_or_else(Default::default, |source| {
+            mod_source_history::rule_signature(&source)
+        });
     let (note_text, _) = current_note.unwrap_or_default();
-    let location = current_option(card)
-        .map(|option| option.location.clone())
-        .unwrap_or_default();
-    let rule_words = current_option(card)
-        .map(|option| option.rule_words.clone())
-        .unwrap_or_default();
+    let location =
+        current_option(card).map_or_else(Default::default, |option| option.location.clone());
+    let rule_words =
+        current_option(card).map_or_else(Default::default, |option| option.rule_words.clone());
     outcome.note_seed = Some(NoteSeed {
         mod_name: card.name.clone(),
         rule_words,

@@ -117,8 +117,7 @@ mod orchestrate {
             let file_name = tp2
                 .file_name()
                 .and_then(|value| value.to_str())
-                .map(str::to_ascii_lowercase)
-                .unwrap_or_default();
+                .map_or_else(Default::default, str::to_ascii_lowercase);
             if file_name == preferred_setup {
                 return Some(tp2);
             }

@@ -107,8 +107,7 @@ fn copy_appdata_tree_filtered(
         let ext = src_path
             .extension()
             .and_then(|e| e.to_str())
-            .map(str::to_ascii_lowercase)
-            .unwrap_or_default();
+            .map_or_else(Default::default, str::to_ascii_lowercase);
         if !matches!(
             ext.as_str(),
             "json" | "toml" | "yaml" | "yml" | "log" | "txt"

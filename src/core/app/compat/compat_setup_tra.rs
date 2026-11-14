@@ -23,26 +23,24 @@ pub(crate) fn load_tp2_setup_tra_map(tp2_path: &Path) -> HashMap<String, String>
         base.join("lang/english").join(format!("{tp2_stem}.tra")),
         custom_setup_name
             .as_ref()
-            .map(|name| base.join("lang/english").join(name))
-            .unwrap_or_default(),
+            .map_or_else(Default::default, |name| {
+                base.join("lang/english").join(name)
+            }),
         base.join("lang/en_us/setup.tra"),
         base.join("lang/en_us").join(format!("{tp2_stem}.tra")),
         custom_setup_name
             .as_ref()
-            .map(|name| base.join("lang/en_us").join(name))
-            .unwrap_or_default(),
+            .map_or_else(Default::default, |name| base.join("lang/en_us").join(name)),
         base.join("lang/en_US/setup.tra"),
         base.join("lang/en_US").join(format!("{tp2_stem}.tra")),
         custom_setup_name
             .as_ref()
-            .map(|name| base.join("lang/en_US").join(name))
-            .unwrap_or_default(),
+            .map_or_else(Default::default, |name| base.join("lang/en_US").join(name)),
         base.join("setup.tra"),
         base.join(format!("{tp2_stem}.tra")),
         custom_setup_name
             .as_ref()
-            .map(|name| base.join(name))
-            .unwrap_or_default(),
+            .map_or_else(Default::default, |name| base.join(name)),
     ] {
         if path.is_file() && !candidates.iter().any(|existing| existing == &path) {
             candidates.push(path);

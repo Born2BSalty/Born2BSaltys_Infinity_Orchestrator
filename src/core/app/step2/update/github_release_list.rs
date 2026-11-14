@@ -246,8 +246,7 @@ fn parse_release_list_response(text: &str) -> Result<Vec<CachedRelease>, String>
     let nodes = envelope
         .data
         .and_then(|data| data.repository)
-        .map(|repository| repository.releases.nodes)
-        .unwrap_or_default();
+        .map_or_else(Default::default, |repository| repository.releases.nodes);
     Ok(nodes
         .into_iter()
         .filter(|node| !node.is_draft)

@@ -22,6 +22,11 @@ use super::compat_path_eval::PathRequirementContext;
 use super::compat_path_runtime::{
     ComponentPathGuardCache, PathRequirementHit, scan_path_requirement_hit,
 };
+#[cfg(test)]
+use super::compat_predicate_constraints::ConstraintMetadata;
+use super::compat_predicate_constraints::{
+    ConstraintOutcome, ConstraintSnapshot, builtin_metadata, planning_snapshot,
+};
 use super::compat_rule_runtime::{
     CompatActiveItem, clear_kind_matches, collect_step3_active_items, compat_component_matches,
     compat_mod_matches, direct_rule_applies, game_dir_for_tab, match_kind_matches, mode_matches,
@@ -42,7 +47,84 @@ pub(crate) struct Step3CompatMarker {
     pub(crate) raw_evidence: Option<String>,
 }
 
+pub(crate) struct Step3CompatResult {
+    pub(crate) markers: HashMap<String, Step3CompatMarker>,
+    pub(in crate::app) constraint_outcomes: Vec<ConstraintOutcome>,
+    pub(crate) diagnostics: Vec<String>,
+}
+
 pub(crate) fn collect_step3_compat_markers(
+    step1: &Step1State,
+    tab: &str,
+    mods: &[Step2ModState],
+    items: &[Step3ItemState],
+    bgee_items: &[Step3ItemState],
+) -> HashMap<String, Step3CompatMarker> {
+    collect_step3_compat_result(step1, tab, mods, items, bgee_items).markers
+}
+
+pub(crate) fn collect_step3_compat_result(
+    step1: &Step1State,
+    tab: &str,
+    mods: &[Step2ModState],
+    items: &[Step3ItemState],
+    bgee_items: &[Step3ItemState],
+) -> Step3CompatResult {
+    let metadata = builtin_metadata();
+    let snapshot = planning_snapshot(step1, tab, mods, items, &metadata);
+    if snapshot.rows.is_empty() {
+        return Step3CompatResult {
+            markers: collect_legacy_step3_compat_markers(step1, tab, mods, items, bgee_items),
+            constraint_outcomes: snapshot.outcomes,
+            diagnostics: snapshot.diagnostics,
+        };
+    }
+    collect_result_from_snapshot(
+        step1,
+        tab,
+        mods,
+        items,
+        bgee_items,
+        snapshot,
+        &load_rules().rules,
+    )
+}
+
+#[cfg(test)]
+pub(in crate::app) fn collect_step3_compat_result_with_metadata_and_rules(
+    step1: &Step1State,
+    tab: &str,
+    mods: &[Step2ModState],
+    items: &[Step3ItemState],
+    bgee_items: &[Step3ItemState],
+    metadata: &ConstraintMetadata,
+    rules: &[CompatRule],
+) -> Step3CompatResult {
+    let snapshot = planning_snapshot(step1, tab, mods, items, metadata);
+    collect_result_from_snapshot(step1, tab, mods, items, bgee_items, snapshot, rules)
+}
+
+fn collect_result_from_snapshot(
+    step1: &Step1State,
+    tab: &str,
+    mods: &[Step2ModState],
+    items: &[Step3ItemState],
+    bgee_items: &[Step3ItemState],
+    snapshot: ConstraintSnapshot,
+    rules: &[CompatRule],
+) -> Step3CompatResult {
+    let mut markers =
+        collect_step3_compat_markers_uncached(step1, tab, mods, items, &snapshot, rules);
+    super::compat_dlc_source::apply_step3(step1, tab, items, bgee_items, &mut markers);
+    project_constraint_outcomes(&mut markers, items, &snapshot.outcomes);
+    Step3CompatResult {
+        markers,
+        constraint_outcomes: snapshot.outcomes,
+        diagnostics: snapshot.diagnostics,
+    }
+}
+
+fn collect_legacy_step3_compat_markers(
     step1: &Step1State,
     tab: &str,
     mods: &[Step2ModState],
@@ -60,7 +142,14 @@ pub(crate) fn collect_step3_compat_markers(
         return cached;
     }
 
-    let markers = collect_step3_compat_markers_uncached(step1, tab, mods, items);
+    let markers = collect_step3_compat_markers_uncached(
+        step1,
+        tab,
+        mods,
+        items,
+        &ConstraintSnapshot::default(),
+        &load_rules().rules,
+    );
     let mut cache = step3_compat_cache()
         .lock()
         .expect("step3 compat cache lock poisoned");
@@ -79,10 +168,20 @@ fn collect_step3_compat_markers_uncached(
     tab: &str,
     mods: &[Step2ModState],
     items: &[Step3ItemState],
+    snapshot: &ConstraintSnapshot,
+    rules: &[CompatRule],
 ) -> HashMap<String, Step3CompatMarker> {
-    let tp2_paths = build_tp2_path_lookup(mods);
+    let mut tp2_paths = build_tp2_path_lookup(mods);
+    for (&index, source) in &snapshot.rows {
+        if source.error.is_none() {
+            let item = &items[index];
+            tp2_paths.insert(
+                tp2_lookup_key(&item.tp_file, &item.mod_name),
+                source.path.clone(),
+            );
+        }
+    }
     let active_items = collect_step3_active_items(items, &tp2_paths);
-    let rules = load_rules().rules;
     let mut out = HashMap::<String, Step3CompatMarker>::new();
     let mut requirement_cache = ComponentRequirementCache::new();
     let mut conflict_cache = ComponentConflictCache::new();
@@ -92,12 +191,19 @@ fn collect_step3_compat_markers_uncached(
     let predicate_context =
         build_mismatch_context(step1, tab, collect_checked_components(&active_items));
 
-    for (order, item) in (1usize..).zip(items.iter().filter(|item| !item.is_parent)) {
+    for (order, (row_index, item)) in
+        (1usize..).zip(items.iter().enumerate().filter(|(_, item)| !item.is_parent))
+    {
         let key = marker_key(item);
         let mut marker =
             scan_path_marker_for_item(item, &tp2_paths, &path_context, &mut path_guard_cache)
                 .or_else(|| scan_conflict_marker_for_item(item, order, &conflict_context))
-                .or_else(|| scan_predicate_marker_for_item(item, &tp2_paths, &predicate_context))
+                .or_else(|| {
+                    snapshot.rows.get(&row_index).map_or_else(
+                        || scan_predicate_marker_for_item(item, &tp2_paths, &predicate_context),
+                        |source| scan_covered_predicate_marker(item, source, &predicate_context),
+                    )
+                })
                 .or_else(|| {
                     scan_dependency_marker_for_item(
                         item,
@@ -109,7 +215,7 @@ fn collect_step3_compat_markers_uncached(
                 });
         let component_order = Some(order);
 
-        for rule in &rules {
+        for rule in rules {
             let current_kind = marker.as_ref().map(|value| value.kind.as_str());
             if !rule_matches(rule, step1, tab, item, current_kind) {
                 continue;
@@ -120,7 +226,7 @@ fn collect_step3_compat_markers_uncached(
             }
             apply_rule(rule, &mut marker);
         }
-        for rule in &rules {
+        for rule in rules {
             let current_kind = marker.as_ref().map(|value| value.kind.as_str());
             if !rule_matches(rule, step1, tab, item, current_kind) {
                 continue;
@@ -144,6 +250,63 @@ fn collect_step3_compat_markers_uncached(
     }
 
     out
+}
+
+fn scan_covered_predicate_marker(
+    item: &Step3ItemState,
+    source: &super::compat_predicate_constraints::CoveredSource,
+    context: &super::compat_mismatch_eval::MismatchContext,
+) -> Option<Step3CompatMarker> {
+    let context = context.for_component(&item.tp_file, &item.component_id);
+    super::compat_mismatch_scan::scan_loaded_predicate_hit(source, &context).map(|hit| {
+        Step3CompatMarker {
+            kind: hit.kind.to_string(),
+            message: Some(hit.message),
+            related_mod: hit.related_mod,
+            related_component: hit.related_component,
+            source: Some(source.path.clone()),
+            raw_evidence: Some(hit.raw_evidence),
+        }
+    })
+}
+
+fn project_constraint_outcomes(
+    markers: &mut HashMap<String, Step3CompatMarker>,
+    items: &[Step3ItemState],
+    outcomes: &[ConstraintOutcome],
+) {
+    for outcome in outcomes {
+        let Some(item) = items.get(outcome.row_index) else {
+            continue;
+        };
+        let message = format!(
+            "{} [{}: {}]",
+            outcome.message, "builtin_predicate_constraints.toml", outcome.record_id
+        );
+        markers
+            .entry(marker_key(item))
+            .and_modify(|marker| {
+                let previous = marker.message.get_or_insert_with(String::new);
+                previous.push('\n');
+                previous.push_str(&message);
+                let evidence = marker.raw_evidence.get_or_insert_with(String::new);
+                evidence.push('\n');
+                evidence.push_str(&outcome.raw_evidence);
+            })
+            .or_insert_with(|| Step3CompatMarker {
+                kind: if outcome.kind == "order_violation" {
+                    "order_block"
+                } else {
+                    "warning"
+                }
+                .to_string(),
+                message: Some(message),
+                related_mod: outcome.related_mod.clone(),
+                related_component: outcome.related_component.clone(),
+                source: Some(outcome.source.clone()),
+                raw_evidence: Some(outcome.raw_evidence.clone()),
+            });
+    }
 }
 
 pub(crate) fn marker_key(item: &Step3ItemState) -> String {

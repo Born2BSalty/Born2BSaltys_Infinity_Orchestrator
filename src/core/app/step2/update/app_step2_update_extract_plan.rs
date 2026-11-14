@@ -92,10 +92,10 @@ pub(crate) fn build_extract_jobs(
         plan.jobs.push(Step2UpdateExtractJob {
             label: asset.label.clone(),
             tp_file: asset.tp_file.clone(),
-            aliases: source
-                .as_ref()
-                .map(mod_downloads::ModDownloadSource::declared_tp2_names)
-                .unwrap_or_default(),
+            aliases: source.as_ref().map_or_else(
+                Default::default,
+                mod_downloads::ModDownloadSource::declared_tp2_names,
+            ),
             tp2_rename,
             subdir_require,
             archive_path,

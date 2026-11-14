@@ -30,7 +30,7 @@ pub(super) fn parse_tp2_component_blocks(tp2_text: &str) -> HashMap<String, Tp2C
             out.insert(
                 id.clone(),
                 Tp2ComponentBlock {
-                    component_id: id.clone(),
+                    component_id: id,
                     begin_at_component_id: false,
                     group_key: block.iter().find_map(|line| parse_group_key(line)),
                     subcomponent_key: block.iter().find_map(|line| parse_subcomponent_key(line)),

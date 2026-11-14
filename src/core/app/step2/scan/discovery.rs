@@ -91,8 +91,7 @@ pub fn build_preview_mods(grouped: &[(String, Vec<PathBuf>)]) -> Vec<Step2ModSta
             let display_name = display_name_from_group_key(group_key);
             let tp2_path = tp2_paths
                 .first()
-                .map(|p| p.display().to_string())
-                .unwrap_or_default();
+                .map_or_else(Default::default, |p| p.display().to_string());
             let tp_file = Path::new(&tp2_path)
                 .file_name()
                 .map_or_else(|| display_name.clone(), |v| v.to_string_lossy().to_string());

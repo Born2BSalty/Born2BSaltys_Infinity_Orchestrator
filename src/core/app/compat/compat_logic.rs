@@ -6,29 +6,52 @@ use crate::app::state::{Step1State, Step2ComponentState, Step2ModState};
 
 use super::compat_conflict_scan::apply_step2_scan_conflict;
 use super::compat_deprecated_scan::apply_step2_scan_deprecated;
-use super::compat_mismatch_scan::apply_step2_scan_mismatch;
+use super::compat_mismatch_scan::apply_step2_scan_mismatch_with_metadata;
 use super::compat_missing_dep_scan::apply_step2_scan_missing_dep;
 use super::compat_path_scan::apply_step2_scan_path_requirement;
+use super::compat_predicate_constraints::{ConstraintMetadata, builtin_metadata};
 use super::compat_rule_runtime::{
     active_item_order, clear_kind_matches, collect_step2_active_items, compat_component_matches,
     compat_mod_matches, direct_rule_applies, first_related_target, kind_disables_selection,
     match_kind_matches, matched_related_target, mode_matches, non_empty, normalize_kind,
     normalize_mod_key, relation_rule_applies, single_related_target, tab_matches,
 };
-use super::compat_rules::{CompatRule, compat_rule_source_path, load_rules};
+use super::compat_rules::{CompatRule, CompatRulesLoad, compat_rule_source_path, load_rules};
 
 pub(crate) fn apply_step2_compat_rules(
     step1: &Step1State,
     first_game_mods: &mut [Step2ModState],
     second_game_mods: &mut [Step2ModState],
 ) -> Option<String> {
+    apply_step2_compat_rules_with_load(
+        step1,
+        first_game_mods,
+        second_game_mods,
+        &builtin_metadata(),
+        load_rules(),
+    )
+}
+
+pub(in crate::app) fn apply_step2_compat_rules_with_load(
+    step1: &Step1State,
+    first_game_mods: &mut [Step2ModState],
+    second_game_mods: &mut [Step2ModState],
+    metadata: &ConstraintMetadata,
+    loaded: CompatRulesLoad,
+) -> Option<String> {
     clear_step2_compat_state(first_game_mods);
     clear_step2_compat_state(second_game_mods);
 
     let first_tab = game_authority::first_slot_tab(&step1.game_install);
 
-    apply_step2_scan_mismatch(step1, first_tab, first_game_mods);
-    apply_step2_scan_mismatch(step1, "BG2EE", second_game_mods);
+    let mut diagnostics =
+        apply_step2_scan_mismatch_with_metadata(step1, first_tab, first_game_mods, metadata);
+    diagnostics.extend(apply_step2_scan_mismatch_with_metadata(
+        step1,
+        "BG2EE",
+        second_game_mods,
+        metadata,
+    ));
     apply_step2_scan_path_requirement(step1, first_tab, first_game_mods);
     apply_step2_scan_path_requirement(step1, "BG2EE", second_game_mods);
     apply_step2_scan_missing_dep(first_game_mods);
@@ -38,7 +61,6 @@ pub(crate) fn apply_step2_compat_rules(
     apply_step2_scan_deprecated(first_game_mods);
     apply_step2_scan_deprecated(second_game_mods);
 
-    let loaded = load_rules();
     let rules = loaded.rules;
     if !rules.is_empty() {
         apply_direct_rules_to_tab(step1, first_tab, &rules, first_game_mods);
@@ -53,7 +75,10 @@ pub(crate) fn apply_step2_compat_rules(
     super::compat_dlc_source::apply_step2(step1, first_game_mods, second_game_mods);
     finalize_step2_compat_state(first_game_mods);
     finalize_step2_compat_state(second_game_mods);
-    loaded.error
+    diagnostics.extend(loaded.error);
+    diagnostics.sort();
+    diagnostics.dedup();
+    (!diagnostics.is_empty()).then(|| diagnostics.join("\n"))
 }
 
 pub(crate) fn clear_step2_compat_state(mods: &mut [Step2ModState]) {
