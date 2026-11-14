@@ -533,7 +533,7 @@ fn continuous_order_independent_scans_keep_their_primary_issue() {
             "missing_dep",
         ),
         (
-            "REQUIRE_PREDICATE DIRECTORY_EXISTS ~definitely-absent-file~ ~Path~",
+            "REQUIRE_PREDICATE DIRECTORY_EXISTS \"definitely-absent-file\" ~Path~",
             "path_requirement",
         ),
     ] {
