@@ -1,32 +1,40 @@
 use super::{
-    ParserInitializer, VersionOutput, capture_choice_phrases_at, merge_parser_documents,
-    prepare_parser_at, union_phrases, validate_phrases,
+    ParserInitializer, ParserTestGuard, VersionOutput, capture_choice_phrases_at,
+    coordinate_parser_test, merge_parser_documents, prepare_parser_at, union_phrases,
+    validate_phrases,
 };
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 
-struct Fixture(PathBuf);
+struct Fixture {
+    path: PathBuf,
+    _parser_guard: ParserTestGuard,
+}
 
 impl Fixture {
     fn new() -> Self {
         static NEXT: AtomicU64 = AtomicU64::new(0);
+        let parser_guard = coordinate_parser_test();
         let path = std::env::temp_dir().join(format!(
             "bio-parser-sharing-{}-{}",
             std::process::id(),
             NEXT.fetch_add(1, Ordering::Relaxed)
         ));
         std::fs::create_dir(&path).expect("isolated fixture");
-        Self(path)
+        Self {
+            path,
+            _parser_guard: parser_guard,
+        }
     }
 
     fn parser(&self) -> PathBuf {
-        self.0.join("parser.toml")
+        self.path.join("parser.toml")
     }
 }
 
 impl Drop for Fixture {
     fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
+        let _ = std::fs::remove_dir_all(&self.path);
     }
 }
 
@@ -61,6 +69,26 @@ fn document(text: &str) -> toml::Value {
 
 const CURRENT: &str = "choice_phrase = ['Default', 'Shared']\nnew_setting = true\n[metadata]\nmod_installer_version = '15.0.1'\nnew_metadata = 42\n[settings]\nanswer = 'new'\nnew_default = true\n";
 const ORIGINAL: &str = "choice_phrase = ['Shared', ' Custom 世界 ']\nunknown_top = [1, 2]\n[metadata]\nmod_installer_version = '14.0.0'\nuser_note = 'keep'\n[settings]\nanswer = 'old'\n[settings.nested]\ncustom = 7\n";
+
+#[test]
+fn parser_sharing_fixture_releases_coordination_and_files_on_return_and_unwind() {
+    let normal_path = {
+        let fixture = Fixture::new();
+        std::fs::write(fixture.parser(), CURRENT).expect("normal fixture write");
+        fixture.path.clone()
+    };
+    assert!(!normal_path.exists());
+    let mut unwind_path = None;
+    let failure = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let fixture = Fixture::new();
+        unwind_path = Some(fixture.path.clone());
+        std::fs::write(fixture.parser(), CURRENT).expect("unwind fixture write");
+        panic!("controlled fixture unwind");
+    }));
+    assert!(failure.is_err());
+    assert!(!unwind_path.expect("unwind fixture created").exists());
+    let _guard = coordinate_parser_test();
+}
 
 #[test]
 fn parser_sharing_union_preserves_exact_text_and_first_seen_order() {
@@ -170,7 +198,7 @@ fn parser_sharing_version_reset_retains_exact_backup_and_verified_merge() {
     };
     let prepared = prepare_parser_at(
         &path,
-        &fixture.0.join("never-executed.exe"),
+        &fixture.path.join("never-executed.exe"),
         &strings(&["Imported"]),
         &initializer,
     )
@@ -210,7 +238,7 @@ fn parser_sharing_absent_parser_uses_explicit_initializer_path_without_backup() 
     };
     let prepared = prepare_parser_at(
         &path,
-        &fixture.0.join("never-executed.exe"),
+        &fixture.path.join("never-executed.exe"),
         &strings(&["Imported"]),
         &initializer,
     )
@@ -237,7 +265,7 @@ fn parser_sharing_malformed_original_never_invokes_initializer() {
     assert!(
         prepare_parser_at(
             &path,
-            &fixture.0.join("never-executed.exe"),
+            &fixture.path.join("never-executed.exe"),
             &strings(&["Imported"]),
             &initializer
         )
@@ -261,7 +289,7 @@ fn parser_sharing_initializer_failure_restores_original_exact_bytes() {
     assert!(
         prepare_parser_at(
             &path,
-            &fixture.0.join("never-executed.exe"),
+            &fixture.path.join("never-executed.exe"),
             &strings(&["Imported"]),
             &initializer
         )
@@ -291,7 +319,7 @@ fn parser_sharing_faults_preserve_backup_and_restore_owned_bytes() {
         let fired = std::cell::Cell::new(false);
         let result = prepare_parser_at_with(
             &path,
-            &fixture.0.join("never.exe"),
+            &fixture.path.join("never.exe"),
             &strings(&["Imported"]),
             &initializer,
             &|current| {
@@ -329,7 +357,7 @@ fn parser_sharing_verification_conflict_preserves_external_writer_and_backup() {
     let external = "choice_phrase = ['External writer']\n";
     let result = prepare_parser_at_with(
         &path,
-        &fixture.0.join("never.exe"),
+        &fixture.path.join("never.exe"),
         &strings(&["Imported"]),
         &initializer,
         &|stage| {
@@ -347,7 +375,7 @@ fn parser_sharing_verification_conflict_preserves_external_writer_and_backup() {
         external
     );
     assert_eq!(
-        std::fs::read(fixture.0.join("parser.toml.bio-recovery")).expect("retained recovery"),
+        std::fs::read(fixture.path.join("parser.toml.bio-recovery")).expect("retained recovery"),
         ORIGINAL.as_bytes()
     );
     assert_eq!(
@@ -367,10 +395,10 @@ fn parser_sharing_wrong_post_version_rolls_back_and_lease_blocks_capture_until_d
         calls: AtomicUsize::new(0),
         fail_after_write: false,
     };
-    assert!(prepare_parser_at(&path, &fixture.0.join("never.exe"), &[], &initializer).is_err());
+    assert!(prepare_parser_at(&path, &fixture.path.join("never.exe"), &[], &initializer).is_err());
     assert_eq!(std::fs::read(&path).expect("restored"), ORIGINAL.as_bytes());
     initializer.document = CURRENT.to_string();
-    let prepared = prepare_parser_at(&path, &fixture.0.join("never.exe"), &[], &initializer)
+    let prepared = prepare_parser_at(&path, &fixture.path.join("never.exe"), &[], &initializer)
         .unwrap_or_else(|error| panic!("prepare: {error}"));
     super::with_parser_path_for_test(&path, || {
         assert!(super::capture_local_choice_phrases().is_err());
@@ -398,7 +426,7 @@ fn parser_sharing_initializer_timeout_error_and_failed_restore_report_backup() {
     std::fs::write(&path, ORIGINAL).expect("original");
     let error = prepare_parser_at(
         &path,
-        &fixture.0.join("never.exe"),
+        &fixture.path.join("never.exe"),
         &[],
         &TimedOut(path.clone()),
     )
@@ -408,7 +436,7 @@ fn parser_sharing_initializer_timeout_error_and_failed_restore_report_backup() {
     assert_eq!(std::fs::read(&path).expect("restored"), ORIGINAL.as_bytes());
     let error = super::prepare_parser_at_with(
         &path,
-        &fixture.0.join("never.exe"),
+        &fixture.path.join("never.exe"),
         &[],
         &TimedOut(path.clone()),
         &|stage| {
@@ -430,6 +458,44 @@ fn parser_sharing_initializer_timeout_error_and_failed_restore_report_backup() {
     );
 }
 
+#[test]
+fn parser_sharing_independent_fixtures_wait_for_active_parser_owner() {
+    let fixture = Fixture::new();
+    let path = fixture.parser();
+    let initializer = Initializer {
+        path: path.clone(),
+        document: CURRENT.to_string(),
+        calls: AtomicUsize::new(0),
+        fail_after_write: false,
+    };
+    let prepared = prepare_parser_at(&path, Path::new("never.exe"), &[], &initializer)
+        .unwrap_or_else(|error| panic!("owner preparation: {error}"));
+    let (started_tx, started_rx) = std::sync::mpsc::channel();
+    let (finished_tx, finished_rx) = std::sync::mpsc::channel();
+    let worker = std::thread::spawn(move || {
+        started_tx.send(()).expect("worker started");
+        let result = prepare_layout_fixture(Some(CURRENT), CURRENT, &["Imported"]);
+        finished_tx.send(result).expect("worker finished");
+    });
+    let started = started_rx.recv_timeout(std::time::Duration::from_secs(30));
+    let blocked = finished_rx.recv_timeout(std::time::Duration::from_secs(6));
+    drop(prepared);
+    drop(fixture);
+    let completed = finished_rx.recv_timeout(std::time::Duration::from_secs(30));
+    let joined = worker.join();
+    started.expect("worker start deadline");
+    assert!(matches!(
+        blocked,
+        Err(std::sync::mpsc::RecvTimeoutError::Timeout)
+    ));
+    let result = completed.expect("independent fixture completes after owner release");
+    joined.expect("independent fixture worker");
+    assert_eq!(
+        document(&result)["choice_phrase"],
+        document("choice_phrase = ['Default', 'Shared', 'Imported']")["choice_phrase"]
+    );
+}
+
 fn prepare_layout_fixture(
     original: Option<&str>,
     defaults_text: &str,
@@ -448,7 +514,7 @@ fn prepare_layout_fixture(
     };
     let prepared = prepare_parser_at(
         &path,
-        &fixture.0.join("never-executed.exe"),
+        &fixture.path.join("never-executed.exe"),
         &strings(imported),
         &initializer,
     )
@@ -658,7 +724,7 @@ fn parser_sharing_layout_opening_comment_empty_lf_and_crlf() {
 }
 
 fn rolling_inventory(fixture: &Fixture) -> Vec<String> {
-    let mut names = std::fs::read_dir(&fixture.0)
+    let mut names = std::fs::read_dir(&fixture.path)
         .expect("fixture inventory")
         .map(|entry| {
             entry
@@ -685,14 +751,14 @@ fn rolling_initializer(path: &Path, text: &str) -> Initializer {
 fn parser_sharing_rolling_repeated_changes_and_noop_keep_one_backup() {
     let fixture = Fixture::new();
     let path = fixture.parser();
-    let backup = fixture.0.join("parser.toml.bio-backup");
-    let history = fixture.0.join("parser.toml.bio-backup-historical");
+    let backup = fixture.path.join("parser.toml.bio-backup");
+    let history = fixture.path.join("parser.toml.bio-backup-historical");
     std::fs::write(&history, b"historical sentinel").expect("history");
     std::fs::write(&path, ORIGINAL).expect("original");
     let initializer = rolling_initializer(&path, CURRENT);
     let first = prepare_parser_at(
         &path,
-        &fixture.0.join("never.exe"),
+        &fixture.path.join("never.exe"),
         &strings(&["first"]),
         &initializer,
     )
@@ -706,7 +772,7 @@ fn parser_sharing_rolling_repeated_changes_and_noop_keep_one_backup() {
     drop(first);
     let second = prepare_parser_at(
         &path,
-        &fixture.0.join("never.exe"),
+        &fixture.path.join("never.exe"),
         &strings(&["second"]),
         &initializer,
     )
@@ -717,7 +783,7 @@ fn parser_sharing_rolling_repeated_changes_and_noop_keep_one_backup() {
     let before = super::snapshot(&backup).expect("backup snapshot");
     let noop = prepare_parser_at(
         &path,
-        &fixture.0.join("never.exe"),
+        &fixture.path.join("never.exe"),
         &strings(&["second"]),
         &initializer,
     )
@@ -744,7 +810,7 @@ fn parser_sharing_rolling_noop_reformat_preserves_absent_or_existing_backup() {
         for newline in ["\n", "\r\n"] {
             let fixture = Fixture::new();
             let path = fixture.parser();
-            let backup = fixture.0.join("parser.toml.bio-backup");
+            let backup = fixture.path.join("parser.toml.bio-backup");
             let original = MULTILINE_LAYOUT.replace('\n', newline);
             std::fs::write(&path, &original).expect("original");
             if let Some(bytes) = sentinel {
@@ -754,7 +820,7 @@ fn parser_sharing_rolling_noop_reformat_preserves_absent_or_existing_backup() {
             let reformatted = toml::to_string(&document(&original)).expect("reformat");
             let initializer = rolling_initializer(&path, &reformatted);
             let prepared =
-                prepare_parser_at(&path, &fixture.0.join("never.exe"), &[], &initializer)
+                prepare_parser_at(&path, &fixture.path.join("never.exe"), &[], &initializer)
                     .unwrap_or_else(|error| panic!("prepare: {error}"));
             assert!(prepared.preparation.backup_path.is_none());
             assert_eq!(
@@ -796,8 +862,8 @@ fn parser_sharing_rolling_initializer_observes_original_recovery_and_permissions
     }
     let fixture = Fixture::new();
     let path = fixture.parser();
-    let recovery = fixture.0.join("parser.toml.bio-recovery");
-    let backup = fixture.0.join("parser.toml.bio-backup");
+    let recovery = fixture.path.join("parser.toml.bio-recovery");
+    let backup = fixture.path.join("parser.toml.bio-backup");
     std::fs::write(&path, ORIGINAL).expect("original");
     let permissions = std::fs::metadata(&path).expect("metadata").permissions();
     let initializer = Observing {
@@ -805,7 +871,7 @@ fn parser_sharing_rolling_initializer_observes_original_recovery_and_permissions
         recovery: &recovery,
         permissions: permissions.clone(),
     };
-    let prepared = prepare_parser_at(&path, &fixture.0.join("never.exe"), &[], &initializer)
+    let prepared = prepare_parser_at(&path, &fixture.path.join("never.exe"), &[], &initializer)
         .unwrap_or_else(|error| panic!("prepare: {error}"));
     assert_eq!(prepared.preparation.backup_path.as_ref(), Some(&backup));
     assert_eq!(std::fs::read(&backup).expect("backup"), ORIGINAL.as_bytes());
@@ -827,7 +893,7 @@ fn parser_sharing_rolling_unresolved_recovery_blocks_existing_and_absent_parser(
         for directory in [false, true] {
             let fixture = Fixture::new();
             let path = fixture.parser();
-            let recovery = fixture.0.join("parser.toml.bio-recovery");
+            let recovery = fixture.path.join("parser.toml.bio-recovery");
             if existing {
                 std::fs::write(&path, ORIGINAL).expect("original");
             }
@@ -838,9 +904,10 @@ fn parser_sharing_rolling_unresolved_recovery_blocks_existing_and_absent_parser(
             }
             let before = rolling_inventory(&fixture);
             let initializer = rolling_initializer(&path, CURRENT);
-            let error = prepare_parser_at(&path, &fixture.0.join("never.exe"), &[], &initializer)
-                .err()
-                .expect("must block");
+            let error =
+                prepare_parser_at(&path, &fixture.path.join("never.exe"), &[], &initializer)
+                    .err()
+                    .expect("must block");
             assert!(error.contains(&recovery.display().to_string()));
             assert_eq!(initializer.calls.load(Ordering::Relaxed), 0);
             assert_eq!(rolling_inventory(&fixture), before);
@@ -864,15 +931,15 @@ fn parser_sharing_rolling_unresolved_recovery_blocks_existing_and_absent_parser(
 fn parser_sharing_rolling_failed_restore_retains_recovery_and_blocks_next_attempt() {
     let fixture = Fixture::new();
     let path = fixture.parser();
-    let backup = fixture.0.join("parser.toml.bio-backup");
-    let recovery = fixture.0.join("parser.toml.bio-recovery");
+    let backup = fixture.path.join("parser.toml.bio-backup");
+    let recovery = fixture.path.join("parser.toml.bio-recovery");
     std::fs::write(&path, ORIGINAL).expect("original");
     std::fs::write(&backup, b"previous backup").expect("old backup");
     let mut initializer = rolling_initializer(&path, CURRENT);
     initializer.fail_after_write = true;
     let error = super::prepare_parser_at_with(
         &path,
-        &fixture.0.join("never.exe"),
+        &fixture.path.join("never.exe"),
         &[],
         &initializer,
         &|stage| {
@@ -900,7 +967,7 @@ fn parser_sharing_rolling_failed_restore_retains_recovery_and_blocks_next_attemp
         CURRENT.as_bytes()
     );
     let calls = initializer.calls.load(Ordering::Relaxed);
-    assert!(prepare_parser_at(&path, &fixture.0.join("never.exe"), &[], &initializer).is_err());
+    assert!(prepare_parser_at(&path, &fixture.path.join("never.exe"), &[], &initializer).is_err());
     assert_eq!(initializer.calls.load(Ordering::Relaxed), calls);
     assert_eq!(
         rolling_inventory(&fixture),
@@ -926,7 +993,7 @@ fn parser_sharing_rolling_fault_stages_restore_and_leave_previous_backup_untouch
     ] {
         let fixture = Fixture::new();
         let path = fixture.parser();
-        let backup = fixture.0.join("parser.toml.bio-backup");
+        let backup = fixture.path.join("parser.toml.bio-backup");
         std::fs::write(&path, ORIGINAL).expect("original");
         std::fs::write(&backup, b"previous backup").expect("previous backup");
         let before = super::snapshot(&backup).expect("old snapshot");
@@ -934,7 +1001,7 @@ fn parser_sharing_rolling_fault_stages_restore_and_leave_previous_backup_untouch
         let fired = std::cell::Cell::new(false);
         let result = super::prepare_parser_at_with(
             &path,
-            &fixture.0.join("never.exe"),
+            &fixture.path.join("never.exe"),
             &strings(&["Imported"]),
             &initializer,
             &|current| {
@@ -979,19 +1046,19 @@ fn parser_sharing_rolling_promotion_conflicts_preserve_external_artifacts() {
     ] {
         let fixture = Fixture::new();
         let path = fixture.parser();
-        let backup = fixture.0.join("parser.toml.bio-backup");
-        let recovery = fixture.0.join("parser.toml.bio-recovery");
+        let backup = fixture.path.join("parser.toml.bio-backup");
+        let recovery = fixture.path.join("parser.toml.bio-recovery");
         std::fs::write(&path, ORIGINAL).expect("original");
         std::fs::write(&backup, b"previous backup").expect("previous backup");
         let initializer = rolling_initializer(&path, CURRENT);
         let error = super::prepare_parser_at_with(
             &path,
-            &fixture.0.join("never.exe"),
+            &fixture.path.join("never.exe"),
             &strings(&["Imported"]),
             &initializer,
             &|stage| {
                 if stage == super::FileStage::Promote {
-                    std::fs::write(fixture.0.join(modified), b"external writer")
+                    std::fs::write(fixture.path.join(modified), b"external writer")
                         .expect("external modification");
                 }
                 Ok(())
@@ -1000,7 +1067,7 @@ fn parser_sharing_rolling_promotion_conflicts_preserve_external_artifacts() {
         .err()
         .expect("promotion conflict");
         assert_eq!(
-            std::fs::read(fixture.0.join(modified)).expect("external retained"),
+            std::fs::read(fixture.path.join(modified)).expect("external retained"),
             b"external writer"
         );
         if modified == "parser.toml" {
@@ -1027,7 +1094,8 @@ fn parser_sharing_rolling_promotion_conflicts_preserve_external_artifacts() {
             assert!(error.contains(&recovery.display().to_string()));
             let calls = initializer.calls.load(Ordering::Relaxed);
             assert!(
-                prepare_parser_at(&path, &fixture.0.join("never.exe"), &[], &initializer).is_err()
+                prepare_parser_at(&path, &fixture.path.join("never.exe"), &[], &initializer)
+                    .is_err()
             );
             assert_eq!(initializer.calls.load(Ordering::Relaxed), calls);
         }
@@ -1038,14 +1106,14 @@ fn parser_sharing_rolling_promotion_conflicts_preserve_external_artifacts() {
 fn parser_sharing_rolling_cleanup_failure_blocks_next_preparation() {
     let fixture = Fixture::new();
     let path = fixture.parser();
-    let backup = fixture.0.join("parser.toml.bio-backup");
-    let recovery = fixture.0.join("parser.toml.bio-recovery");
+    let backup = fixture.path.join("parser.toml.bio-backup");
+    let recovery = fixture.path.join("parser.toml.bio-recovery");
     std::fs::write(&path, CURRENT).expect("original");
     std::fs::write(&backup, b"previous backup").expect("old backup");
     let initializer = rolling_initializer(&path, CURRENT);
     let error = super::prepare_parser_at_with(
         &path,
-        &fixture.0.join("never.exe"),
+        &fixture.path.join("never.exe"),
         &[],
         &initializer,
         &|stage| {
@@ -1070,7 +1138,7 @@ fn parser_sharing_rolling_cleanup_failure_blocks_next_preparation() {
         b"previous backup"
     );
     let calls = initializer.calls.load(Ordering::Relaxed);
-    assert!(prepare_parser_at(&path, &fixture.0.join("never.exe"), &[], &initializer).is_err());
+    assert!(prepare_parser_at(&path, &fixture.path.join("never.exe"), &[], &initializer).is_err());
     assert_eq!(initializer.calls.load(Ordering::Relaxed), calls);
     assert_eq!(
         rolling_inventory(&fixture),
@@ -1086,11 +1154,11 @@ fn parser_sharing_rolling_cleanup_failure_blocks_next_preparation() {
 fn parser_sharing_rolling_absent_original_preserves_previous_backup() {
     let fixture = Fixture::new();
     let path = fixture.parser();
-    let backup = fixture.0.join("parser.toml.bio-backup");
+    let backup = fixture.path.join("parser.toml.bio-backup");
     std::fs::write(&backup, b"previous backup").expect("old backup");
     let before = super::snapshot(&backup).expect("old snapshot");
     let initializer = rolling_initializer(&path, CURRENT);
-    let prepared = prepare_parser_at(&path, &fixture.0.join("never.exe"), &[], &initializer)
+    let prepared = prepare_parser_at(&path, &fixture.path.join("never.exe"), &[], &initializer)
         .unwrap_or_else(|error| panic!("first preparation: {error}"));
     assert!(prepared.preparation.backup_path.is_none());
     assert!(super::snapshot(&backup).expect("preserved backup") == before);
@@ -1105,7 +1173,7 @@ fn parser_sharing_rolling_unsafe_backup_blocks_before_initializer() {
     for oversized in [false, true] {
         let fixture = Fixture::new();
         let path = fixture.parser();
-        let backup = fixture.0.join("parser.toml.bio-backup");
+        let backup = fixture.path.join("parser.toml.bio-backup");
         std::fs::write(&path, ORIGINAL).expect("original");
         if oversized {
             std::fs::write(
@@ -1117,7 +1185,9 @@ fn parser_sharing_rolling_unsafe_backup_blocks_before_initializer() {
             std::fs::create_dir(&backup).expect("backup directory");
         }
         let initializer = rolling_initializer(&path, CURRENT);
-        assert!(prepare_parser_at(&path, &fixture.0.join("never.exe"), &[], &initializer).is_err());
+        assert!(
+            prepare_parser_at(&path, &fixture.path.join("never.exe"), &[], &initializer).is_err()
+        );
         assert_eq!(initializer.calls.load(Ordering::Relaxed), 0);
         assert_eq!(std::fs::read(&path).expect("original"), ORIGINAL.as_bytes());
         assert_eq!(
@@ -1147,11 +1217,11 @@ fn parser_sharing_rolling_unknown_observation_retains_recovery_and_blocks_retry(
     }
     let fixture = Fixture::new();
     let path = fixture.parser();
-    let recovery = fixture.0.join("parser.toml.bio-recovery");
+    let recovery = fixture.path.join("parser.toml.bio-recovery");
     std::fs::write(&path, ORIGINAL).expect("original");
     let error = prepare_parser_at(
         &path,
-        &fixture.0.join("never.exe"),
+        &fixture.path.join("never.exe"),
         &[],
         &Unobservable(path.clone()),
     )
@@ -1165,7 +1235,7 @@ fn parser_sharing_rolling_unknown_observation_retains_recovery_and_blocks_retry(
     );
     assert!(path.is_dir());
     let initializer = rolling_initializer(&path, CURRENT);
-    assert!(prepare_parser_at(&path, &fixture.0.join("never.exe"), &[], &initializer).is_err());
+    assert!(prepare_parser_at(&path, &fixture.path.join("never.exe"), &[], &initializer).is_err());
     assert_eq!(initializer.calls.load(Ordering::Relaxed), 0);
     assert_eq!(
         rolling_inventory(&fixture),
@@ -1178,8 +1248,8 @@ fn parser_sharing_rolling_initializer_and_version_failures_preserve_old_backup()
     for failure in ["initializer", "version", "merge"] {
         let fixture = Fixture::new();
         let path = fixture.parser();
-        let backup = fixture.0.join("parser.toml.bio-backup");
-        let history = fixture.0.join("parser.toml.bio-backup-historical");
+        let backup = fixture.path.join("parser.toml.bio-backup");
+        let history = fixture.path.join("parser.toml.bio-backup-historical");
         std::fs::write(&path, ORIGINAL).expect("original");
         std::fs::write(&backup, b"previous backup").expect("previous backup");
         std::fs::write(&history, b"historical sentinel").expect("history");
@@ -1190,7 +1260,7 @@ fn parser_sharing_rolling_initializer_and_version_failures_preserve_old_backup()
             "version" => initializer.document = CURRENT.replace("15.0.1", "wrong"),
             _ => initializer.document = CURRENT.replace("answer = 'new'", "nested = 42"),
         }
-        let error = prepare_parser_at(&path, &fixture.0.join("never.exe"), &[], &initializer)
+        let error = prepare_parser_at(&path, &fixture.path.join("never.exe"), &[], &initializer)
             .err()
             .expect("preparation must fail");
         assert!(!error.contains("restoration failed"));
@@ -1217,11 +1287,11 @@ fn parser_sharing_rolling_initializer_and_version_failures_preserve_old_backup()
 #[test]
 fn parser_sharing_rolling_suffix_uses_complete_supplied_filename() {
     let fixture = Fixture::new();
-    let path = fixture.0.join("custom.parser.世界.toml");
-    let backup = fixture.0.join("custom.parser.世界.toml.bio-backup");
+    let path = fixture.path.join("custom.parser.世界.toml");
+    let backup = fixture.path.join("custom.parser.世界.toml.bio-backup");
     std::fs::write(&path, ORIGINAL).expect("original");
     let initializer = rolling_initializer(&path, CURRENT);
-    let prepared = prepare_parser_at(&path, &fixture.0.join("never.exe"), &[], &initializer)
+    let prepared = prepare_parser_at(&path, &fixture.path.join("never.exe"), &[], &initializer)
         .unwrap_or_else(|error| panic!("custom filename: {error}"));
     assert_eq!(prepared.preparation.backup_path.as_ref(), Some(&backup));
     assert_eq!(std::fs::read(&backup).expect("backup"), ORIGINAL.as_bytes());
@@ -1248,17 +1318,16 @@ fn parser_sharing_rolling_readonly_noop_and_replacement_keep_permissions() {
     struct Cleanup<'a>(&'a Fixture, std::fs::Permissions);
     impl Drop for Cleanup<'_> {
         fn drop(&mut self) {
-            for entry in std::fs::read_dir(&self.0.0)
-                .expect("fixture cleanup")
-                .flatten()
-            {
-                let _ = std::fs::set_permissions(entry.path(), self.1.clone());
+            if let Ok(entries) = std::fs::read_dir(&self.0.path) {
+                for entry in entries.flatten() {
+                    let _ = std::fs::set_permissions(entry.path(), self.1.clone());
+                }
             }
         }
     }
     let fixture = Fixture::new();
     let path = fixture.parser();
-    let backup = fixture.0.join("parser.toml.bio-backup");
+    let backup = fixture.path.join("parser.toml.bio-backup");
     std::fs::write(&path, CURRENT).expect("original");
     std::fs::write(&backup, b"previous backup").expect("old backup");
     let mut permissions = std::fs::metadata(&path).expect("metadata").permissions();
@@ -1270,7 +1339,7 @@ fn parser_sharing_rolling_readonly_noop_and_replacement_keep_permissions() {
     let before = super::snapshot(&backup).expect("old backup snapshot");
     let initializer =
         WritableInitializer(rolling_initializer(&path, CURRENT), writable_permissions);
-    let noop = prepare_parser_at(&path, &fixture.0.join("never.exe"), &[], &initializer)
+    let noop = prepare_parser_at(&path, &fixture.path.join("never.exe"), &[], &initializer)
         .unwrap_or_else(|error| panic!("readonly no-op: {error}"));
     assert!(noop.preparation.backup_path.is_none());
     assert!(super::snapshot(&backup).expect("unchanged readonly backup") == before);
@@ -1290,7 +1359,7 @@ fn parser_sharing_rolling_readonly_noop_and_replacement_keep_permissions() {
         let old_backup = super::snapshot(&backup).expect("previous backup snapshot");
         match prepare_parser_at(
             &path,
-            &fixture.0.join("never.exe"),
+            &fixture.path.join("never.exe"),
             &strings(&[phrase]),
             &initializer,
         ) {

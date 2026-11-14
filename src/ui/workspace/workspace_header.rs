@@ -1116,6 +1116,7 @@ mod tests {
     #[test]
     fn manual_wlb_draft_fallback_overlays_and_preserves_opaque_metadata() {
         use std::io::Read;
+        let _parser_guard = crate::app::mod_installer_parser::coordinate_parser_test();
         let original = serde_json::json!({"format_version":1,"game_install":"BGEE","install_mode":"start_from_scratch","weidu_logs":{"bgee":"~MOD/MOD.TP2~ #2 #17 // Label // @wlb-inputs: stale"},"future_key":{"opaque":[42,"世界"]},"parser_choice_phrases":["Embedded"],"archive_meta":[{"name":"archive.zip","size":42,"hash":"abc"}],"allow_auto_install":false,"forked_from":[{"name":"Root","author":"@root"}]});
         let code = crate::app::modlist_share::encode_share_payload_text(&original.to_string())
             .expect("code");

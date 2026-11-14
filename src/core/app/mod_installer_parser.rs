@@ -926,3 +926,39 @@ pub(crate) fn prepare_local_parser_with_rules(
 #[cfg(test)]
 #[path = "mod_installer_parser_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+static PARSER_TEST_COORDINATION: (std::sync::Mutex<bool>, std::sync::Condvar) =
+    (std::sync::Mutex::new(false), std::sync::Condvar::new());
+
+#[cfg(test)]
+pub(crate) struct ParserTestGuard;
+
+#[cfg(test)]
+pub(crate) fn coordinate_parser_test() -> ParserTestGuard {
+    let (mutex, available) = &PARSER_TEST_COORDINATION;
+    let (mut occupied, _) = available
+        .wait_timeout_while(
+            mutex
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner),
+            std::time::Duration::from_secs(30),
+            |occupied| *occupied,
+        )
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    assert!(!*occupied, "parser test coordination deadline");
+    *occupied = true;
+    drop(occupied);
+    ParserTestGuard
+}
+
+#[cfg(test)]
+impl Drop for ParserTestGuard {
+    fn drop(&mut self) {
+        let (mutex, available) = &PARSER_TEST_COORDINATION;
+        *mutex
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = false;
+        available.notify_one();
+    }
+}
