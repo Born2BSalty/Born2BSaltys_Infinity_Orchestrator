@@ -98,8 +98,7 @@ fn scan_components_for_tp2(
     let expected_tp2 = tp2
         .file_name()
         .and_then(|n| n.to_str())
-        .map(normalize_tp_file)
-        .unwrap_or_default();
+        .map_or_else(Default::default, normalize_tp_file);
     let languages = candidate_language_ids(
         scan_ctx.weidu,
         tp2,

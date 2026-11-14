@@ -189,8 +189,8 @@ fn continuous_constraint_document_and_entry_rejection_recover_independently() {
         ),
     ] {
         let rejected = metadata_from_text(text);
-        assert!(rejected.records.is_empty());
-        assert!(!rejected.diagnostics.is_empty());
+        assert_eq!(rejected.records, []);
+        assert_ne!(rejected.diagnostics, [] as [String; 0]);
         assert_eq!(metadata_from_text(METADATA).records.len(), 1);
     }
     let entry = METADATA.split_once("[[constraints]]").expect("record").1;
@@ -206,7 +206,7 @@ fn continuous_constraint_document_and_entry_rejection_recover_independently() {
     );
     let parsed = metadata_from_text(&mixed);
     assert_eq!(parsed.records.len(), 1);
-    assert!(!parsed.diagnostics.is_empty());
+    assert_ne!(parsed.diagnostics, [] as [String; 0]);
     let duplicate = format!(
         "{METADATA}\n[[constraints]]\n{}",
         entry.replace("continuous-end-before-eet-end-v1", "duplicate")
@@ -732,8 +732,8 @@ fn continuous_constraint_rejected_overlap_and_legacy_unknown_field_have_no_autho
             .replace("install_before", "install_after")
     );
     let rejected = metadata_from_text(&conflict);
-    assert!(rejected.records.is_empty());
-    assert!(!rejected.diagnostics.is_empty());
+    assert_eq!(rejected.records, []);
+    assert_ne!(rejected.diagnostics, [] as [String; 0]);
     let legacy = toml::from_str::<CompatRulesFile>("schema_version=1\npredicate_constraints=[{ id='pretend-authority' }]\n[[rules]]\nmod='legacy'\nkind='warning'\nmessage='kept'").expect("existing legacy unknown field behavior");
     assert_eq!(legacy.rules.len(), 1);
     assert_eq!(legacy.rules[0].message, "kept");

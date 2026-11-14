@@ -316,8 +316,7 @@ fn overlay_workspace_logs(
     };
     let mut answers = obj
         .get("answers")
-        .map(ShareAnswers::parse)
-        .unwrap_or_default();
+        .map_or_else(Default::default, ShareAnswers::parse);
     for (slot, order) in [first, ("bg2ee", &workspace.order_bg2ee)] {
         if !order.iter().any(|item| !item.answer_sets().is_empty()) {
             continue;

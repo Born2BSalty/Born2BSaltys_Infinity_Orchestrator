@@ -22,11 +22,12 @@ pub(super) struct ModLayout {
 
 impl ModLayout {
     pub(super) fn for_tp2(tp2_path: &Path) -> Self {
-        let mod_dir = tp2_path.parent().map(Path::to_path_buf).unwrap_or_default();
+        let mod_dir = tp2_path
+            .parent()
+            .map_or_else(Default::default, Path::to_path_buf);
         let folder_name = mod_dir
             .file_name()
-            .map(|name| name.to_string_lossy().into_owned())
-            .unwrap_or_default();
+            .map_or_else(Default::default, |name| name.to_string_lossy().into_owned());
         Self {
             mod_dir,
             folder_name,

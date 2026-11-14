@@ -154,7 +154,7 @@ fn first_tab_issue_target(
             tp_file: item.tp_file.clone(),
             component_id: item.component_id.clone(),
             component_key: item.raw_line.clone(),
-            issue: issue.clone(),
+            issue,
         };
         if marker_is_blocking(marker.kind.as_str()) {
             return Some(target);

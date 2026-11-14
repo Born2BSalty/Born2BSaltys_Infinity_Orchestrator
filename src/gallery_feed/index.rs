@@ -246,7 +246,7 @@ pub(crate) fn entries_from_index<'a>(
             Some(requirements) if !requirements.is_empty() => requirements,
             _ => requirements_for(game).to_string(),
         };
-        let game_version = preview.game_version.clone();
+        let game_version = preview.game_version;
         result.push(FeedEntry {
             id: entry.id,
             name: entry.name,

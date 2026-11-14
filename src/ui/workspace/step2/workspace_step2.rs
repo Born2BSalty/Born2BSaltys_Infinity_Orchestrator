@@ -565,8 +565,9 @@ fn render_global_mods_scan_confirm(
                     .settings_store
                     .load()
                     .ok()
-                    .map(|s| s.step1.effective_global_mods_folder().to_string())
-                    .unwrap_or_default(),
+                    .map_or_else(Default::default, |s| {
+                        s.step1.effective_global_mods_folder().to_string()
+                    }),
                 ModsSource::InstallationFolder => orchestrator
                     .workspace_state
                     .get(modlist_id.as_str())

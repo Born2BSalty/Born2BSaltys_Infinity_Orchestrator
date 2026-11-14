@@ -681,7 +681,7 @@ fn planned_preview_answers_render_both_branches_live_without_changing_drafts() {
             1
         );
         painted_label(&harness, "Detected %bgee_dir%?\n1 = Yes\n2 = No");
-        let mut expected = original.clone().unwrap();
+        let mut expected = original.unwrap();
         expected.active = 1;
         assert_eq!(
             harness.state().step3.installer_answers.as_ref(),

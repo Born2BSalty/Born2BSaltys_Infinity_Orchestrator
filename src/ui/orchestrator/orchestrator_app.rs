@@ -1734,8 +1734,7 @@ mod tests {
         let probe = format!("isolation-probe-{}", std::process::id());
         let real_before = SettingsStore::new_default()
             .load()
-            .map(|s| s.general.user_name)
-            .unwrap_or_default();
+            .map_or_else(|_| String::new(), |s| s.general.user_name);
         let mut app = OrchestratorApp::new_isolated_for_test("isolationtest");
         app.redesign_settings.user_name.clone_from(&probe);
         app.flush_all_now();
@@ -1744,8 +1743,7 @@ mod tests {
         drop(app);
         let real_after = SettingsStore::new_default()
             .load()
-            .map(|s| s.general.user_name)
-            .unwrap_or_default();
+            .map_or_else(|_| String::new(), |s| s.general.user_name);
         assert_eq!(real_after, real_before);
         assert_ne!(real_after, probe);
     }

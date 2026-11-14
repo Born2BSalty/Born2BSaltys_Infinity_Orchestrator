@@ -36,13 +36,11 @@ pub(in crate::app) fn compat_component_matches(
     let component_ids = rule
         .component_id
         .as_ref()
-        .map(StringOrMany::trimmed_items)
-        .unwrap_or_default();
+        .map_or_else(Default::default, StringOrMany::trimmed_items);
     let component_labels = rule
         .component
         .as_ref()
-        .map(StringOrMany::trimmed_items)
-        .unwrap_or_default();
+        .map_or_else(Default::default, StringOrMany::trimmed_items);
     let has_component_selector = !component_ids.is_empty() || !component_labels.is_empty();
     if !has_component_selector {
         return true;
@@ -154,7 +152,7 @@ pub(in crate::app) fn non_empty(value: Option<&str>) -> Option<String> {
 }
 
 pub(super) fn string_or_many_items(value: Option<&StringOrMany>) -> Vec<String> {
-    value.map(StringOrMany::trimmed_items).unwrap_or_default()
+    value.map_or_else(Default::default, StringOrMany::trimmed_items)
 }
 
 fn option_list_matches(option: Option<&StringOrMany>, value: &str) -> bool {

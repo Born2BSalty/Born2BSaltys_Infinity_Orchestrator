@@ -80,8 +80,7 @@ pub(crate) fn spawn_update_check_worker(
             if done >= total {
                 let final_outcomes = outcomes
                     .lock()
-                    .map(|value| value.clone())
-                    .unwrap_or_default();
+                    .map_or_else(|_| Vec::default(), |value| value.clone());
                 let _ = tx.send(Step2UpdateCheckEvent::Finished(final_outcomes));
                 break;
             }

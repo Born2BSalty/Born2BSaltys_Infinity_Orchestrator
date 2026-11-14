@@ -485,8 +485,7 @@ fn render_fork_info_popup(
                 .workspace_view
                 .fork_meta
                 .as_ref()
-                .map(|m| m.forked_from.clone())
-                .unwrap_or_default(),
+                .map_or_else(Default::default, |m| m.forked_from.clone()),
         ),
     };
 

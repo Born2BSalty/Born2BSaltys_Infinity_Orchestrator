@@ -67,14 +67,15 @@ fn mod_state_from_group(
     }
     let derived_weidu_groups = tp2_text
         .as_deref()
-        .map(|tp2_text| groups::detect_weidu_groups(&tp2_path, tp2_text, &deduped_components))
-        .unwrap_or_default();
-    let derived_collapsible_groups = tp2_text
-        .as_deref()
-        .map(|tp2_text| {
-            groups::detect_derived_collapsible_groups(&tp_file, tp2_text, &deduped_components)
-        })
-        .unwrap_or_default();
+        .map_or_else(Default::default, |tp2_text| {
+            groups::detect_weidu_groups(&tp2_path, tp2_text, &deduped_components)
+        });
+    let derived_collapsible_groups =
+        tp2_text
+            .as_deref()
+            .map_or_else(Default::default, |tp2_text| {
+                groups::detect_derived_collapsible_groups(&tp_file, tp2_text, &deduped_components)
+            });
     let hidden_prompt_like_component_ids = hidden::detect_hidden_prompt_like_component_ids(
         Some(&tp2_path),
         tp2_text.as_deref(),

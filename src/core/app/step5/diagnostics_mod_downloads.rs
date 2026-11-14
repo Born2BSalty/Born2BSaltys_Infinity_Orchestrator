@@ -212,7 +212,7 @@ fn write_update_extract_json(
                 "archive_path": archive_path,
                 "archive_exists": archive_path.exists(),
                 "selected_source_id": selected_source_id(state, &asset.tp_file),
-                "aliases": source.as_ref().map(|source| source.aliases.clone()).unwrap_or_default(),
+                "aliases": source.as_ref().map_or_else(Default::default, |source| source.aliases.clone()),
                 "tp2_rename": source.as_ref().and_then(|source| source.tp2_rename.as_ref()).map(|rename| json!({
                     "from": rename.from,
                     "to": rename.to,
