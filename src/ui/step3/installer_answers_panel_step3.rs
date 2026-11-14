@@ -10,6 +10,7 @@ use crate::app::state::{
 use crate::ui::orchestrator::widgets::btn::{BtnOpts, redesign_btn};
 use crate::ui::orchestrator::widgets::drawer::{self, DrawerSpec, DrawerWidth};
 use crate::ui::orchestrator::widgets::tab_strip::{TabItem, render_tab_strip};
+use crate::ui::prompt_planned_path::{planned_eet_bgee_path, render_eet_planned_paths};
 use crate::ui::shared::redesign_tokens::{ThemePalette, redesign_text_muted};
 use crate::ui::step3::installer_answers_step3::{
     answer_languages, current_target_available, editing_locked, save_current, select_language,
@@ -25,6 +26,7 @@ pub(crate) fn render(ctx: &egui::Context, state: &mut WizardState, palette: Them
         state.step3.installer_answers = None;
         return false;
     }
+    let planned_bgee_path = planned_eet_bgee_path(&state.step1);
     let Some(mut editor) = state.step3.installer_answers.take() else {
         return false;
     };
@@ -45,7 +47,7 @@ pub(crate) fn render(ctx: &egui::Context, state: &mut WizardState, palette: Them
         ctx,
         palette,
         &spec,
-        |ui| requested_language = render_body(ui, &mut editor, palette),
+        |ui| requested_language = render_body(ui, &mut editor, palette, planned_bgee_path),
         |ui| {
             let save = redesign_btn(
                 ui,
@@ -91,6 +93,7 @@ fn render_body(
     ui: &mut egui::Ui,
     editor: &mut InstallerAnswersEditor,
     palette: ThemePalette,
+    planned_bgee_path: Option<&str>,
 ) -> Option<String> {
     if editor.review_missing {
         ui.strong(format!(
@@ -135,6 +138,7 @@ fn render_body(
         ui.add_space(16.0);
     }
     let target = &mut editor.targets[editor.active];
+    let questions = render_eet_planned_paths(&target.questions, &target.tp_file, planned_bgee_path);
     ui.label(
         egui::RichText::new(&target.title).family(egui::FontFamily::Name("poppins_medium".into())),
     );
@@ -160,7 +164,7 @@ fn render_body(
                 for column in columns.iter_mut() {
                     column.spacing_mut().item_spacing.x = item_spacing;
                 }
-                render_questions(&mut columns[0], &target.questions);
+                render_questions(&mut columns[0], &questions);
                 render_answer_section(
                     &mut columns[1],
                     &mut target.answers,
@@ -175,7 +179,7 @@ fn render_body(
         ui.add_space(20.0);
         ui.separator();
         ui.add_space(12.0);
-        render_questions(ui, &target.questions);
+        render_questions(ui, &questions);
     }
     requested_language
 }

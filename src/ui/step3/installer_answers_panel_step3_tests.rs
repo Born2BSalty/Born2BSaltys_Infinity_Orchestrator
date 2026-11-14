@@ -605,3 +605,87 @@ fn language_tabs_drawer_palette_snapshots() {
         }
     }
 }
+
+fn planned_preview_editor() -> WizardState {
+    let mut state = drawer_fixture();
+    state.step1.game_install = "EET".to_string();
+    state.step1.new_pre_eet_dir_enabled = true;
+    state.step1.eet_pre_dir = "planned/Pré EET".to_string();
+    let editor = state.step3.installer_answers.as_mut().unwrap();
+    editor.game_install = "EET".to_string();
+    let target = &mut editor.targets[0];
+    target.game_tab = "BG2EE".to_string();
+    target.tp_file = "EET.tp2".to_string();
+    target.title = "EET core".to_string();
+    target.questions = "Detected %bgee_dir%?\n1 = Yes\n2 = No".to_string();
+    let mut other = target.clone();
+    other.tp_file = "other.tp2".to_string();
+    other.title = "Other component".to_string();
+    editor.targets.push(other);
+    state
+}
+
+#[test]
+fn planned_preview_answers_render_both_branches_live_without_changing_drafts() {
+    for (name, width) in [("wide", 1200.0), ("narrow", 650.0)] {
+        let state = planned_preview_editor();
+        let original = state.step3.installer_answers.clone();
+        let mut fonts_installed = false;
+        let mut harness = Harness::builder()
+            .with_size(egui::vec2(width, 900.0))
+            .build_state(
+                move |ctx, state: &mut WizardState| {
+                    if !fonts_installed {
+                        crate::ui::shared::redesign_fonts::install_redesign_fonts(ctx);
+                        fonts_installed = true;
+                        ctx.request_repaint();
+                        return;
+                    }
+                    let path = crate::ui::prompt_planned_path::planned_eet_bgee_path(&state.step1);
+                    egui::CentralPanel::default().show(ctx, |ui| {
+                        super::render_body(
+                            ui,
+                            state.step3.installer_answers.as_mut().unwrap(),
+                            ThemePalette::Dark,
+                            path,
+                        );
+                    });
+                },
+                state,
+            );
+        painted_label(&harness, "Detected planned/Pré EET?\n1 = Yes\n2 = No");
+        assert_eq!(harness.state().step3.installer_answers, original);
+        harness.state_mut().step1.eet_pre_dir = "changed/BGEE".to_string();
+        harness.run();
+        painted_label(&harness, "Detected changed/BGEE?\n1 = Yes\n2 = No");
+        assert_eq!(harness.state().step3.installer_answers, original);
+        if let Some(directory) = std::env::var_os("BIO_TEST_SCREENSHOT_DIR") {
+            let directory = std::path::PathBuf::from(directory);
+            std::fs::create_dir_all(&directory).unwrap();
+            harness
+                .render()
+                .unwrap()
+                .save(directory.join(format!("eet-step3-preview-{name}.png")))
+                .unwrap();
+        }
+        click_label(&mut harness, "1 / 2 — BG2EE · EET core");
+        click_label(&mut harness, "BG2EE · Other component");
+        assert_eq!(
+            harness
+                .state()
+                .step3
+                .installer_answers
+                .as_ref()
+                .unwrap()
+                .active,
+            1
+        );
+        painted_label(&harness, "Detected %bgee_dir%?\n1 = Yes\n2 = No");
+        let mut expected = original.clone().unwrap();
+        expected.active = 1;
+        assert_eq!(
+            harness.state().step3.installer_answers.as_ref(),
+            Some(&expected)
+        );
+    }
+}

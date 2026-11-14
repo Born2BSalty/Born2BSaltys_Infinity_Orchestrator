@@ -4,11 +4,13 @@
 use eframe::egui;
 
 use crate::app::prompt_eval_context::build_prompt_eval_context;
+use crate::app::prompt_jump_targets::prompt_popup_mod_ref;
 use crate::app::prompt_popup_nav;
 use crate::app::prompt_popup_text::{
     PromptToolbarModEntry, format_prompt_toolbar_row, prompt_toolbar_count,
 };
 use crate::app::state::{PromptPopupMode, WizardState};
+use crate::ui::prompt_planned_path::{planned_eet_bgee_path, render_eet_planned_paths};
 use crate::ui::shared::layout_tokens_global::{SPACE_MD, SPACE_SM, SPACE_XS};
 
 const PROMPT_TOOLBAR_ROW_H: f32 = 22.0;
@@ -25,6 +27,11 @@ pub fn render_prompt_popup(ui: &mut egui::Ui, state: &mut WizardState) {
     let title = state.step2.prompt_popup_title.clone();
     let text = state.step2.prompt_popup_text.clone();
     let jump_ids = prompt_popup_nav::collect_text_prompt_jump_ids(state, &title, &text);
+    let display_text = render_eet_planned_paths(
+        &text,
+        &prompt_popup_mod_ref(&title),
+        planned_eet_bgee_path(&state.step1),
+    );
     let mut open = state.step2.prompt_popup_open;
     let mut jump_to_component_id: Option<u32> = None;
     let window_title = format!("Parsed prompts - {title}");
@@ -57,7 +64,7 @@ pub fn render_prompt_popup(ui: &mut egui::Ui, state: &mut WizardState) {
                 .max_height(max_scroll_height)
                 .show(ui, |ui| {
                     ui.set_min_width(scroll_width);
-                    ui.label(&text);
+                    ui.label(&display_text);
                 });
             let trailing_top = ui.cursor().top();
             if jump_ids.is_empty() {
@@ -249,3 +256,7 @@ fn render_prompt_toolbar_popup(ui: &egui::Ui, state: &mut WizardState) {
         prompt_popup_nav::apply_toolbar_prompt_jump(state, &mod_ref, component_id);
     }
 }
+
+#[cfg(test)]
+#[path = "prompt_popup_planned_path_step2_tests.rs"]
+mod planned_path_tests;
