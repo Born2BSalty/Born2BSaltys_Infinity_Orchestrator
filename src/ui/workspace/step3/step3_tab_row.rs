@@ -61,6 +61,13 @@ pub(crate) fn render(
             Step3RowIntent::Redo => toolbar_support_step3::redo_active(state),
             Step3RowIntent::CollapseAll => toolbar_support_step3::collapse_all_active(state),
             Step3RowIntent::ExpandAll => toolbar_support_step3::expand_all_active(state),
+            Step3RowIntent::AddSeparator => {
+                toolbar_support_step3::add_separator_from_toolbar(state);
+            }
+            Step3RowIntent::CollapseSections => {
+                toolbar_support_step3::collapse_sections_active(state);
+            }
+            Step3RowIntent::ExpandSections => toolbar_support_step3::expand_sections_active(state),
         }
     }
 
@@ -73,6 +80,7 @@ struct Step3RowState {
     prompt_count: usize,
     can_undo: bool,
     can_redo: bool,
+    component_count: usize,
     dual_game: bool,
 }
 
@@ -103,6 +111,14 @@ impl Step3RowState {
             } else {
                 !state.step3.bg2ee_redo_stack.is_empty()
             },
+            component_count: if active_is_bgee {
+                &state.step3.bgee_items
+            } else {
+                &state.step3.bg2ee_items
+            }
+            .iter()
+            .filter(|item| !item.is_parent)
+            .count(),
             dual_game: workspace_step4::is_dual_game(state),
         }
     }
@@ -207,6 +223,33 @@ fn render_actions(
         if step3_button(
             ui,
             palette,
+            "Expand sections",
+            true,
+            crate::ui::shared::tooltip_global::STEP3_EXPAND_SECTIONS,
+        ) {
+            *pending = Some(Step3RowIntent::ExpandSections);
+        }
+        if step3_button(
+            ui,
+            palette,
+            "Collapse sections",
+            true,
+            crate::ui::shared::tooltip_global::STEP3_COLLAPSE_SECTIONS,
+        ) {
+            *pending = Some(Step3RowIntent::CollapseSections);
+        }
+        if step3_button(
+            ui,
+            palette,
+            "Add separator",
+            row.component_count > 0,
+            crate::ui::shared::tooltip_global::STEP3_ADD_SEPARATOR,
+        ) {
+            *pending = Some(Step3RowIntent::AddSeparator);
+        }
+        if step3_button(
+            ui,
+            palette,
             "Redo",
             row.can_redo,
             crate::ui::shared::tooltip_global::STEP3_REDO,
@@ -255,6 +298,9 @@ enum Step3RowIntent {
     Redo,
     CollapseAll,
     ExpandAll,
+    AddSeparator,
+    CollapseSections,
+    ExpandSections,
 }
 
 fn clickable_pill(

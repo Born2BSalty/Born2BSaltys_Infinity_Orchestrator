@@ -158,6 +158,7 @@ pub mod step2_action;
 pub mod step2_worker;
 pub mod step3_history;
 pub mod step3_prompt_edit;
+pub mod step3_separators;
 pub mod step3_toolbar;
 #[path = "state/step4_action.rs"]
 pub mod step4_action;

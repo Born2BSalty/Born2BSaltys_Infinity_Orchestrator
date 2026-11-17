@@ -64,6 +64,9 @@ fn step3_fingerprint(state: &WizardState) -> u64 {
         item.selected_order.hash(&mut h);
         item.block_id.hash(&mut h);
         item.is_parent.hash(&mut h);
+        if item.is_separator() {
+            item.mod_name.hash(&mut h);
+        }
     }
     collapsed.len().hash(&mut h);
     for block in collapsed {

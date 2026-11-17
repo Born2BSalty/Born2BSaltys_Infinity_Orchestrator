@@ -5,10 +5,12 @@ use eframe::egui;
 use std::collections::HashMap;
 
 use crate::app::compat_step3_rules::Step3CompatMarker;
+use crate::app::game_authority::{self, GameSlot};
 use crate::app::prompt_eval_summary_step3;
 use crate::app::state::{Step2Selection, Step3ItemState, WizardState};
 use crate::app::step3_history::{self, Step3HistoryEntry, Step3TouchedRows};
 use crate::app::step3_prompt_edit::PromptActionRequest;
+use crate::app::step3_separators::{SeparatorRename, section_indices};
 use crate::parser::prompt_eval_expr::PromptEvalContext;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::shared::layout_tokens_global::BORDER_THIN;
@@ -29,7 +31,12 @@ use crate::ui::step3::move_selection_step3::{
 };
 use crate::ui::step3::service_step3;
 use crate::ui::step3::state_step3;
+use crate::ui::step3::toolbar_support_step3;
 use crate::ui::workspace::widgets::weidu_line;
+
+use super::step3_separator_row::{
+    RenameOutcome, SeparatorRowView, commit_separator_rename, render_separator_row,
+};
 
 const MOVE_LOCKED_NOTICE: &str = "Locked mods cannot be moved. Unlock them first.";
 
@@ -54,6 +61,8 @@ const HEADER_DOT_RADIUS: f32 = 0.7;
 struct RenderCtx<'a> {
     palette: ThemePalette,
     tab_id: &'a str,
+    tab_slot: GameSlot,
+    separator_rename: &'a mut Option<SeparatorRename>,
     prompt_eval: &'a PromptEvalContext,
     compat_markers: &'a HashMap<String, Step3CompatMarker>,
     visible_indices: &'a [usize],
@@ -89,6 +98,14 @@ struct RowAccumulator {
     )>,
     move_request: Option<(usize, MoveSelectionTarget)>,
     drag_refused_locked: bool,
+    separator_request: Option<SeparatorRequest>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SeparatorRequest {
+    AddAbove(usize),
+    Rename(usize),
+    Remove(usize),
 }
 
 impl RowAccumulator {
@@ -101,6 +118,7 @@ impl RowAccumulator {
             open_compat_popup: None,
             move_request: None,
             drag_refused_locked: false,
+            separator_request: None,
         }
     }
 }
@@ -202,6 +220,17 @@ fn run_row_pipeline(
     prompt_eval: &crate::parser::prompt_eval_expr::PromptEvalContext,
     initial_jump: bool,
 ) -> (Option<RowAccumulator>, bool) {
+    let tab_slot = game_authority::slot_for_tab(tab_id);
+    let rename_on_this_tab = state
+        .step3
+        .separator_rename
+        .as_ref()
+        .is_some_and(|rename| rename.tab == tab_slot);
+    let mut separator_rename = if rename_on_this_tab {
+        state.step3.separator_rename.take()
+    } else {
+        None
+    };
     let (
         items,
         selected,
@@ -228,6 +257,11 @@ fn run_row_pipeline(
         );
         return (None, initial_jump);
     }
+    separator_rename.take_if(|rename| {
+        !items
+            .iter()
+            .any(|item| item.is_separator() && item.block_id == rename.block_id)
+    });
 
     let total_child_count = items.iter().filter(|i| !i.is_parent).count();
     let visible_indices = blocks::visible_indices(items, collapsed_blocks);
@@ -236,6 +270,8 @@ fn run_row_pipeline(
     let mut ctx = RenderCtx {
         palette,
         tab_id,
+        tab_slot,
+        separator_rename: &mut separator_rename,
         prompt_eval,
         compat_markers,
         visible_indices: &visible_indices,
@@ -271,6 +307,9 @@ fn run_row_pipeline(
         .inner;
 
     run_drag_pipeline(ui, &mut ctx, &acc.visible_rows);
+    if rename_on_this_tab || separator_rename.is_some() {
+        state.step3.separator_rename = separator_rename;
+    }
 
     (Some(acc), jump_flag)
 }
@@ -313,6 +352,16 @@ fn render_rows(ui: &mut egui::Ui, ctx: &mut RenderCtx<'_>, lineno_w: f32) -> Row
             child_counter += 1;
             let right = render_child_row(ui, ctx, idx, &mut acc, child_counter, lineno_w, false);
             measured = measured.max(right - list_left_x + SCROLLBAR_RESERVE);
+            pos += 1;
+            continue;
+        }
+
+        if ctx.items[idx].is_separator() {
+            if !first_group {
+                ui.add_space(GROUP_GAP_PX * 2.0);
+            }
+            first_group = false;
+            render_separator(ui, ctx, idx, &mut acc, list_left_x + group_w);
             pos += 1;
             continue;
         }
@@ -507,7 +556,82 @@ fn paint_lock_button(ui: &mut egui::Ui, is_locked: bool, color: egui::Color32) -
     response
 }
 
-fn paint_chevron_button(
+fn render_separator(
+    ui: &mut egui::Ui,
+    ctx: &mut RenderCtx<'_>,
+    idx: usize,
+    acc: &mut RowAccumulator,
+    right_x: f32,
+) {
+    let block_id = ctx.items[idx].block_id.clone();
+    let name = ctx.items[idx].mod_name.clone();
+    let collapsed = ctx.collapsed_blocks.contains(&block_id);
+    let mod_count = section_indices(ctx.items, idx)
+        .into_iter()
+        .filter(|row| ctx.items[*row].is_mod_header())
+        .count();
+    let view = SeparatorRowView {
+        palette: ctx.palette,
+        name: &name,
+        collapsed,
+        mod_count,
+        right_x,
+    };
+    let rename = ctx
+        .separator_rename
+        .as_mut()
+        .filter(|rename| rename.block_id == block_id);
+    let renaming = rename.is_some();
+    let row = render_separator_row(ui, &view, rename);
+
+    if row.chevron_clicked {
+        toggle_collapsed(ctx, &block_id, collapsed);
+    }
+    match row.rename {
+        Some(RenameOutcome::Commit(text)) => {
+            commit_separator_rename(ctx.items, idx, &text, ctx.undo_stack, ctx.redo_stack);
+            *ctx.separator_rename = None;
+        }
+        Some(RenameOutcome::Cancel) => *ctx.separator_rename = None,
+        Some(RenameOutcome::Editing) | None => {}
+    }
+
+    let drag_id = ui.make_persistent_id(("step3b_drag_separator", ctx.tab_id, idx));
+    let drag_response = ui.interact(row.grab_rect, drag_id, egui::Sense::click_and_drag());
+    let on_name = drag_response
+        .interact_pointer_pos()
+        .is_some_and(|pos| row.name_rect.contains(pos));
+    if !renaming && on_name && drag_response.double_clicked() {
+        *ctx.separator_rename = Some(SeparatorRename {
+            tab: ctx.tab_slot,
+            block_id,
+            text: name,
+            focus_pending: true,
+        });
+    }
+
+    render_separator_context_menu(&drag_response, idx, acc);
+    acc.visible_rows.push((idx, row.row_rect));
+    handle_jump_to_selected(ui, ctx, idx, row.row_rect);
+    handle_row_selection(ui, ctx, idx, &drag_response, &drag_response);
+    if handle_drag_start(ui, ctx, idx, &drag_response, &acc.visible_rows)
+        == DragStart::RefusedLocked
+    {
+        acc.drag_refused_locked = true;
+    }
+}
+
+fn toggle_collapsed(ctx: &mut RenderCtx<'_>, block_id: &str, collapsed: bool) {
+    if collapsed {
+        ctx.collapsed_blocks.retain(|v| v != block_id);
+    } else if !ctx.collapsed_blocks.iter().any(|v| v == block_id) {
+        ctx.collapsed_blocks.push(block_id.to_string());
+    }
+    ctx.selected.clear();
+    *ctx.anchor = None;
+}
+
+pub(super) fn paint_chevron_button(
     ui: &mut egui::Ui,
     collapsed: bool,
     color: egui::Color32,
@@ -880,6 +1004,30 @@ fn render_move_selection_entries(ui: &mut egui::Ui, idx: usize, acc: &mut RowAcc
     ui.separator();
 }
 
+fn render_add_separator_entry(ui: &mut egui::Ui, idx: usize, acc: &mut RowAccumulator) {
+    if ui.button("Add separator above").clicked() {
+        acc.separator_request = Some(SeparatorRequest::AddAbove(idx));
+        ui.close_menu();
+    }
+}
+
+fn render_separator_context_menu(
+    drag_response: &egui::Response,
+    idx: usize,
+    acc: &mut RowAccumulator,
+) {
+    drag_response.context_menu(|ui| {
+        if ui.button("Rename\u{2026}").clicked() {
+            acc.separator_request = Some(SeparatorRequest::Rename(idx));
+            ui.close_menu();
+        }
+        if ui.button("Remove separator").clicked() {
+            acc.separator_request = Some(SeparatorRequest::Remove(idx));
+            ui.close_menu();
+        }
+    });
+}
+
 fn render_parent_context_menu(
     drag_response: &egui::Response,
     ctx: &mut RenderCtx<'_>,
@@ -888,6 +1036,7 @@ fn render_parent_context_menu(
 ) {
     drag_response.context_menu(|ui| {
         render_move_selection_entries(ui, idx, acc);
+        render_add_separator_entry(ui, idx, acc);
         if ui.button("Clone Parent (empty split target)").clicked() {
             step3_history::push_undo_snapshot(
                 ctx.items,
@@ -913,6 +1062,7 @@ fn render_child_context_menu(
     let mod_name = ctx.items[idx].mod_name.clone();
     drag_response.context_menu(|ui| {
         render_move_selection_entries(ui, idx, acc);
+        render_add_separator_entry(ui, idx, acc);
         if ui.button("Uncheck In Step 2").clicked() {
             acc.uncheck_requests
                 .push((tp_file.clone(), component_id.clone()));
@@ -1109,6 +1259,18 @@ fn flush_row_outcome(
     }
     if !acc.prompt_requests.is_empty() {
         service_step3::prompt_actions::apply_prompt_actions(state, &acc.prompt_requests);
+    }
+    match acc.separator_request.take() {
+        Some(SeparatorRequest::AddAbove(idx)) => {
+            toolbar_support_step3::add_separator_active(state, Some(idx));
+        }
+        Some(SeparatorRequest::Rename(idx)) => {
+            toolbar_support_step3::start_separator_rename_active(state, idx);
+        }
+        Some(SeparatorRequest::Remove(idx)) => {
+            toolbar_support_step3::remove_separator_active(state, idx);
+        }
+        None => {}
     }
     let Some((clicked_idx, target)) = acc.move_request.take() else {
         return acc

@@ -4,6 +4,7 @@
 use std::collections::HashSet;
 
 use crate::app::state::Step3ItemState;
+use crate::app::step3_separators::SEPARATOR_BLOCK_PREFIX;
 
 pub(crate) const STEP3_HISTORY_LIMIT: usize = 100;
 
@@ -42,17 +43,42 @@ pub(crate) fn push_undo_snapshot(
     redo_stack.clear();
 }
 
-pub(crate) fn expand_all(collapsed_blocks: &mut Vec<String>) {
-    collapsed_blocks.clear();
+fn separator_block_ids(items: &[Step3ItemState]) -> HashSet<&str> {
+    items
+        .iter()
+        .filter(|item| item.is_separator())
+        .map(|item| item.block_id.as_str())
+        .collect()
 }
 
-pub(crate) fn collapse_all(items: &[Step3ItemState], collapsed_blocks: &mut Vec<String>) {
-    collapsed_blocks.clear();
-    for item in items.iter().filter(|item| item.is_parent) {
+fn collapse_rows(
+    items: &[Step3ItemState],
+    collapsed_blocks: &mut Vec<String>,
+    wanted: fn(&Step3ItemState) -> bool,
+) {
+    for item in items.iter().filter(|item| wanted(item)) {
         if !collapsed_blocks.contains(&item.block_id) {
             collapsed_blocks.push(item.block_id.clone());
         }
     }
+}
+
+pub(crate) fn expand_all(items: &[Step3ItemState], collapsed_blocks: &mut Vec<String>) {
+    let separators = separator_block_ids(items);
+    collapsed_blocks.retain(|block_id| separators.contains(block_id.as_str()));
+}
+
+pub(crate) fn collapse_all(items: &[Step3ItemState], collapsed_blocks: &mut Vec<String>) {
+    expand_all(items, collapsed_blocks);
+    collapse_rows(items, collapsed_blocks, Step3ItemState::is_mod_header);
+}
+
+pub(crate) fn expand_all_sections(_items: &[Step3ItemState], collapsed_blocks: &mut Vec<String>) {
+    collapsed_blocks.retain(|block_id| !block_id.starts_with(SEPARATOR_BLOCK_PREFIX));
+}
+
+pub(crate) fn collapse_all_sections(items: &[Step3ItemState], collapsed_blocks: &mut Vec<String>) {
+    collapse_rows(items, collapsed_blocks, Step3ItemState::is_separator);
 }
 
 pub(crate) fn redo(
@@ -184,5 +210,54 @@ mod tests {
             Some(touched(&["c", "d"]))
         );
         assert_eq!(items, after_step_2);
+    }
+
+    fn list_with_two_sections() -> Vec<Step3ItemState> {
+        vec![
+            crate::app::step3_separators::separator_row("Fixes", "SEPARATOR::1".to_string()),
+            row("A", "__PARENT__", true),
+            row("A", "1", false),
+            crate::app::step3_separators::separator_row("NPCs", "SEPARATOR::2".to_string()),
+            row("B", "__PARENT__", true),
+            row("B", "1", false),
+        ]
+    }
+
+    #[test]
+    fn collapse_all_leaves_sections_alone() {
+        let items = list_with_two_sections();
+        let mut collapsed = vec!["SEPARATOR::2".to_string()];
+
+        collapse_all(&items, &mut collapsed);
+        assert_eq!(
+            collapsed,
+            vec![
+                "SEPARATOR::2".to_string(),
+                "A::block0".to_string(),
+                "B::block0".to_string()
+            ]
+        );
+
+        expand_all(&items, &mut collapsed);
+        assert_eq!(collapsed, vec!["SEPARATOR::2".to_string()]);
+    }
+
+    #[test]
+    fn collapse_sections_leaves_mods_alone() {
+        let items = list_with_two_sections();
+        let mut collapsed = vec!["A::block0".to_string()];
+
+        collapse_all_sections(&items, &mut collapsed);
+        assert_eq!(
+            collapsed,
+            vec![
+                "A::block0".to_string(),
+                "SEPARATOR::1".to_string(),
+                "SEPARATOR::2".to_string()
+            ]
+        );
+
+        expand_all_sections(&items, &mut collapsed);
+        assert_eq!(collapsed, vec!["A::block0".to_string()]);
     }
 }
