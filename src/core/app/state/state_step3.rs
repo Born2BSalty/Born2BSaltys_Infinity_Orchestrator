@@ -5,6 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::app::answer_sets::{AnswerBook, AnswerSets};
 use crate::app::game_authority::GameSlot;
+use crate::app::step3_separators::{SEPARATOR_COMPONENT_ID, SeparatorAnchor, SeparatorRename};
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct InstallerAnswerDraft {
@@ -62,6 +63,18 @@ pub struct Step3ItemState {
     pub parent_placeholder: bool,
 }
 
+impl Step3ItemState {
+    #[must_use]
+    pub fn is_separator(&self) -> bool {
+        self.is_parent && self.component_id == SEPARATOR_COMPONENT_ID
+    }
+
+    #[must_use]
+    pub fn is_mod_header(&self) -> bool {
+        self.is_parent && !self.is_separator()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Step3State<Flag = bool> {
     pub active_game_tab: String,
@@ -113,6 +126,8 @@ pub struct Step3State<Flag = bool> {
     pub prompt_edit_status: String,
     pub pending_log_placements: Vec<Step3LogPlacement>,
     pub answer_book: AnswerBook,
+    pub pending_separators: Vec<(GameSlot, Vec<SeparatorAnchor>)>,
+    pub separator_rename: Option<SeparatorRename>,
 }
 
 impl<Flag> Step3State<Flag> {
@@ -182,6 +197,8 @@ impl Default for Step3State {
             prompt_edit_status: String::new(),
             pending_log_placements: Vec::new(),
             answer_book: AnswerBook::default(),
+            pending_separators: Vec::new(),
+            separator_rename: None,
         }
     }
 }

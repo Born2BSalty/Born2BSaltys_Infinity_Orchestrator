@@ -26,17 +26,40 @@ pub fn render_weidu_line(
     line_number: Option<usize>,
     lineno_col_w: f32,
 ) {
+    paint_weidu_line(ui, palette, item, line_number, lineno_col_w, false);
+}
+
+pub fn render_review_line(
+    ui: &mut egui::Ui,
+    palette: ThemePalette,
+    item: &Step3ItemState,
+    line_number: Option<usize>,
+    lineno_col_w: f32,
+) {
+    paint_weidu_line(ui, palette, item, line_number, lineno_col_w, true);
+}
+
+fn paint_weidu_line(
+    ui: &mut egui::Ui,
+    palette: ThemePalette,
+    item: &Step3ItemState,
+    line_number: Option<usize>,
+    lineno_col_w: f32,
+    always_reserve_gutter: bool,
+) {
     let text = format_step4_item(item);
 
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 0.0;
 
-        if let Some(n) = line_number {
+        if line_number.is_some() || always_reserve_gutter {
             let (rect, _) = ui.allocate_exact_size(
                 egui::vec2(lineno_col_w, LINENO_FONT_SIZE + 4.0),
                 egui::Sense::hover(),
             );
-            if ui.is_rect_visible(rect) {
+            if let Some(n) = line_number
+                && ui.is_rect_visible(rect)
+            {
                 ui.painter().text(
                     egui::pos2(rect.right(), rect.center().y),
                     egui::Align2::RIGHT_CENTER,

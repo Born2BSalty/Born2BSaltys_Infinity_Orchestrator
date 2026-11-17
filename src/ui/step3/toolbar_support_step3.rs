@@ -5,8 +5,11 @@ pub(crate) use crate::app::step3_toolbar::{
     Step3ToolbarSummary, build_toolbar_summary, open_toolbar_issue_popup, tab_has_conflict,
 };
 
+use crate::app::game_authority;
 use crate::app::state::{Step3ItemState, WizardState};
-use crate::app::step3_history::{Step3HistoryEntry, Step3TouchedRows};
+use crate::app::step3_history::{self, Step3HistoryEntry, Step3TouchedRows};
+use crate::app::step3_separators::{self, SeparatorRename};
+use crate::ui::step3::blocks;
 use crate::ui::step3::move_selection_step3::{
     expand_blocks_hiding_lit_components, restore_selection_after_history,
 };
@@ -28,20 +31,157 @@ pub(crate) fn export_diagnostics_from_step3(
     }
 }
 
-pub(crate) fn expand_all_active(state: &mut WizardState) {
-    let (_, selected, _, _, _, anchor, _, _, _, _, collapsed_blocks, _, _, _, _) =
-        crate::ui::step3::state_step3::active_list_mut(state);
-    crate::app::step3_history::expand_all(collapsed_blocks);
+fn change_collapse_active(
+    state: &mut WizardState,
+    change: fn(&[Step3ItemState], &mut Vec<String>),
+) {
+    let (items, selected, _, _, _, anchor, _, _, _, _, collapsed_blocks, _, _, _, _) =
+        active_list_mut(state);
+    change(items, collapsed_blocks);
     selected.clear();
     *anchor = None;
 }
 
+pub(crate) fn expand_all_active(state: &mut WizardState) {
+    change_collapse_active(state, step3_history::expand_all);
+}
+
 pub(crate) fn collapse_all_active(state: &mut WizardState) {
-    let (items, selected, _, _, _, anchor, _, _, _, _, collapsed_blocks, _, _, _, _) =
-        crate::ui::step3::state_step3::active_list_mut(state);
-    crate::app::step3_history::collapse_all(items, collapsed_blocks);
-    selected.clear();
-    *anchor = None;
+    change_collapse_active(state, step3_history::collapse_all);
+}
+
+pub(crate) fn expand_sections_active(state: &mut WizardState) {
+    change_collapse_active(state, step3_history::expand_all_sections);
+}
+
+pub(crate) fn collapse_sections_active(state: &mut WizardState) {
+    change_collapse_active(state, step3_history::collapse_all_sections);
+}
+
+fn shift_indices_after_insert(selected: &mut [usize], anchor: &mut Option<usize>, at: usize) {
+    for idx in selected.iter_mut().chain(anchor.iter_mut()) {
+        if *idx >= at {
+            *idx += 1;
+        }
+    }
+}
+
+fn shift_indices_after_remove(selected: &mut Vec<usize>, anchor: &mut Option<usize>, at: usize) {
+    selected.retain(|idx| *idx != at);
+    if *anchor == Some(at) {
+        *anchor = None;
+    }
+    for idx in selected.iter_mut().chain(anchor.iter_mut()) {
+        if *idx > at {
+            *idx -= 1;
+        }
+    }
+}
+
+fn has_component_row(items: &[Step3ItemState]) -> bool {
+    items.iter().any(|item| !item.is_parent)
+}
+
+pub(crate) fn add_separator_active(state: &mut WizardState, above_idx: Option<usize>) {
+    let tab = game_authority::slot_for_tab(&state.step3.active_game_tab);
+    let (
+        items,
+        selected,
+        _,
+        _,
+        _,
+        anchor,
+        _,
+        _,
+        _,
+        _,
+        collapsed_blocks,
+        _,
+        _,
+        undo_stack,
+        redo_stack,
+    ) = active_list_mut(state);
+    if !has_component_row(items) {
+        return;
+    }
+    let block_id = step3_separators::add_separator(items, above_idx, undo_stack, redo_stack);
+    if let Some(at) = items.iter().position(|item| item.block_id == block_id) {
+        shift_indices_after_insert(selected, anchor, at);
+    }
+    collapsed_blocks.retain(|collapsed| *collapsed != block_id);
+    state.step3.separator_rename = Some(SeparatorRename {
+        tab,
+        block_id,
+        text: step3_separators::DEFAULT_SEPARATOR_NAME.to_string(),
+        focus_pending: true,
+    });
+}
+
+pub(crate) fn add_separator_from_toolbar(state: &mut WizardState) {
+    let (items, selected, ..) = active_list_mut(state);
+    let lowest_lit = selected
+        .iter()
+        .copied()
+        .filter(|idx| *idx < items.len())
+        .min();
+    add_separator_active(state, lowest_lit);
+}
+
+pub(crate) fn start_separator_rename_active(state: &mut WizardState, idx: usize) {
+    let tab = game_authority::slot_for_tab(&state.step3.active_game_tab);
+    let (items, ..) = active_list_mut(state);
+    let Some(separator) = items.get(idx).filter(|item| item.is_separator()) else {
+        return;
+    };
+    let rename = SeparatorRename {
+        tab,
+        block_id: separator.block_id.clone(),
+        text: separator.mod_name.clone(),
+        focus_pending: true,
+    };
+    state.step3.separator_rename = Some(rename);
+}
+
+pub(crate) fn remove_separator_active(state: &mut WizardState, idx: usize) {
+    let tab = game_authority::slot_for_tab(&state.step3.active_game_tab);
+    let (
+        items,
+        selected,
+        _,
+        _,
+        _,
+        anchor,
+        _,
+        _,
+        _,
+        _,
+        collapsed_blocks,
+        _,
+        _,
+        undo_stack,
+        redo_stack,
+    ) = active_list_mut(state);
+    if !items.get(idx).is_some_and(Step3ItemState::is_separator) {
+        return;
+    }
+    step3_history::push_undo_snapshot(items, Step3TouchedRows::default(), undo_stack, redo_stack);
+    let removed = items.remove(idx);
+    collapsed_blocks.retain(|block_id| *block_id != removed.block_id);
+    shift_indices_after_remove(selected, anchor, idx);
+    let len_before_tidy = items.len();
+    blocks::merge_adjacent_same_mod_blocks(items, selected);
+    blocks::prune_empty_parent_blocks(items, selected);
+    if items.len() != len_before_tidy {
+        *anchor = selected.first().copied();
+    }
+    if state
+        .step3
+        .separator_rename
+        .as_ref()
+        .is_some_and(|rename| rename.tab == tab && rename.block_id == removed.block_id)
+    {
+        state.step3.separator_rename = None;
+    }
 }
 
 fn step_history_active(
@@ -52,6 +192,7 @@ fn step_history_active(
         &mut Vec<Step3HistoryEntry>,
     ) -> Option<Step3TouchedRows>,
 ) {
+    state.step3.separator_rename = None;
     let (
         items,
         selected,
@@ -89,9 +230,13 @@ pub(crate) fn undo_active(state: &mut WizardState) {
 
 #[cfg(test)]
 mod tests {
-    use super::{collapse_all_active, expand_all_active, redo_active, undo_active};
+    use super::{
+        add_separator_active, collapse_all_active, expand_all_active, redo_active,
+        remove_separator_active, undo_active,
+    };
     use crate::app::state::{Step3ItemState, WizardState};
     use crate::app::step3_history::{self, Step3TouchedRows};
+    use crate::app::step3_separators::separator_row;
     use crate::ui::step3::move_selection_step3::capture_identities;
     use crate::ui::step3::state_step3::active_list_mut;
 
@@ -129,6 +274,64 @@ mod tests {
     fn selection_and_anchor(state: &mut WizardState) -> (Vec<usize>, Option<usize>) {
         let (_, selected, _, _, _, anchor, ..) = active_list_mut(state);
         (selected.clone(), *anchor)
+    }
+
+    #[test]
+    fn add_after_undo_of_a_closed_separator_is_open() {
+        let mut state = state_with_two_mods_and_a_selection(&[]);
+        add_separator_active(&mut state, None);
+        let first = state
+            .step3
+            .separator_rename
+            .take()
+            .map(|rename| rename.block_id)
+            .expect("rename opened");
+        {
+            let (.., collapsed_blocks, _, _, _, _) = active_list_mut(&mut state);
+            collapsed_blocks.push(first);
+        }
+        undo_active(&mut state);
+
+        add_separator_active(&mut state, None);
+
+        let second = state
+            .step3
+            .separator_rename
+            .as_ref()
+            .map(|rename| rename.block_id.clone())
+            .expect("rename opened");
+        let (items, .., collapsed_blocks, _, _, _, _) = active_list_mut(&mut state);
+        assert!(items.iter().any(|item| item.block_id == second));
+        assert!(!collapsed_blocks.contains(&second));
+    }
+
+    #[test]
+    fn removing_a_separator_between_two_halves_merges_them() {
+        let mut state = WizardState::default();
+        {
+            let (items, ..) = active_list_mut(&mut state);
+            let mut second_half_header = row("A", "__PARENT__", true);
+            second_half_header.block_id = "A::block1".to_string();
+            let mut second_half_child = row("A", "2", false);
+            second_half_child.block_id = "A::block1".to_string();
+            *items = vec![
+                row("A", "__PARENT__", true),
+                row("A", "1", false),
+                separator_row("Fixes", "SEPARATOR::1".to_string()),
+                second_half_header,
+                second_half_child,
+            ];
+        }
+
+        remove_separator_active(&mut state, 2);
+
+        let (items, .., undo_stack, _) = active_list_mut(&mut state);
+        assert_eq!(items.len(), 3);
+        assert!(items[0].is_mod_header());
+        assert!(items.iter().all(|item| !item.is_separator()));
+        assert!(items.iter().all(|item| item.block_id == "A::block0"));
+        assert_eq!(undo_stack.len(), 1);
+        assert_eq!(undo_stack[0].items.len(), 5);
     }
 
     #[test]

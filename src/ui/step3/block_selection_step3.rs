@@ -16,7 +16,7 @@ pub(crate) fn single_child_main_parent_block_indices(
     }
     let parent_idx = items
         .iter()
-        .position(|it| it.is_parent && it.block_id == item.block_id)?;
+        .position(|it| it.is_mod_header() && it.block_id == item.block_id)?;
     let parent = items.get(parent_idx)?;
     (!parent.parent_placeholder && blocks::count_children_in_block(items, parent_idx) == 1)
         .then(|| blocks::block_indices(items, parent_idx))
@@ -28,10 +28,10 @@ pub(crate) fn selected_full_main_parent_block_indices(
     idx: usize,
 ) -> Option<Vec<usize>> {
     let item = items.get(idx)?;
-    if !selected.contains(&idx) {
+    if !selected.contains(&idx) || item.is_separator() {
         return None;
     }
-    if item.is_parent {
+    if item.is_mod_header() {
         let selected_blocks: HashSet<&str> = selected
             .iter()
             .filter_map(|selected_idx| items.get(*selected_idx))
@@ -51,7 +51,7 @@ pub(crate) fn selected_full_main_parent_block_indices(
     }
     let parent_idx = items
         .iter()
-        .position(|it| it.is_parent && it.block_id == item.block_id)?;
+        .position(|it| it.is_mod_header() && it.block_id == item.block_id)?;
     let parent = items.get(parent_idx)?;
     if parent.parent_placeholder {
         return None;

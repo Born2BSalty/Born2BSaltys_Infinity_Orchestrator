@@ -15,6 +15,11 @@ pub fn apply_row_selection(
     idx: usize,
     modifiers: egui::Modifiers,
 ) {
+    if items.get(idx).is_some_and(Step3ItemState::is_separator) {
+        selected.clear();
+        *anchor = None;
+        return;
+    }
     if modifiers.shift {
         selected.clear();
         let start = *anchor.get_or_insert(idx);
@@ -59,6 +64,9 @@ fn range_selection(
         let Some(item) = items.get(row) else {
             continue;
         };
+        if item.is_separator() {
+            continue;
+        }
         if !item.is_parent {
             out.push(row);
             continue;
@@ -82,7 +90,7 @@ fn headers_of_fully_selected_mods(items: &[Step3ItemState], chosen_rows: &[usize
     items
         .iter()
         .enumerate()
-        .filter(|(row, item)| item.is_parent && !chosen.contains(row))
+        .filter(|(row, item)| item.is_mod_header() && !chosen.contains(row))
         .filter_map(|(row, _)| {
             let block = blocks::block_indices(items, row);
             let mut children = block
@@ -368,5 +376,44 @@ mod tests {
         let dragged =
             crate::ui::step3::move_selection_step3::moving_set(&items, &selected, &[], mod2_header);
         assert_eq!(dragged, vec![3, 4, 5, 6, 7, 8, 9, 10]);
+    }
+
+    fn three_mods_with_a_separator_before_b() -> Vec<Step3ItemState> {
+        let mut items = three_mods_of_three();
+        items.insert(
+            4,
+            crate::app::step3_separators::separator_row("NPCs", "SEPARATOR::1".to_string()),
+        );
+        items
+    }
+
+    #[test]
+    fn click_on_separator_clears_selection() {
+        let items = three_mods_with_a_separator_before_b();
+        let visible: Vec<usize> = (0..items.len()).collect();
+
+        for modifiers in [PLAIN, CTRL, SHIFT] {
+            let mut selected: Vec<usize> = vec![1, 2, 6];
+            let mut anchor = Some(1);
+
+            apply_row_selection(&mut selected, &mut anchor, &items, &visible, 4, modifiers);
+
+            assert_eq!(selected.len(), 0);
+            assert_eq!(anchor, None);
+        }
+    }
+
+    #[test]
+    fn shift_range_skips_separators() {
+        let items = three_mods_with_a_separator_before_b();
+        let visible: Vec<usize> = (0..items.len()).collect();
+        let mut selected: Vec<usize> = vec![2];
+        let mut anchor = Some(2);
+
+        apply_row_selection(&mut selected, &mut anchor, &items, &visible, 7, SHIFT);
+
+        assert_eq!(selected, vec![2, 3, 5, 6, 7]);
+        assert!(!selected.contains(&4));
+        assert_eq!(anchor, Some(2));
     }
 }

@@ -7,12 +7,14 @@ use crate::app::answer_sets::{AnswerBook, AnswerSide, outgoing_for_line, tree_wi
 use crate::app::app_step2_log::component_exclusion_reason;
 use crate::app::controller::step3_sync;
 use crate::app::game_authority::GameSlot;
-use crate::app::state::{Step2ComponentState, Step2ModState, Step2State, WizardState};
+use crate::app::state::{Step2ComponentState, Step2ModState, Step2State, Step3State, WizardState};
+use crate::app::step3_separators::{SeparatorAnchor, capture_separator_anchors};
 use crate::app::wlb_inputs::parse_identity;
 use crate::registry::workspace_model::ModsSource;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::workspace::state_workspace::{RescanSelection, RescanSnapshot};
 use crate::ui::workspace::step2_log_glue;
+use crate::ui::workspace::workspace_state_loader::restore_separators;
 
 pub fn snapshot_current_selection(orchestrator: &mut OrchestratorApp) {
     let mut snapshot = capture_snapshot(&orchestrator.wizard_state);
@@ -171,10 +173,7 @@ fn reconcile_completed_scan(orchestrator: &mut OrchestratorApp) {
     orchestrator.wizard_state.step2.next_selection_order = max_order.max(unresolved_max) + 1;
 
     if std::mem::take(&mut orchestrator.workspace_view.step2.resume_pending) {
-        orchestrator.wizard_state.step3.bgee_items =
-            step3_sync::build_step3_items(&orchestrator.wizard_state.step2.bgee_mods);
-        orchestrator.wizard_state.step3.bg2ee_items =
-            step3_sync::build_step3_items(&orchestrator.wizard_state.step2.bg2ee_mods);
+        rebuild_step3_for_resume(&mut orchestrator.wizard_state);
     }
 
     tick_settled_log_ticks(orchestrator);
@@ -197,6 +196,33 @@ fn reconcile_completed_scan(orchestrator: &mut OrchestratorApp) {
             .warn_persistent(format_unrestored_notification(&unrestored));
     }
     super::step2_selection_recovery::notify_unresolved(orchestrator);
+}
+
+fn resume_anchors(step3: &mut Step3State, tree: GameSlot) -> Vec<SeparatorAnchor> {
+    if let Some(idx) = step3
+        .pending_separators
+        .iter()
+        .position(|(pending_tree, _)| *pending_tree == tree)
+    {
+        return step3.pending_separators.remove(idx).1;
+    }
+    match tree {
+        GameSlot::First => {
+            capture_separator_anchors(&step3.bgee_items, &step3.bgee_collapsed_blocks)
+        }
+        GameSlot::Second => {
+            capture_separator_anchors(&step3.bg2ee_items, &step3.bg2ee_collapsed_blocks)
+        }
+    }
+}
+
+fn rebuild_step3_for_resume(state: &mut WizardState) {
+    let first = resume_anchors(&mut state.step3, GameSlot::First);
+    let second = resume_anchors(&mut state.step3, GameSlot::Second);
+    state.step3.bgee_items = step3_sync::build_step3_items(&state.step2.bgee_mods);
+    state.step3.bg2ee_items = step3_sync::build_step3_items(&state.step2.bg2ee_mods);
+    restore_separators(&mut state.step3, GameSlot::First, first);
+    restore_separators(&mut state.step3, GameSlot::Second, second);
 }
 
 fn take_settled_log_ticks(step2: &mut Step2State) -> BTreeSet<String> {
@@ -1041,6 +1067,226 @@ mod tests {
         advance_pending_download_snapshot_state(&mut view, false, true, false);
         assert!(view.rescan_snapshot.is_none());
         assert!(!view.was_scanning);
+    }
+
+    fn lettered_mods(ticked: &[&str]) -> Vec<Step2ModState> {
+        ticked
+            .iter()
+            .enumerate()
+            .map(|(order, letter)| {
+                mod_state(
+                    &format!("{letter}/Setup-{letter}.tp2"),
+                    vec![comp("0", true, Some(order + 1))],
+                )
+            })
+            .collect()
+    }
+
+    fn shape(items: &[crate::app::state::Step3ItemState]) -> Vec<String> {
+        items
+            .iter()
+            .map(|item| {
+                let letter = item.tp_file.split('/').next().unwrap_or_default();
+                if item.is_separator() {
+                    format!("[{}]", item.mod_name)
+                } else if item.is_parent {
+                    format!("{letter}:")
+                } else {
+                    format!("{letter}{}", item.component_id)
+                }
+            })
+            .collect()
+    }
+
+    fn separator_block_id(state: &WizardState, name: &str) -> String {
+        state
+            .step3
+            .bgee_items
+            .iter()
+            .find(|item| item.is_separator() && item.mod_name == name)
+            .map(|item| item.block_id.clone())
+            .expect("separator present")
+    }
+
+    #[test]
+    fn resume_rebuild_keeps_separators() {
+        use crate::app::step3_separators::separator_row;
+
+        let mut state = WizardState::default();
+        state.step2.bgee_mods = lettered_mods(&["A", "B", "C"]);
+        state.step3.bgee_items = step3_sync::build_step3_items(&state.step2.bgee_mods);
+        let items = &mut state.step3.bgee_items;
+        let b_header = items
+            .iter()
+            .position(|item| item.is_parent && item.tp_file.starts_with("B/"))
+            .expect("B header");
+        items.insert(b_header, separator_row("NPCs", "SEPARATOR::2".to_string()));
+        items.insert(0, separator_row("Fixes", "SEPARATOR::1".to_string()));
+        state.step3.bgee_collapsed_blocks = vec!["SEPARATOR::1".to_string()];
+
+        state.step2.bgee_mods = lettered_mods(&["A", "C", "D"]);
+        rebuild_step3_for_resume(&mut state);
+
+        assert_eq!(
+            shape(&state.step3.bgee_items),
+            ["[Fixes]", "A:", "A0", "[NPCs]", "C:", "C0", "D:", "D0"]
+        );
+        assert_eq!(separator_block_id(&state, "Fixes"), "SEPARATOR::1");
+        assert_eq!(state.step3.bgee_collapsed_blocks, ["SEPARATOR::1"]);
+        assert_eq!(state.step3.pending_separators.len(), 0);
+
+        state.step2.bgee_mods = lettered_mods(&[]);
+        rebuild_step3_for_resume(&mut state);
+        assert_eq!(state.step3.bgee_items.len(), 0);
+        assert_eq!(state.step3.pending_separators.len(), 1);
+        assert_eq!(state.step3.pending_separators[0].0, GameSlot::First);
+
+        state.step2.bgee_mods = lettered_mods(&["A", "C", "D"]);
+        rebuild_step3_for_resume(&mut state);
+        assert_eq!(
+            shape(&state.step3.bgee_items),
+            ["[Fixes]", "A:", "A0", "[NPCs]", "C:", "C0", "D:", "D0"]
+        );
+        assert!(
+            state
+                .step3
+                .bgee_collapsed_blocks
+                .contains(&separator_block_id(&state, "Fixes"))
+        );
+        assert!(
+            !state
+                .step3
+                .bgee_collapsed_blocks
+                .contains(&separator_block_id(&state, "NPCs"))
+        );
+        assert_eq!(state.step3.pending_separators.len(), 0);
+    }
+
+    #[test]
+    fn resume_rebuild_without_separators_matches_build_step3_items() {
+        let mut state = WizardState::default();
+        state.step2.bgee_mods = lettered_mods(&["A", "B"]);
+        state.step3.bgee_collapsed_blocks = vec!["KEPT".to_string()];
+        rebuild_step3_for_resume(&mut state);
+        assert_eq!(
+            state.step3.bgee_items,
+            step3_sync::build_step3_items(&state.step2.bgee_mods)
+        );
+        assert_eq!(state.step3.bgee_collapsed_blocks, ["KEPT"]);
+        assert_eq!(state.step3.pending_separators.len(), 0);
+    }
+
+    struct SeparatorTempRoot(std::path::PathBuf);
+
+    impl SeparatorTempRoot {
+        fn new() -> Self {
+            use std::sync::atomic::{AtomicU64, Ordering};
+            static NEXT: AtomicU64 = AtomicU64::new(0);
+            let root = Self(std::env::temp_dir().join(format!(
+                "bio_rescan_separators_{}_{}",
+                std::process::id(),
+                NEXT.fetch_add(1, Ordering::Relaxed)
+            )));
+            std::fs::create_dir_all(&root.0).expect("create temp root");
+            root
+        }
+    }
+
+    impl Drop for SeparatorTempRoot {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn open_saved(
+        root: &SeparatorTempRoot,
+        saved: &crate::registry::workspace_model::ModlistWorkspaceState,
+    ) -> WizardState {
+        use crate::registry::model::{Game, ModlistEntry};
+        let list = ModlistEntry {
+            id: "SEPARATORSFK".to_string(),
+            game: Game::BGEE,
+            destination_folder: root.0.join("dest").to_string_lossy().into_owned(),
+            ..Default::default()
+        };
+        let store =
+            crate::settings::store::SettingsStore::new_with_path(root.0.join("bio_settings.json"));
+        let mut state = WizardState::default();
+        crate::ui::workspace::workspace_state_loader::populate_wizard_state_from_workspace(
+            saved, &list, &store, &mut state,
+        );
+        state
+    }
+
+    #[test]
+    fn fork_import_rescan_then_save_keeps_separators() {
+        use crate::registry::workspace_model::{
+            ComponentRef, ModlistWorkspaceState, SeparatorBefore, SeparatorRef,
+        };
+        use crate::ui::workspace::workspace_state_loader::{
+            extract_workspace_state_from_wizard, sync_step3_from_step2_if_changed,
+        };
+
+        let letters = ["A", "B", "C", "D"];
+        let before = |letter: &str| {
+            Some(SeparatorBefore {
+                tp2: format!("{letter}/Setup-{letter}.tp2"),
+                id: 0,
+            })
+        };
+        let saved = ModlistWorkspaceState {
+            order_bgee: letters
+                .iter()
+                .map(|letter| ComponentRef {
+                    tp2: format!("{letter}/Setup-{letter}.tp2"),
+                    id: 0,
+                    ..ComponentRef::default()
+                })
+                .collect(),
+            separators_bgee: vec![
+                SeparatorRef {
+                    name: "Fixes".to_string(),
+                    collapsed: true,
+                    before: before("A"),
+                },
+                SeparatorRef {
+                    name: "NPCs".to_string(),
+                    collapsed: false,
+                    before: before("C"),
+                },
+            ],
+            ..Default::default()
+        };
+        let root = SeparatorTempRoot::new();
+
+        let mut state = open_saved(&root, &saved);
+        assert_eq!(state.step2.bgee_mods.len(), 0);
+        let pending_on_open = state.step3.pending_separators.clone();
+        assert_eq!(pending_on_open.len(), 1);
+
+        state.step2.bgee_mods = lettered_mods(&letters);
+        rebuild_step3_for_resume(&mut state);
+        assert_eq!(
+            shape(&state.step3.bgee_items),
+            [
+                "[Fixes]", "A:", "A0", "B:", "B0", "[NPCs]", "C:", "C0", "D:", "D0"
+            ]
+        );
+        assert!(
+            state
+                .step3
+                .bgee_collapsed_blocks
+                .contains(&separator_block_id(&state, "Fixes"))
+        );
+
+        sync_step3_from_step2_if_changed(&mut state);
+        let extracted = extract_workspace_state_from_wizard(&state, &saved);
+        let resaved: ModlistWorkspaceState =
+            serde_json::from_str(&serde_json::to_string(&extracted).expect("serialise"))
+                .expect("deserialise");
+        assert_eq!(resaved.separators_bgee, saved.separators_bgee);
+        let reopened = open_saved(&root, &resaved);
+        assert_eq!(reopened.step3.pending_separators, pending_on_open);
     }
 
     fn answer_key(id: i64) -> crate::app::answer_sets::AnswerKey {
