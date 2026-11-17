@@ -64,7 +64,7 @@ pub fn render(
             .auto_shrink([false, false])
             .show(&mut child, |ui| {
                 for (item, line_number) in &rows {
-                    weidu_line::render_weidu_line(ui, palette, item, *line_number, lineno_w);
+                    weidu_line::render_review_line(ui, palette, item, *line_number, lineno_w);
                 }
             });
     }

@@ -19,6 +19,7 @@ const TAB_GAP: f32 = 4.0;
 const ITEM_GAP: f32 = 8.0;
 const ACTION_LEFT_PAD: f32 = 12.0;
 const BTN_GAP: f32 = 6.0;
+const SEPARATORS_MENU_ID: &str = "step3_separators_menu";
 
 pub(crate) fn render(
     ui: &mut egui::Ui,
@@ -220,33 +221,7 @@ fn render_actions(
         ) {
             *pending = Some(Step3RowIntent::CollapseAll);
         }
-        if step3_button(
-            ui,
-            palette,
-            "Expand sections",
-            true,
-            crate::ui::shared::tooltip_global::STEP3_EXPAND_SECTIONS,
-        ) {
-            *pending = Some(Step3RowIntent::ExpandSections);
-        }
-        if step3_button(
-            ui,
-            palette,
-            "Collapse sections",
-            true,
-            crate::ui::shared::tooltip_global::STEP3_COLLAPSE_SECTIONS,
-        ) {
-            *pending = Some(Step3RowIntent::CollapseSections);
-        }
-        if step3_button(
-            ui,
-            palette,
-            "Add separator",
-            row.component_count > 0,
-            crate::ui::shared::tooltip_global::STEP3_ADD_SEPARATOR,
-        ) {
-            *pending = Some(Step3RowIntent::AddSeparator);
-        }
+        render_separators_menu(ui, palette, row.component_count > 0, pending);
         if step3_button(
             ui,
             palette,
@@ -266,6 +241,52 @@ fn render_actions(
             *pending = Some(Step3RowIntent::Undo);
         }
     });
+}
+
+fn render_separators_menu(
+    ui: &mut egui::Ui,
+    palette: ThemePalette,
+    can_add: bool,
+    pending: &mut Option<Step3RowIntent>,
+) {
+    let popup_id = egui::Id::new(SEPARATORS_MENU_ID);
+    let response = redesign_btn(
+        ui,
+        palette,
+        "Separators",
+        BtnOpts {
+            small: true,
+            ..Default::default()
+        },
+    )
+    .on_hover_text(crate::ui::shared::tooltip_global::STEP3_SEPARATORS_MENU);
+    if response.clicked() {
+        ui.memory_mut(|memory| memory.toggle_popup(popup_id));
+    }
+    egui::popup::popup_below_widget(
+        ui,
+        popup_id,
+        &response,
+        egui::PopupCloseBehavior::CloseOnClickOutside,
+        |ui| {
+            ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
+            let entries = [
+                ("Add separator", can_add, Step3RowIntent::AddSeparator),
+                (
+                    "Collapse all sections",
+                    true,
+                    Step3RowIntent::CollapseSections,
+                ),
+                ("Expand all sections", true, Step3RowIntent::ExpandSections),
+            ];
+            for (label, enabled, intent) in entries {
+                if ui.add_enabled(enabled, egui::Button::new(label)).clicked() {
+                    *pending = Some(intent);
+                    ui.memory_mut(egui::Memory::close_popup);
+                }
+            }
+        },
+    );
 }
 
 fn step3_button(
