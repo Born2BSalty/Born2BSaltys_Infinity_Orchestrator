@@ -15,7 +15,7 @@ use super::step3_list_body::paint_chevron_button;
 
 const ROW_LEFT_PAD_PX: f32 = 6.0;
 const GLYPH_GAP_PX: f32 = 4.0;
-const COUNT_GAP_PX: f32 = 8.0;
+const COUNT_GAP_PX: f32 = 6.0;
 const NAME_SIZE_STEP_PX: f32 = 2.0;
 const BAND_BAR_PX: f32 = 3.0;
 const BAND_TINT_NUM: u16 = 1;
@@ -52,6 +52,7 @@ pub(super) fn render_separator_row(
     rename: Option<&mut SeparatorRename>,
 ) -> SeparatorRowResponse {
     let mut chevron_clicked = false;
+    let mut chevron_right = 0.0;
     let mut rename_outcome = None;
     let mut name_rect = egui::Rect::NOTHING;
     let mut count_rect = egui::Rect::NOTHING;
@@ -60,35 +61,41 @@ pub(super) fn render_separator_row(
     let on_band = redesign_text_primary(view.palette);
     let name_size = egui::TextStyle::Body.resolve(ui.style()).size + NAME_SIZE_STEP_PX;
     let band_size = egui::vec2((view.right_x - band_left_top.x).max(0.0), view.band_height);
+    let center_x = band_left_top.x + band_size.x / 2.0;
+    let name_galley = no_wrap_galley(ui, strong(view.name).size(name_size).color(on_band));
+    let count_galley = no_wrap_galley(
+        ui,
+        egui::RichText::new(mod_count_text(view.mod_count))
+            .color(redesign_with_alpha(on_band, 4, 5)),
+    );
     let row = ui.allocate_ui_with_layout(
         band_size,
         egui::Layout::left_to_right(egui::Align::Center),
         |ui| {
             ui.set_min_height(view.band_height);
+            ui.spacing_mut().item_spacing.x = 0.0;
             ui.add_space(ROW_LEFT_PAD_PX);
-            chevron_clicked = paint_chevron_button(ui, view.collapsed, on_band).clicked();
-            ui.add_space(GLYPH_GAP_PX);
+            let chevron = paint_chevron_button(ui, view.collapsed, on_band);
+            chevron_clicked = chevron.clicked();
+            chevron_right = chevron.rect.right();
+            let name_w = if rename.is_some() {
+                RENAME_WIDTH_PX
+            } else {
+                name_galley.size().x
+            };
+            let content_w = name_w + COUNT_GAP_PX + count_galley.size().x;
+            let start_x = (center_x - content_w / 2.0).max(chevron_right + GLYPH_GAP_PX);
+            ui.add_space(start_x - ui.cursor().min.x);
             if let Some(rename) = rename {
                 let (response, outcome) = rename_box(ui, rename);
                 name_rect = response.rect;
                 rename_outcome = Some(outcome);
             } else {
-                name_rect = ui
-                    .add(
-                        egui::Label::new(strong(view.name).size(name_size).color(on_band))
-                            .selectable(false),
-                    )
-                    .rect;
+                name_rect = ui.add(egui::Label::new(name_galley).selectable(false)).rect;
             }
             ui.add_space(COUNT_GAP_PX);
             count_rect = ui
-                .add(
-                    egui::Label::new(
-                        egui::RichText::new(mod_count_text(view.mod_count))
-                            .color(redesign_with_alpha(on_band, 4, 5)),
-                    )
-                    .selectable(false),
-                )
+                .add(egui::Label::new(count_galley).selectable(false))
                 .rect;
         },
     );
@@ -115,7 +122,7 @@ pub(super) fn render_separator_row(
     let grab_left = if rename_outcome.is_some() {
         count_rect.left()
     } else {
-        name_rect.left()
+        chevron_right
     };
     let grab_rect = egui::Rect::from_min_max(
         egui::pos2(grab_left, row_top),
@@ -128,6 +135,15 @@ pub(super) fn render_separator_row(
         chevron_clicked,
         rename: rename_outcome,
     }
+}
+
+fn no_wrap_galley(ui: &egui::Ui, text: egui::RichText) -> std::sync::Arc<egui::Galley> {
+    egui::WidgetText::from(text).into_galley(
+        ui,
+        Some(egui::TextWrapMode::Extend),
+        f32::INFINITY,
+        egui::TextStyle::Body,
+    )
 }
 
 fn mod_count_text(mod_count: usize) -> String {

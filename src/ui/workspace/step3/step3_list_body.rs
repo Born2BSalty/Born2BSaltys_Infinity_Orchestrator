@@ -59,7 +59,6 @@ const HEADER_DOT_STEP_PX: f32 = 7.0;
 const HEADER_DOT_RADIUS: f32 = 0.7;
 const HEADER_LEFT_PAD_PX: f32 = 6.0;
 const HEADER_BAND_HEIGHT_KEY: &str = "step3_header_band_height";
-const SECTION_INDENT_PX: f32 = 16.0;
 const SEPARATOR_BAND_SCALE: f32 = 1.1;
 
 struct RenderCtx<'a> {
@@ -87,7 +86,6 @@ struct RenderCtx<'a> {
     undo_stack: &'a mut Vec<Step3HistoryEntry>,
     redo_stack: &'a mut Vec<Step3HistoryEntry>,
     current_group_x_bounds: Option<(f32, f32)>,
-    section_indent: f32,
     header_band_h: f32,
 }
 
@@ -298,7 +296,6 @@ fn run_row_pipeline(
         undo_stack,
         redo_stack,
         current_group_x_bounds: None,
-        section_indent: 0.0,
         header_band_h: remembered_header_band_height(ui),
     };
 
@@ -369,7 +366,6 @@ fn render_rows(ui: &mut egui::Ui, ctx: &mut RenderCtx<'_>, lineno_w: f32) -> Row
                 ui.add_space(GROUP_GAP_PX * 2.0);
             }
             first_group = false;
-            ctx.section_indent = SECTION_INDENT_PX;
             render_separator(ui, ctx, idx, &mut acc, list_left_x + group_w);
             pos += 1;
             continue;
@@ -426,7 +422,6 @@ fn render_header_band(
     acc: &mut RowAccumulator,
     group_w: f32,
 ) {
-    let indent = ctx.section_indent;
     let top_cursor = ui.cursor().min;
     let bg_shape_id = ui.painter().add(egui::Shape::Noop);
 
@@ -434,7 +429,7 @@ fn render_header_band(
         ui.set_min_width(group_w + SCROLLBAR_RESERVE);
         ui.add_space(HEADER_BAR_VPAD_TOP);
         ui.horizontal(|ui| {
-            ui.add_space(HEADER_LEFT_PAD_PX + indent);
+            ui.add_space(HEADER_LEFT_PAD_PX);
             render_header_row(ui, ctx, idx, acc);
         });
         ui.add_space(HEADER_BAR_VPAD_BOT);
@@ -442,10 +437,8 @@ fn render_header_band(
     let band_height = scope_resp.response.rect.height();
     ctx.header_band_h = band_height;
 
-    let header_rect = egui::Rect::from_min_size(
-        egui::pos2(top_cursor.x + indent, top_cursor.y),
-        egui::vec2((group_w - indent).max(0.0), band_height),
-    );
+    let header_rect =
+        egui::Rect::from_min_size(top_cursor, egui::vec2(group_w.max(0.0), band_height));
 
     ui.painter().set(
         bg_shape_id,
@@ -744,7 +737,7 @@ fn render_child_row(
         .get(&crate::app::compat_step3_rules::marker_key(item));
 
     let row_outer = ui.horizontal(|ui| {
-        ui.add_space(CHILD_INDENT + ctx.section_indent);
+        ui.add_space(CHILD_INDENT);
 
         render_lineno(ui, ctx.palette, child_counter, lineno_w);
 
