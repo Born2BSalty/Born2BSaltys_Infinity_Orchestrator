@@ -11,6 +11,7 @@ use super::log_files::{
     run_dir_from_id,
 };
 use crate::app::state::{Step3ItemState, WizardState};
+use crate::app::step3_separators::format_separator_log_line;
 use crate::app::step5::command_config::build_install_command_config;
 use crate::app::terminal::EmbeddedTerminal;
 use crate::install::step5_command_install::build_install_invocation;
@@ -71,14 +72,16 @@ pub use write_checks::{
 pub fn build_weidu_export_lines(items: &[Step3ItemState]) -> Vec<String> {
     items
         .iter()
-        .filter(|i| !i.is_parent)
+        .filter(|i| !i.is_parent || i.is_separator())
         .map(format_step4_item)
         .collect()
 }
 
 #[must_use]
 pub fn format_step4_item(item: &Step3ItemState) -> String {
-    if item.raw_line.trim().is_empty() {
+    if item.is_separator() {
+        format_separator_log_line(&item.mod_name)
+    } else if item.raw_line.trim().is_empty() {
         let folder = item.mod_name.replace('/', "\\");
         format!(
             "~{}\\{}~ #0 #{} // {}",
@@ -412,3 +415,7 @@ fn fallback_console_excerpt(state: &WizardState, limit_chars: usize) -> String {
     let start = total.saturating_sub(limit_chars);
     text.chars().skip(start).collect()
 }
+
+#[cfg(test)]
+#[path = "diagnostics_tests.rs"]
+mod tests;
