@@ -60,7 +60,7 @@ const HEADER_DOT_RADIUS: f32 = 0.7;
 const HEADER_LEFT_PAD_PX: f32 = 6.0;
 const HEADER_BAND_HEIGHT_KEY: &str = "step3_header_band_height";
 const SECTION_INDENT_PX: f32 = 16.0;
-const SEPARATOR_BAND_SCALE: f32 = 1.6;
+const SEPARATOR_BAND_SCALE: f32 = 1.1;
 
 struct RenderCtx<'a> {
     palette: ThemePalette,

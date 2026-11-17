@@ -7,7 +7,7 @@ use crate::app::state::Step3ItemState;
 use crate::app::step3_history::{self, Step3HistoryEntry, Step3TouchedRows};
 use crate::app::step3_separators::{SeparatorRename, sanitize_separator_name};
 use crate::ui::shared::redesign_tokens::{
-    ThemePalette, redesign_accent, redesign_pill_text, redesign_with_alpha,
+    ThemePalette, redesign_accent, redesign_text_primary, redesign_with_alpha,
 };
 use crate::ui::shared::typography_global::strong;
 
@@ -16,7 +16,10 @@ use super::step3_list_body::paint_chevron_button;
 const ROW_LEFT_PAD_PX: f32 = 6.0;
 const GLYPH_GAP_PX: f32 = 4.0;
 const COUNT_GAP_PX: f32 = 8.0;
-const NAME_SIZE_STEP_PX: f32 = 4.0;
+const NAME_SIZE_STEP_PX: f32 = 2.0;
+const BAND_BAR_PX: f32 = 3.0;
+const BAND_TINT_NUM: u16 = 1;
+const BAND_TINT_DEN: u16 = 4;
 const RENAME_WIDTH_PX: f32 = 260.0;
 
 pub(super) struct SeparatorRowView<'a> {
@@ -54,7 +57,7 @@ pub(super) fn render_separator_row(
     let mut count_rect = egui::Rect::NOTHING;
     let band_left_top = ui.cursor().min;
     let band_shape = ui.painter().add(egui::Shape::Noop);
-    let on_band = redesign_pill_text(view.palette);
+    let on_band = redesign_text_primary(view.palette);
     let name_size = egui::TextStyle::Body.resolve(ui.style()).size + NAME_SIZE_STEP_PX;
     let band_size = egui::vec2((view.right_x - band_left_top.x).max(0.0), view.band_height);
     let row = ui.allocate_ui_with_layout(
@@ -82,7 +85,7 @@ pub(super) fn render_separator_row(
                 .add(
                     egui::Label::new(
                         egui::RichText::new(mod_count_text(view.mod_count))
-                            .color(redesign_with_alpha(on_band, 3, 4)),
+                            .color(redesign_with_alpha(on_band, 4, 5)),
                     )
                     .selectable(false),
                 )
@@ -95,13 +98,19 @@ pub(super) fn render_separator_row(
         egui::pos2(band_left_top.x, row_top),
         egui::pos2(view.right_x.max(count_rect.right()), row_bottom),
     );
+    let accent = redesign_accent(view.palette);
     ui.painter().set(
         band_shape,
         egui::Shape::rect_filled(
             row_rect,
             egui::CornerRadius::ZERO,
-            redesign_accent(view.palette),
+            redesign_with_alpha(accent, BAND_TINT_NUM, BAND_TINT_DEN),
         ),
+    );
+    ui.painter().rect_filled(
+        egui::Rect::from_min_size(row_rect.min, egui::vec2(BAND_BAR_PX, row_rect.height())),
+        egui::CornerRadius::ZERO,
+        accent,
     );
     let grab_left = if rename_outcome.is_some() {
         count_rect.left()
