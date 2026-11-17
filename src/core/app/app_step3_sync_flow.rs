@@ -52,8 +52,7 @@ fn reconcile_tab(
         |idx| pending.remove(idx).1,
     );
     let anchors = resolve_separator_block_ids(&children, &anchors);
-    insert_separators(&mut children, &anchors);
-    let items = rebuild_parent_blocks(children);
+    let items = rebuild_with_separators(children, &anchors);
     let mut collapsed = collect_parent_block_ids(&items);
     for anchor in anchors.iter().filter(|anchor| anchor.collapsed) {
         if let Some(block_id) = &anchor.block_id
@@ -198,6 +197,18 @@ fn child_pair(item: &Step3ItemState) -> ComponentPair {
 
 fn has_pair(item: &Step3ItemState, pair: &ComponentPair) -> bool {
     item.component_id == pair.1 && item.tp_file.eq_ignore_ascii_case(&pair.0)
+}
+
+#[must_use]
+pub(crate) fn rebuild_with_separators(
+    items: Vec<Step3ItemState>,
+    anchors: &[SeparatorAnchor],
+) -> Vec<Step3ItemState> {
+    let mut children: Vec<Step3ItemState> =
+        items.into_iter().filter(|item| !item.is_parent).collect();
+    let anchors = resolve_separator_block_ids(&children, anchors);
+    insert_separators(&mut children, &anchors);
+    rebuild_parent_blocks(children)
 }
 
 fn rebuild_parent_blocks(children: Vec<Step3ItemState>) -> Vec<Step3ItemState> {
