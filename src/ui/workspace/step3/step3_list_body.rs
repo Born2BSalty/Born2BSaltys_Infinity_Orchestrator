@@ -36,8 +36,8 @@ use crate::ui::workspace::widgets::weidu_line;
 
 use super::step3_section_drag as section_drag;
 use super::step3_separator_row::{
-    RenameOutcome, SeparatorRowView, commit_separator_rename, paint_separator_ghost,
-    render_separator_row,
+    RenameOutcome, SeparatorRowView, commit_separator_rename, grip_hit_rect, paint_grip,
+    paint_separator_ghost, render_separator_row,
 };
 
 const MOVE_LOCKED_NOTICE: &str = "Locked mods cannot be moved. Unlock them first.";
@@ -460,8 +460,43 @@ fn render_header_band(
         HEADER_DOT_STEP_PX,
         HEADER_DOT_RADIUS,
     );
+    render_header_grip(ui, ctx, idx, acc, header_rect);
 
     ctx.current_group_x_bounds = Some((header_rect.left(), header_rect.right()));
+}
+
+fn render_header_grip(
+    ui: &egui::Ui,
+    ctx: &mut RenderCtx<'_>,
+    idx: usize,
+    acc: &mut RowAccumulator,
+    header_rect: egui::Rect,
+) {
+    let center_y = acc
+        .visible_rows
+        .iter()
+        .rev()
+        .find(|(row, _)| *row == idx)
+        .map_or_else(|| header_rect.center().y, |(_, rect)| rect.center().y);
+    paint_grip(
+        ui.painter(),
+        header_rect.right(),
+        center_y,
+        redesign_text_faint(ctx.palette),
+    );
+    let grip_id = ui.make_persistent_id(("step3b_drag_parent_grip", ctx.tab_id, idx));
+    let grip = ui.interact(
+        grip_hit_rect(header_rect),
+        grip_id,
+        egui::Sense::click_and_drag(),
+    );
+    if grip.hovered() && ctx.drag_from.is_none() {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
+    }
+    handle_row_selection(ui, ctx, idx, &grip, &grip);
+    if handle_drag_start(ui, ctx, idx, &grip, &acc.visible_rows) == DragStart::RefusedLocked {
+        acc.drag_refused_locked = true;
+    }
 }
 
 fn estimated_header_band_height(ui: &egui::Ui) -> f32 {
@@ -1061,11 +1096,11 @@ fn render_separator_context_menu(
     acc: &mut RowAccumulator,
 ) {
     drag_response.context_menu(|ui| {
-        if ui.button("Move section to top").clicked() {
+        if ui.button("Move separator to top").clicked() {
             acc.move_request = Some((idx, MoveSelectionTarget::Top));
             ui.close_menu();
         }
-        if ui.button("Move section to bottom").clicked() {
+        if ui.button("Move separator to bottom").clicked() {
             acc.move_request = Some((idx, MoveSelectionTarget::Bottom));
             ui.close_menu();
         }
@@ -1332,6 +1367,9 @@ fn run_section_drag(ui: &egui::Ui, ctx: &mut RenderCtx<'_>, visible_rows: &[(usi
 }
 
 fn run_row_drag(ui: &egui::Ui, ctx: &mut RenderCtx<'_>, visible_rows: &[(usize, egui::Rect)]) {
+    if ctx.drag_from.is_some() && ui.input(|input| input.pointer.primary_down()) {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
+    }
     let mut pointer_ctx = service_step3::drag_ops::DragPointerContext {
         items: ctx.items,
         drag_from: ctx.drag_from.as_ref(),

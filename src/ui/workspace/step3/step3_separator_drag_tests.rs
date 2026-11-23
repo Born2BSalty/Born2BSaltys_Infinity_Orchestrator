@@ -177,3 +177,40 @@ fn a_closed_section_drags_from_anywhere_on_its_band_but_the_chevron() {
         );
     }
 }
+
+fn header_band_right<T>(harness: &Harness<'_, T>, label: &str) -> f32 {
+    let label = label_rect(harness, label);
+    harness
+        .output()
+        .shapes
+        .iter()
+        .filter_map(|clipped| match &clipped.shape {
+            egui::Shape::Rect(rect)
+                if rect.rect.contains(label.center())
+                    && rect.rect.height() < 3.0 * label.height() =>
+            {
+                Some(rect.rect.right())
+            }
+            _ => None,
+        })
+        .fold(0.0, f32::max)
+}
+
+#[test]
+fn a_mod_drags_by_the_grip_on_the_right_of_its_header() {
+    let mut harness = harness_for(sectioned_list(), Vec::new());
+    harness.run_steps(2);
+    let grip_x = header_band_right(&harness, "Heart (2)") - 14.0;
+    let heart_y = label_rect(&harness, "Heart (2)").center().y;
+    let klatu_y = label_rect(&harness, "Klatu (2)").center().y;
+
+    drag(
+        &mut harness,
+        egui::pos2(grip_x, heart_y),
+        egui::pos2(grip_x, klatu_y),
+    );
+
+    let order = header_order(&harness.state().wizard_state.step3.bgee_items);
+    let position = |name: &str| order.iter().position(|item| *item == name).unwrap();
+    assert!(position("Heart") > position("Ruins"), "order {order:?}");
+}

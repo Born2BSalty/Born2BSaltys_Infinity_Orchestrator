@@ -24,6 +24,7 @@ const RENAME_WIDTH_PX: f32 = 260.0;
 const GRIP_RIGHT_PAD_PX: f32 = 12.0;
 const GRIP_DOT_STEP_PX: f32 = 4.0;
 const GRIP_DOT_RADIUS: f32 = 1.3;
+const GRIP_HIT_WIDTH_PX: f32 = 28.0;
 const GHOST_TINT_NUM: u16 = 2;
 const GHOST_TINT_DEN: u16 = 5;
 const GHOST_STROKE_PX: f32 = 1.0;
@@ -145,16 +146,36 @@ fn paint_bar_and_grip(painter: &egui::Painter, palette: ThemePalette, band: egui
         egui::CornerRadius::ZERO,
         redesign_accent(palette),
     );
-    let dot_color = redesign_with_alpha(redesign_text_primary(palette), 4, 5);
+    paint_grip(
+        painter,
+        band.right(),
+        band.center().y,
+        redesign_with_alpha(redesign_text_primary(palette), 4, 5),
+    );
+}
+
+pub(super) fn paint_grip(
+    painter: &egui::Painter,
+    right_x: f32,
+    center_y: f32,
+    color: egui::Color32,
+) {
     let first = egui::pos2(
-        band.right() - GRIP_RIGHT_PAD_PX - GRIP_DOT_STEP_PX,
-        band.center().y - GRIP_DOT_STEP_PX,
+        right_x - GRIP_RIGHT_PAD_PX - GRIP_DOT_STEP_PX,
+        center_y - GRIP_DOT_STEP_PX,
     );
     for column in [0.0, GRIP_DOT_STEP_PX] {
         for row in [0.0, GRIP_DOT_STEP_PX, 2.0 * GRIP_DOT_STEP_PX] {
-            painter.circle_filled(first + egui::vec2(column, row), GRIP_DOT_RADIUS, dot_color);
+            painter.circle_filled(first + egui::vec2(column, row), GRIP_DOT_RADIUS, color);
         }
     }
+}
+
+pub(super) fn grip_hit_rect(band: egui::Rect) -> egui::Rect {
+    egui::Rect::from_min_max(
+        egui::pos2(band.right() - GRIP_HIT_WIDTH_PX, band.top()),
+        band.max,
+    )
 }
 
 pub(super) fn paint_separator_ghost(
