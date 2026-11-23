@@ -175,10 +175,43 @@ fn a_closed_section_drags_from_anywhere_on_its_band_but_the_chevron() {
             ],
             "grabbed at x={grab_x}"
         );
+        assert_eq!(
+            harness.state().wizard_state.step3.bgee_undo_stack.len(),
+            1,
+            "grabbed at x={grab_x}"
+        );
     }
 }
 
-fn header_band_right<T>(harness: &Harness<'_, T>, label: &str) -> f32 {
+#[test]
+fn a_closed_section_dropped_where_it_sits_changes_nothing_and_leaves_no_undo() {
+    let mut harness = harness_for(sectioned_list(), vec!["SEPARATOR::1".to_string()]);
+    harness.run_steps(2);
+    let name = label_rect(&harness, "Utilities").center();
+
+    drag(&mut harness, name, name + egui::vec2(0.0, 12.0));
+
+    let step3 = &harness.state().wizard_state.step3;
+    assert_eq!(step3.bgee_items, sectioned_list());
+    assert_eq!(step3.bgee_undo_stack.len(), 0);
+}
+
+#[test]
+fn pressing_the_chevron_of_a_closed_separator_never_starts_a_drag() {
+    let mut harness = harness_for(sectioned_list(), vec!["SEPARATOR::1".to_string()]);
+    harness.run_steps(2);
+    let band = header_band(&harness, "Utilities");
+    let chevron = egui::pos2(band.left() + 13.0, band.center().y);
+    let target_y = label_rect(&harness, "Tweaks").center().y;
+
+    drag(&mut harness, chevron, egui::pos2(chevron.x, target_y));
+
+    let step3 = &harness.state().wizard_state.step3;
+    assert_eq!(step3.bgee_items, sectioned_list());
+    assert_eq!(step3.bgee_undo_stack.len(), 0);
+}
+
+fn header_band<T>(harness: &Harness<'_, T>, label: &str) -> egui::Rect {
     let label = label_rect(harness, label);
     harness
         .output()
@@ -189,11 +222,16 @@ fn header_band_right<T>(harness: &Harness<'_, T>, label: &str) -> f32 {
                 if rect.rect.contains(label.center())
                     && rect.rect.height() < 3.0 * label.height() =>
             {
-                Some(rect.rect.right())
+                Some(rect.rect)
             }
             _ => None,
         })
-        .fold(0.0, f32::max)
+        .max_by(|a, b| a.width().total_cmp(&b.width()))
+        .unwrap_or_else(|| panic!("no band behind {label:?}"))
+}
+
+fn header_band_right<T>(harness: &Harness<'_, T>, label: &str) -> f32 {
+    header_band(harness, label).right()
 }
 
 #[test]

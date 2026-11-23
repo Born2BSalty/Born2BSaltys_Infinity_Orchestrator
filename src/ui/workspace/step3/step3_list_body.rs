@@ -1301,21 +1301,26 @@ fn run_section_drag(ui: &egui::Ui, ctx: &mut RenderCtx<'_>, visible_rows: &[(usi
     let Some(&(_, band)) = visible_rows.iter().find(|(idx, _)| *idx == separator_idx) else {
         return;
     };
-    let Some(cursor) = ui.input(|input| input.pointer.latest_pos()) else {
-        return;
-    };
-    let ghost = band.translate(egui::vec2(
-        0.0,
-        cursor.y - *ctx.drag_grab_offset - band.top(),
-    ));
-    let Some(drop) =
-        section_drag::section_drop_target(ctx.items, visible_rows, ghost.center().y, GROUP_GAP_PX)
-    else {
-        return;
-    };
+    let ghost_and_drop = ui
+        .input(|input| input.pointer.latest_pos())
+        .and_then(|cursor| {
+            let ghost = band.translate(egui::vec2(
+                0.0,
+                cursor.y - *ctx.drag_grab_offset - band.top(),
+            ));
+            section_drag::section_drop_target(
+                ctx.items,
+                visible_rows,
+                ghost.center().y,
+                GROUP_GAP_PX,
+            )
+            .map(|drop| (ghost, drop))
+        });
 
     if ui.input(|input| input.pointer.any_released()) {
-        if !move_section(ctx.items, separator_idx, drop.before)
+        let moved = ghost_and_drop
+            .is_some_and(|(_, drop)| move_section(ctx.items, separator_idx, drop.before));
+        if !moved
             && ctx
                 .undo_stack
                 .last()
@@ -1327,6 +1332,9 @@ fn run_section_drag(ui: &egui::Ui, ctx: &mut RenderCtx<'_>, visible_rows: &[(usi
         *ctx.anchor = None;
         return;
     }
+    let Some((ghost, drop)) = ghost_and_drop else {
+        return;
+    };
 
     let clip = ui.clip_rect();
     let painter = ui
