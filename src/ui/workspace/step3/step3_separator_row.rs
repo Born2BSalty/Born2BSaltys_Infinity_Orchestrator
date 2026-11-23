@@ -7,7 +7,7 @@ use crate::app::state::Step3ItemState;
 use crate::app::step3_history::{self, Step3HistoryEntry, Step3TouchedRows};
 use crate::app::step3_separators::{SeparatorRename, sanitize_separator_name};
 use crate::ui::shared::redesign_tokens::{
-    ThemePalette, redesign_accent, redesign_text_primary, redesign_with_alpha,
+    ThemePalette, redesign_accent, redesign_shell_bg, redesign_text_primary, redesign_with_alpha,
 };
 use crate::ui::shared::typography_global::strong;
 
@@ -21,6 +21,12 @@ const BAND_BAR_PX: f32 = 3.0;
 const BAND_TINT_NUM: u16 = 1;
 const BAND_TINT_DEN: u16 = 4;
 const RENAME_WIDTH_PX: f32 = 260.0;
+const GRIP_RIGHT_PAD_PX: f32 = 12.0;
+const GRIP_DOT_STEP_PX: f32 = 4.0;
+const GRIP_DOT_RADIUS: f32 = 1.3;
+const GHOST_TINT_NUM: u16 = 2;
+const GHOST_TINT_DEN: u16 = 5;
+const GHOST_STROKE_PX: f32 = 1.0;
 
 pub(super) struct SeparatorRowView<'a> {
     pub(super) palette: ThemePalette,
@@ -114,11 +120,7 @@ pub(super) fn render_separator_row(
             redesign_with_alpha(accent, BAND_TINT_NUM, BAND_TINT_DEN),
         ),
     );
-    ui.painter().rect_filled(
-        egui::Rect::from_min_size(row_rect.min, egui::vec2(BAND_BAR_PX, row_rect.height())),
-        egui::CornerRadius::ZERO,
-        accent,
-    );
+    paint_bar_and_grip(ui.painter(), view.palette, row_rect);
     let grab_left = if rename_outcome.is_some() {
         count_rect.left()
     } else {
@@ -135,6 +137,66 @@ pub(super) fn render_separator_row(
         chevron_clicked,
         rename: rename_outcome,
     }
+}
+
+fn paint_bar_and_grip(painter: &egui::Painter, palette: ThemePalette, band: egui::Rect) {
+    painter.rect_filled(
+        egui::Rect::from_min_size(band.min, egui::vec2(BAND_BAR_PX, band.height())),
+        egui::CornerRadius::ZERO,
+        redesign_accent(palette),
+    );
+    let dot_color = redesign_with_alpha(redesign_text_primary(palette), 4, 5);
+    let first = egui::pos2(
+        band.right() - GRIP_RIGHT_PAD_PX - GRIP_DOT_STEP_PX,
+        band.center().y - GRIP_DOT_STEP_PX,
+    );
+    for column in [0.0, GRIP_DOT_STEP_PX] {
+        for row in [0.0, GRIP_DOT_STEP_PX, 2.0 * GRIP_DOT_STEP_PX] {
+            painter.circle_filled(first + egui::vec2(column, row), GRIP_DOT_RADIUS, dot_color);
+        }
+    }
+}
+
+pub(super) fn paint_separator_ghost(
+    ui: &egui::Ui,
+    painter: &egui::Painter,
+    palette: ThemePalette,
+    band: egui::Rect,
+    name: &str,
+    mod_count: usize,
+) {
+    let accent = redesign_accent(palette);
+    painter.rect_filled(band, egui::CornerRadius::ZERO, redesign_shell_bg(palette));
+    painter.rect_filled(
+        band,
+        egui::CornerRadius::ZERO,
+        redesign_with_alpha(accent, GHOST_TINT_NUM, GHOST_TINT_DEN),
+    );
+    painter.rect_stroke(
+        band,
+        egui::CornerRadius::ZERO,
+        egui::Stroke::new(GHOST_STROKE_PX, accent),
+        egui::StrokeKind::Inside,
+    );
+    paint_bar_and_grip(painter, palette, band);
+    let on_band = redesign_text_primary(palette);
+    let name_size = egui::TextStyle::Body.resolve(ui.style()).size + NAME_SIZE_STEP_PX;
+    let name_galley = no_wrap_galley(ui, strong(name).size(name_size).color(on_band));
+    let count_galley = no_wrap_galley(
+        ui,
+        egui::RichText::new(mod_count_text(mod_count)).color(redesign_with_alpha(on_band, 4, 5)),
+    );
+    let content_w = name_galley.size().x + COUNT_GAP_PX + count_galley.size().x;
+    let name_pos = egui::pos2(
+        band.center().x - content_w / 2.0,
+        band.center().y - name_galley.size().y / 2.0,
+    );
+    let count_pos = egui::pos2(
+        name_pos.x + name_galley.size().x + COUNT_GAP_PX,
+        band.center().y - count_galley.size().y / 2.0,
+    );
+    painter.galley(name_pos, name_galley, on_band);
+    painter.galley(count_pos, count_galley, on_band);
 }
 
 fn no_wrap_galley(ui: &egui::Ui, text: egui::RichText) -> std::sync::Arc<egui::Galley> {

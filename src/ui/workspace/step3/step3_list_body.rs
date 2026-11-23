@@ -15,10 +15,10 @@ use crate::parser::prompt_eval_expr::PromptEvalContext;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::shared::layout_tokens_global::BORDER_THIN;
 use crate::ui::shared::redesign_tokens::{
-    REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_border_strong,
-    redesign_prompt_fill, redesign_prompt_stroke, redesign_prompt_text, redesign_rail_bg,
-    redesign_shell_bg, redesign_text_disabled, redesign_text_faint, redesign_text_fainter,
-    redesign_warning, redesign_with_alpha,
+    REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_accent,
+    redesign_border_strong, redesign_prompt_fill, redesign_prompt_stroke, redesign_prompt_text,
+    redesign_rail_bg, redesign_shell_bg, redesign_text_disabled, redesign_text_faint,
+    redesign_text_fainter, redesign_warning, redesign_with_alpha,
 };
 use crate::ui::shared::selected_row::selectable_row;
 use crate::ui::shared::typography_global::{SIZE_PILL_TEXT, strong};
@@ -34,8 +34,10 @@ use crate::ui::step3::state_step3;
 use crate::ui::step3::toolbar_support_step3;
 use crate::ui::workspace::widgets::weidu_line;
 
+use super::step3_section_drag as section_drag;
 use super::step3_separator_row::{
-    RenameOutcome, SeparatorRowView, commit_separator_rename, render_separator_row,
+    RenameOutcome, SeparatorRowView, commit_separator_rename, paint_separator_ghost,
+    render_separator_row,
 };
 
 const MOVE_LOCKED_NOTICE: &str = "Locked mods cannot be moved. Unlock them first.";
@@ -60,6 +62,7 @@ const HEADER_DOT_RADIUS: f32 = 0.7;
 const HEADER_LEFT_PAD_PX: f32 = 6.0;
 const HEADER_BAND_HEIGHT_KEY: &str = "step3_header_band_height";
 const SEPARATOR_BAND_SCALE: f32 = 1.1;
+const SECTION_DROP_LINE_PX: f32 = 2.0;
 
 struct RenderCtx<'a> {
     palette: ThemePalette,
@@ -636,6 +639,9 @@ fn render_separator(
 
     let drag_id = ui.make_persistent_id(("step3b_drag_separator", ctx.tab_id, idx));
     let drag_response = ui.interact(row.grab_rect, drag_id, egui::Sense::click_and_drag());
+    if drag_response.hovered() && ctx.drag_from.is_none() {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
+    }
     let on_name = drag_response
         .interact_pointer_pos()
         .is_some_and(|pos| row.name_rect.contains(pos));
@@ -1223,6 +1229,100 @@ fn update_drag_grab_geometry(
 }
 
 fn run_drag_pipeline(ui: &egui::Ui, ctx: &mut RenderCtx<'_>, visible_rows: &[(usize, egui::Rect)]) {
+    if section_drag::is_section_drag(ctx.items, *ctx.drag_from, ctx.drag_indices) {
+        run_section_drag(ui, ctx, visible_rows);
+    } else {
+        run_row_drag(ui, ctx, visible_rows);
+    }
+
+    let mut finalize_ctx = service_step3::drag_ops::DragFinalizeContext {
+        items: ctx.items,
+        selected: ctx.selected,
+        drag_from: ctx.drag_from,
+        drag_over: ctx.drag_over,
+        drag_indices: ctx.drag_indices,
+        drag_grab_offset: ctx.drag_grab_offset,
+        drag_grab_pos_in_block: ctx.drag_grab_pos_in_block,
+        drag_row_h: ctx.drag_row_h,
+        last_insert_at: ctx.last_insert_at,
+        clone_seq: ctx.clone_seq,
+    };
+    service_step3::drag_ops::finalize_on_release(ui, &mut finalize_ctx);
+}
+
+fn run_section_drag(ui: &egui::Ui, ctx: &mut RenderCtx<'_>, visible_rows: &[(usize, egui::Rect)]) {
+    let Some(separator_idx) = *ctx.drag_from else {
+        return;
+    };
+    let Some(&(_, band)) = visible_rows.iter().find(|(idx, _)| *idx == separator_idx) else {
+        return;
+    };
+    let Some(cursor) = ui.input(|input| input.pointer.latest_pos()) else {
+        return;
+    };
+    let ghost = band.translate(egui::vec2(
+        0.0,
+        cursor.y - *ctx.drag_grab_offset - band.top(),
+    ));
+    let Some(drop) =
+        section_drag::section_drop_target(ctx.items, visible_rows, ghost.center().y, GROUP_GAP_PX)
+    else {
+        return;
+    };
+
+    if ui.input(|input| input.pointer.any_released()) {
+        if !section_drag::apply_section_drop(ctx.items, separator_idx, drop.before)
+            && ctx
+                .undo_stack
+                .last()
+                .is_some_and(|entry| entry.items == *ctx.items)
+        {
+            ctx.undo_stack.pop();
+        }
+        ctx.selected.clear();
+        *ctx.anchor = None;
+        return;
+    }
+
+    let clip = ui.clip_rect();
+    let painter = ui
+        .ctx()
+        .layer_painter(egui::LayerId::new(
+            egui::Order::Tooltip,
+            egui::Id::new(("step3_section_drag", ctx.tab_id)),
+        ))
+        .with_clip_rect(clip);
+    painter.rect_filled(
+        band,
+        egui::CornerRadius::ZERO,
+        redesign_with_alpha(redesign_shell_bg(ctx.palette), 3, 5),
+    );
+    painter.line_segment(
+        [
+            egui::pos2(clip.left(), drop.line_y),
+            egui::pos2(
+                (clip.right() - SCROLLBAR_RESERVE).max(clip.left()),
+                drop.line_y,
+            ),
+        ],
+        egui::Stroke::new(SECTION_DROP_LINE_PX, redesign_accent(ctx.palette)),
+    );
+    let mod_count = section_indices(ctx.items, separator_idx)
+        .into_iter()
+        .filter(|row| ctx.items[*row].is_mod_header())
+        .count();
+    paint_separator_ghost(
+        ui,
+        &painter,
+        ctx.palette,
+        ghost,
+        &ctx.items[separator_idx].mod_name,
+        mod_count,
+    );
+    ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
+}
+
+fn run_row_drag(ui: &egui::Ui, ctx: &mut RenderCtx<'_>, visible_rows: &[(usize, egui::Rect)]) {
     let mut pointer_ctx = service_step3::drag_ops::DragPointerContext {
         items: ctx.items,
         drag_from: ctx.drag_from.as_ref(),
@@ -1256,20 +1356,6 @@ fn run_drag_pipeline(ui: &egui::Ui, ctx: &mut RenderCtx<'_>, visible_rows: &[(us
         visible_rows,
     };
     service_step3::drag_ops::apply_live_reorder(ui, &mut reorder_ctx);
-
-    let mut finalize_ctx = service_step3::drag_ops::DragFinalizeContext {
-        items: ctx.items,
-        selected: ctx.selected,
-        drag_from: ctx.drag_from,
-        drag_over: ctx.drag_over,
-        drag_indices: ctx.drag_indices,
-        drag_grab_offset: ctx.drag_grab_offset,
-        drag_grab_pos_in_block: ctx.drag_grab_pos_in_block,
-        drag_row_h: ctx.drag_row_h,
-        last_insert_at: ctx.last_insert_at,
-        clone_seq: ctx.clone_seq,
-    };
-    service_step3::drag_ops::finalize_on_release(ui, &mut finalize_ctx);
 }
 
 fn flush_row_outcome(

@@ -2,6 +2,7 @@
 // Copyright (c) 2026 Born2BSalty
 
 pub mod step3_list_body;
+mod step3_section_drag;
 #[cfg(test)]
 mod step3_separator_drag_tests;
 mod step3_separator_row;
