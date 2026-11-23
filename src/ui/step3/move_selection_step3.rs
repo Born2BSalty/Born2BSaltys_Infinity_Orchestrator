@@ -5,7 +5,9 @@ use std::collections::HashSet;
 
 use crate::app::state::Step3ItemState;
 use crate::app::step3_history::{self, Step3HistoryEntry, Step3TouchedRows};
-use crate::app::step3_separators::{enclosing_separator, section_indices};
+use crate::app::step3_separators::{
+    enclosing_separator, first_separator, move_section, section_indices,
+};
 use crate::ui::step3::blocks;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -244,6 +246,9 @@ pub(crate) fn move_selection(
     if clicked_idx >= ctx.items.len() {
         return MoveSelectionOutcome::NothingToMove;
     }
+    if ctx.items[clicked_idx].is_separator() {
+        return move_whole_section(ctx, clicked_idx, target);
+    }
 
     let moving = moving_set(ctx.items, ctx.selected, ctx.collapsed_blocks, clicked_idx);
 
@@ -279,6 +284,34 @@ pub(crate) fn move_selection(
     *ctx.selected = recompute_selection(ctx.items, &identities);
     *ctx.anchor = ctx.selected.first().copied();
 
+    MoveSelectionOutcome::Moved
+}
+
+fn move_whole_section(
+    ctx: &mut MoveSelectionContext<'_>,
+    separator_idx: usize,
+    target: MoveSelectionTarget,
+) -> MoveSelectionOutcome {
+    let section = section_indices(ctx.items, separator_idx);
+    if is_locked(ctx.items, &section, ctx.locked_blocks) {
+        return MoveSelectionOutcome::RefusedLocked;
+    }
+    let before = match target {
+        MoveSelectionTarget::Top => first_separator(ctx.items),
+        MoveSelectionTarget::Bottom => None,
+    };
+    let snapshot = ctx.items.clone();
+    if !move_section(ctx.items, separator_idx, before) {
+        return MoveSelectionOutcome::NothingToMove;
+    }
+    step3_history::push_undo_snapshot(
+        &snapshot,
+        capture_identities(&snapshot, &section),
+        ctx.undo_stack,
+        ctx.redo_stack,
+    );
+    ctx.selected.clear();
+    *ctx.anchor = None;
     MoveSelectionOutcome::Moved
 }
 
@@ -915,6 +948,66 @@ mod tests {
             &moving_set(&items, &[], &[], 2),
             &locked
         ));
+    }
+
+    fn names(items: &[Step3ItemState]) -> Vec<String> {
+        items
+            .iter()
+            .filter(|item| item.is_parent)
+            .map(|item| item.mod_name.clone())
+            .collect()
+    }
+
+    #[test]
+    fn a_separator_moves_its_whole_section_to_the_top_or_bottom() {
+        let mut items = two_sections();
+        let mut selected = vec![3];
+        let (outcome, undo, _) = run(&mut items, &mut selected, &[], 7, MoveSelectionTarget::Top);
+        assert_eq!(outcome, MoveSelectionOutcome::Moved);
+        assert_eq!(names(&items), ["A", "Tweaks", "D", "NPCs", "B", "C"]);
+        assert_eq!(undo.len(), 1);
+        assert_eq!(undo[0].items, two_sections());
+        assert_eq!(selected, Vec::<usize>::new());
+
+        let mut items = two_sections();
+        let (outcome, ..) = run(
+            &mut items,
+            &mut Vec::new(),
+            &[],
+            2,
+            MoveSelectionTarget::Bottom,
+        );
+        assert_eq!(outcome, MoveSelectionOutcome::Moved);
+        assert_eq!(names(&items), ["A", "Tweaks", "D", "NPCs", "B", "C"]);
+    }
+
+    #[test]
+    fn a_section_already_at_the_top_or_bottom_does_not_move() {
+        for (separator, target) in [
+            (2, MoveSelectionTarget::Top),
+            (7, MoveSelectionTarget::Bottom),
+        ] {
+            let mut items = two_sections();
+            let (outcome, undo, _) = run(&mut items, &mut Vec::new(), &[], separator, target);
+            assert_eq!(outcome, MoveSelectionOutcome::NothingToMove);
+            assert_eq!(items, two_sections());
+            assert_eq!(undo.len(), 0);
+        }
+    }
+
+    #[test]
+    fn an_open_section_holding_a_locked_mod_refuses_to_move() {
+        let mut items = two_sections();
+        let locked = vec!["B::b0".to_string()];
+        let (outcome, ..) = run(
+            &mut items,
+            &mut Vec::new(),
+            &locked,
+            2,
+            MoveSelectionTarget::Bottom,
+        );
+        assert_eq!(outcome, MoveSelectionOutcome::RefusedLocked);
+        assert_eq!(items, two_sections());
     }
 
     #[test]

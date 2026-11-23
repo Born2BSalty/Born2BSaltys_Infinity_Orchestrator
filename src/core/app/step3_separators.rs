@@ -100,6 +100,36 @@ pub fn section_indices(items: &[Step3ItemState], separator_idx: usize) -> Vec<us
     (separator_idx..end).collect()
 }
 
+pub fn move_section(
+    items: &mut Vec<Step3ItemState>,
+    separator_idx: usize,
+    before: Option<usize>,
+) -> bool {
+    let section = section_indices(items, separator_idx);
+    let (Some(&start), Some(&end)) = (section.first(), section.last()) else {
+        return false;
+    };
+    let target = before.unwrap_or(items.len());
+    let lands_on_a_separator =
+        before.is_none_or(|idx| items.get(idx).is_some_and(Step3ItemState::is_separator));
+    if !lands_on_a_separator || (start..=end + 1).contains(&target) {
+        return false;
+    }
+    let moving: Vec<Step3ItemState> = items.drain(start..=end).collect();
+    let insert_at = if target > end {
+        target - moving.len()
+    } else {
+        target
+    };
+    items.splice(insert_at..insert_at, moving);
+    true
+}
+
+#[must_use]
+pub fn first_separator(items: &[Step3ItemState]) -> Option<usize> {
+    items.iter().position(Step3ItemState::is_separator)
+}
+
 #[must_use]
 pub fn enclosing_separator(items: &[Step3ItemState], idx: usize) -> Option<usize> {
     items

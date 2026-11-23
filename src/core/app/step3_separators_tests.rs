@@ -272,6 +272,75 @@ fn section_indices_stop_at_next_separator() {
     assert_eq!(enclosing_separator(&items, 7), Some(5));
 }
 
+fn three_sections() -> Vec<Step3ItemState> {
+    vec![
+        header("Fixpack", "Fixpack::b0"),
+        separator_row("Utilities", "SEPARATOR::1".to_string()),
+        header("Eeex", "Eeex::b0"),
+        separator_row("Quests", "SEPARATOR::2".to_string()),
+        header("Heart", "Heart::b0"),
+        header("Ruins", "Ruins::b0"),
+        separator_row("Tweaks", "SEPARATOR::3".to_string()),
+        header("Klatu", "Klatu::b0"),
+    ]
+}
+
+fn names(items: &[Step3ItemState]) -> Vec<&str> {
+    items.iter().map(|item| item.mod_name.as_str()).collect()
+}
+
+#[test]
+fn a_section_moves_before_another_separator_or_to_the_end() {
+    let mut items = three_sections();
+    assert!(move_section(&mut items, 1, Some(6)));
+    assert_eq!(
+        names(&items),
+        [
+            "Fixpack",
+            "Quests",
+            "Heart",
+            "Ruins",
+            "Utilities",
+            "Eeex",
+            "Tweaks",
+            "Klatu"
+        ]
+    );
+
+    let mut items = three_sections();
+    let top = first_separator(&items);
+    assert!(move_section(&mut items, 6, top));
+    assert_eq!(
+        names(&items),
+        [
+            "Fixpack",
+            "Tweaks",
+            "Klatu",
+            "Utilities",
+            "Eeex",
+            "Quests",
+            "Heart",
+            "Ruins"
+        ]
+    );
+
+    let mut items = three_sections();
+    assert!(move_section(&mut items, 1, None));
+    assert_eq!(names(&items)[5..], ["Klatu", "Utilities", "Eeex"]);
+}
+
+#[test]
+fn a_section_never_lands_where_it_sits_or_inside_another_section() {
+    for before in [Some(1), Some(3), Some(4)] {
+        let mut items = three_sections();
+        assert!(!move_section(&mut items, 1, before));
+        assert_eq!(items, three_sections());
+    }
+    let mut items = three_sections();
+    assert!(!move_section(&mut items, 6, None));
+    assert_eq!(items, three_sections());
+}
+
 #[test]
 fn next_block_id_increments() {
     let mut items = vec![header("A", "A::b0"), component("A", "A::b0", "0")];

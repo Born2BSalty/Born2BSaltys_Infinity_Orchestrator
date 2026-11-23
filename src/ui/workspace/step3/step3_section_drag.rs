@@ -4,7 +4,6 @@
 use eframe::egui;
 
 use crate::app::state::Step3ItemState;
-use crate::app::step3_separators::section_indices;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(super) struct SectionDrop {
@@ -43,36 +42,11 @@ pub(super) fn section_drop_target(
         .map(|(before, _, line_y)| SectionDrop { before, line_y })
 }
 
-pub(super) fn apply_section_drop(
-    items: &mut Vec<Step3ItemState>,
-    separator_idx: usize,
-    before: Option<usize>,
-) -> bool {
-    let section = section_indices(items, separator_idx);
-    let (Some(&start), Some(&end)) = (section.first(), section.last()) else {
-        return false;
-    };
-    let target = before.unwrap_or(items.len());
-    let lands_on_a_separator =
-        before.is_none_or(|idx| items.get(idx).is_some_and(Step3ItemState::is_separator));
-    if !lands_on_a_separator || (start..=end + 1).contains(&target) {
-        return false;
-    }
-    let moving: Vec<Step3ItemState> = items.drain(start..=end).collect();
-    let insert_at = if target > end {
-        target - moving.len()
-    } else {
-        target
-    };
-    items.splice(insert_at..insert_at, moving);
-    true
-}
-
 #[cfg(test)]
 mod tests {
     use eframe::egui;
 
-    use super::{SectionDrop, apply_section_drop, section_drop_target};
+    use super::{SectionDrop, section_drop_target};
     use crate::app::state::Step3ItemState;
     use crate::app::step3_separators::separator_row;
 
@@ -103,62 +77,6 @@ mod tests {
             separator_row("Tweaks", "SEPARATOR::3".to_string()),
             header("Klatu"),
         ]
-    }
-
-    fn names(items: &[Step3ItemState]) -> Vec<&str> {
-        items.iter().map(|item| item.mod_name.as_str()).collect()
-    }
-
-    #[test]
-    fn a_section_lands_before_another_separator_or_at_the_end() {
-        let mut items = list();
-        assert!(apply_section_drop(&mut items, 1, Some(6)));
-        assert_eq!(
-            names(&items),
-            [
-                "Fixpack",
-                "Quests",
-                "Heart",
-                "Ruins",
-                "Utilities",
-                "Eeex",
-                "Tweaks",
-                "Klatu"
-            ]
-        );
-
-        let mut items = list();
-        assert!(apply_section_drop(&mut items, 6, Some(1)));
-        assert_eq!(
-            names(&items),
-            [
-                "Fixpack",
-                "Tweaks",
-                "Klatu",
-                "Utilities",
-                "Eeex",
-                "Quests",
-                "Heart",
-                "Ruins"
-            ]
-        );
-
-        let mut items = list();
-        assert!(apply_section_drop(&mut items, 1, None));
-        assert_eq!(names(&items)[5..], ["Klatu", "Utilities", "Eeex"]);
-    }
-
-    #[test]
-    fn dropping_a_section_where_it_already_sits_changes_nothing() {
-        for before in [Some(1), Some(3)] {
-            let mut items = list();
-            assert!(!apply_section_drop(&mut items, 1, before));
-            assert_eq!(items, list());
-        }
-        let mut items = list();
-        assert!(!apply_section_drop(&mut items, 6, None));
-        assert!(!apply_section_drop(&mut items, 1, Some(4)));
-        assert_eq!(items, list());
     }
 
     #[test]

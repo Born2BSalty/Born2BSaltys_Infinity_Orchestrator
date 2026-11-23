@@ -10,7 +10,7 @@ use crate::app::prompt_eval_summary_step3;
 use crate::app::state::{Step2Selection, Step3ItemState, WizardState};
 use crate::app::step3_history::{self, Step3HistoryEntry, Step3TouchedRows};
 use crate::app::step3_prompt_edit::PromptActionRequest;
-use crate::app::step3_separators::{SeparatorRename, section_indices};
+use crate::app::step3_separators::{SeparatorRename, move_section, section_indices};
 use crate::parser::prompt_eval_expr::PromptEvalContext;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::shared::layout_tokens_global::BORDER_THIN;
@@ -1061,6 +1061,15 @@ fn render_separator_context_menu(
     acc: &mut RowAccumulator,
 ) {
     drag_response.context_menu(|ui| {
+        if ui.button("Move section to top").clicked() {
+            acc.move_request = Some((idx, MoveSelectionTarget::Top));
+            ui.close_menu();
+        }
+        if ui.button("Move section to bottom").clicked() {
+            acc.move_request = Some((idx, MoveSelectionTarget::Bottom));
+            ui.close_menu();
+        }
+        ui.separator();
         if ui.button("Rename\u{2026}").clicked() {
             acc.separator_request = Some(SeparatorRequest::Rename(idx));
             ui.close_menu();
@@ -1271,7 +1280,7 @@ fn run_section_drag(ui: &egui::Ui, ctx: &mut RenderCtx<'_>, visible_rows: &[(usi
     };
 
     if ui.input(|input| input.pointer.any_released()) {
-        if !section_drag::apply_section_drop(ctx.items, separator_idx, drop.before)
+        if !move_section(ctx.items, separator_idx, drop.before)
             && ctx
                 .undo_stack
                 .last()
