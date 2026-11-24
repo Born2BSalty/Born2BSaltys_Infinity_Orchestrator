@@ -910,8 +910,7 @@ mod tests {
         let body = bodies
             .iter()
             .find(|(body_name, _)| *body_name == name)
-            .map(|(_, body)| body.clone())
-            .unwrap_or_default();
+            .map_or_else(Default::default, |(_, body)| body.clone());
         let mode = path.split('/').nth(1).unwrap_or_default();
         match mode {
             "404" => {

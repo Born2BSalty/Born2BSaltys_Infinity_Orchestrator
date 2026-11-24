@@ -194,9 +194,7 @@ fn parse_section(
 }
 
 fn installed_refs_map(text: &str) -> BTreeMap<String, String> {
-    toml::from_str::<ModSourceRefsFile>(text)
-        .map(|file| file.refs)
-        .unwrap_or_default()
+    toml::from_str::<ModSourceRefsFile>(text).map_or_else(|_| BTreeMap::default(), |file| file.refs)
 }
 
 fn display_version(

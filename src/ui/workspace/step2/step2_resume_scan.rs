@@ -502,7 +502,7 @@ mod tests {
                         .to_string_lossy()
                         .into_owned(),
                 ),
-                order_bgee: vec![legacy.clone()],
+                order_bgee: vec![legacy],
                 order_iwdee: if canonical {
                     vec![current.clone()]
                 } else {

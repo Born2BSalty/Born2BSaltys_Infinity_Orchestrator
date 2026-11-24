@@ -19,6 +19,7 @@ const TAB_GAP: f32 = 4.0;
 const ITEM_GAP: f32 = 8.0;
 const ACTION_LEFT_PAD: f32 = 12.0;
 const BTN_GAP: f32 = 6.0;
+const SEPARATORS_MENU_ID: &str = "step3_separators_menu";
 
 pub(crate) fn render(
     ui: &mut egui::Ui,
@@ -61,6 +62,13 @@ pub(crate) fn render(
             Step3RowIntent::Redo => toolbar_support_step3::redo_active(state),
             Step3RowIntent::CollapseAll => toolbar_support_step3::collapse_all_active(state),
             Step3RowIntent::ExpandAll => toolbar_support_step3::expand_all_active(state),
+            Step3RowIntent::AddSeparator => {
+                toolbar_support_step3::add_separator_from_toolbar(state);
+            }
+            Step3RowIntent::CollapseSections => {
+                toolbar_support_step3::collapse_sections_active(state);
+            }
+            Step3RowIntent::ExpandSections => toolbar_support_step3::expand_sections_active(state),
         }
     }
 
@@ -73,6 +81,7 @@ struct Step3RowState {
     prompt_count: usize,
     can_undo: bool,
     can_redo: bool,
+    component_count: usize,
     dual_game: bool,
 }
 
@@ -103,6 +112,14 @@ impl Step3RowState {
             } else {
                 !state.step3.bg2ee_redo_stack.is_empty()
             },
+            component_count: if active_is_bgee {
+                &state.step3.bgee_items
+            } else {
+                &state.step3.bg2ee_items
+            }
+            .iter()
+            .filter(|item| !item.is_parent)
+            .count(),
             dual_game: workspace_step4::is_dual_game(state),
         }
     }
@@ -204,6 +221,7 @@ fn render_actions(
         ) {
             *pending = Some(Step3RowIntent::CollapseAll);
         }
+        render_separators_menu(ui, palette, row.component_count > 0, pending);
         if step3_button(
             ui,
             palette,
@@ -223,6 +241,52 @@ fn render_actions(
             *pending = Some(Step3RowIntent::Undo);
         }
     });
+}
+
+fn render_separators_menu(
+    ui: &mut egui::Ui,
+    palette: ThemePalette,
+    can_add: bool,
+    pending: &mut Option<Step3RowIntent>,
+) {
+    let popup_id = egui::Id::new(SEPARATORS_MENU_ID);
+    let response = redesign_btn(
+        ui,
+        palette,
+        "Separators",
+        BtnOpts {
+            small: true,
+            ..Default::default()
+        },
+    )
+    .on_hover_text(crate::ui::shared::tooltip_global::STEP3_SEPARATORS_MENU);
+    if response.clicked() {
+        ui.memory_mut(|memory| memory.toggle_popup(popup_id));
+    }
+    egui::popup::popup_below_widget(
+        ui,
+        popup_id,
+        &response,
+        egui::PopupCloseBehavior::CloseOnClickOutside,
+        |ui| {
+            ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
+            let entries = [
+                ("Add separator", can_add, Step3RowIntent::AddSeparator),
+                (
+                    "Collapse all sections",
+                    true,
+                    Step3RowIntent::CollapseSections,
+                ),
+                ("Expand all sections", true, Step3RowIntent::ExpandSections),
+            ];
+            for (label, enabled, intent) in entries {
+                if ui.add_enabled(enabled, egui::Button::new(label)).clicked() {
+                    *pending = Some(intent);
+                    ui.memory_mut(egui::Memory::close_popup);
+                }
+            }
+        },
+    );
 }
 
 fn step3_button(
@@ -255,6 +319,9 @@ enum Step3RowIntent {
     Redo,
     CollapseAll,
     ExpandAll,
+    AddSeparator,
+    CollapseSections,
+    ExpandSections,
 }
 
 fn clickable_pill(

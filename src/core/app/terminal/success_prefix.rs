@@ -45,8 +45,7 @@ fn parse_batch_entry(entry: &str) -> Option<BatchComponent> {
         return None;
     }
     let component_name = extract_field(entry, "component_name")
-        .map(|name| name.trim().to_string())
-        .unwrap_or_default();
+        .map_or_else(Default::default, |name| name.trim().to_string());
     Some(BatchComponent {
         tp2_stem: tp2_stem(&tp_file),
         component_id,

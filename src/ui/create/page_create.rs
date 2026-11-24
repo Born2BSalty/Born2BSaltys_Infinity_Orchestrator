@@ -437,11 +437,10 @@ mod tests {
         let dest = TempDestGuard::new("globaldefault");
         let mut app = orch_for_create_test();
         app.redesign_settings.user_name = "@tester".to_string();
-        let global = app
-            .settings_store
-            .load()
-            .map(|s| s.step1.effective_global_mods_folder().to_string())
-            .unwrap_or_default();
+        let global = app.settings_store.load().map_or_else(
+            |_| String::new(),
+            |s| s.step1.effective_global_mods_folder().to_string(),
+        );
         assert_eq!(global.trim().len(), 0, "isolated app has no mods folder");
 
         finish_start_scratch(&mut app, "Fresh", Game::BGEE, &dest.as_string());

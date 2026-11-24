@@ -15,8 +15,7 @@ pub fn current_exe_fingerprint() -> String {
         .modified()
         .ok()
         .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-        .map(|d| d.as_secs())
-        .unwrap_or_default();
+        .map_or_else(Default::default, |d| d.as_secs());
     format!(
         "path={};len={};mtime={}",
         path.display(),

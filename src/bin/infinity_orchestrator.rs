@@ -74,15 +74,7 @@ fn main() -> Result<()> {
 
     bio::app::mod_downloads_migrate::migrate_source_files_at_launch();
 
-    let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default()
-            .with_inner_size([WINDOW_WIDTH, WINDOW_HEIGHT])
-            .with_min_inner_size([WINDOW_MIN_WIDTH, WINDOW_MIN_HEIGHT])
-            .with_icon(app_icon())
-            .with_decorations(false)
-            .with_resizable(true),
-        ..Default::default()
-    };
+    let options = native_options();
 
     eframe::run_native(
         APP_TITLE,
@@ -95,6 +87,18 @@ fn main() -> Result<()> {
     .map_err(|err| anyhow!("failed to launch Infinity Orchestrator: {err}"))?;
 
     Ok(())
+}
+
+fn native_options() -> eframe::NativeOptions {
+    eframe::NativeOptions {
+        viewport: egui::ViewportBuilder::default()
+            .with_inner_size([WINDOW_WIDTH, WINDOW_HEIGHT])
+            .with_min_inner_size([WINDOW_MIN_WIDTH, WINDOW_MIN_HEIGHT])
+            .with_icon(app_icon())
+            .with_decorations(cfg!(target_os = "windows"))
+            .with_resizable(true),
+        ..Default::default()
+    }
 }
 
 fn log_legacy_step1_outcome(
@@ -127,4 +131,35 @@ fn log_legacy_step1_outcome(
 fn app_icon() -> egui::IconData {
     eframe::icon_data::from_png_bytes(include_bytes!("../../assets/icon.png"))
         .expect("assets/icon.png must be a valid PNG icon")
+}
+
+#[cfg(test)]
+mod native_window_tests {
+    use super::*;
+
+    #[test]
+    fn native_window_options_keep_identity_and_normal_startup() {
+        let options = native_options();
+        assert_eq!(options.viewport.inner_size, Some(egui::vec2(1280.0, 820.0)));
+        assert_eq!(
+            options.viewport.min_inner_size,
+            Some(egui::vec2(1024.0, 700.0))
+        );
+        assert_eq!(
+            options.viewport.decorations,
+            Some(cfg!(target_os = "windows"))
+        );
+        assert_eq!(options.viewport.resizable, Some(true));
+        assert_ne!(options.viewport.maximized, Some(true));
+        assert_ne!(options.viewport.fullscreen, Some(true));
+        assert_eq!(
+            APP_TITLE,
+            concat!("Infinity Orchestrator (beta) v", env!("CARGO_PKG_VERSION"))
+        );
+        let icon = options.viewport.icon.expect("production icon");
+        let original = app_icon();
+        assert_eq!(icon.width, original.width);
+        assert_eq!(icon.height, original.height);
+        assert_eq!(icon.rgba, original.rgba);
+    }
 }

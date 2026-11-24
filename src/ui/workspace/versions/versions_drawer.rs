@@ -62,9 +62,9 @@ fn cached_source_tiers(ctx: &egui::Context) -> Arc<mod_downloads::SourceTiers> {
     {
         return cache.tiers;
     }
-    let modlist_text = modlist_path
-        .map(|path| std::fs::read_to_string(path).unwrap_or_default())
-        .unwrap_or_default();
+    let modlist_text = modlist_path.map_or_else(Default::default, |path| {
+        std::fs::read_to_string(path).unwrap_or_default()
+    });
     let tiers = Arc::new(mod_downloads::load_source_tiers(&modlist_text));
     ctx.data_mut(|d| {
         d.insert_temp(

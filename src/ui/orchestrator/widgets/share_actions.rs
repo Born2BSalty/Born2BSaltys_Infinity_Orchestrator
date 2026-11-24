@@ -14,8 +14,7 @@ use crate::ui::orchestrator::widgets::notification::NotificationManager;
 #[must_use]
 pub fn unresolved_mods_for_code(code: &str) -> Vec<String> {
     preview_modlist_share_code(code)
-        .map(|preview| preview.unresolved_mods)
-        .unwrap_or_default()
+        .map_or_else(|_| Vec::default(), |preview| preview.unresolved_mods)
 }
 
 pub fn export_modlist_file(

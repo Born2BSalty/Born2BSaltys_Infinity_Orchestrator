@@ -110,9 +110,6 @@ pub(super) fn preferred_guard_hit(
             "conflict" => 1u8,
             _ => 0u8,
         };
-        if priority == 2 {
-            return Some(candidate);
-        }
         if best.as_ref().is_none_or(|(current, _)| priority > *current) {
             best = Some((priority, candidate));
         }

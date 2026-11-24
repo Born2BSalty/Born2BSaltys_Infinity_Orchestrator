@@ -146,6 +146,12 @@ fn jump_to_target_in_tab(
     };
     let block_id = target.items[target_idx].block_id.clone();
     target.collapsed_blocks.retain(|value| value != &block_id);
+    if let Some(separator_idx) =
+        crate::app::step3_separators::enclosing_separator(target.items, target_idx)
+    {
+        let section_id = target.items[separator_idx].block_id.clone();
+        target.collapsed_blocks.retain(|value| value != &section_id);
+    }
     target.selected.clear();
     target.selected.push(target_idx);
     *target.anchor = Some(target_idx);

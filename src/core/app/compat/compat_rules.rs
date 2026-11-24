@@ -190,8 +190,7 @@ fn cache_stamp_signature(path: &PathBuf) -> String {
     let modified = stamp
         .modified
         .and_then(|value| value.duration_since(SystemTime::UNIX_EPOCH).ok())
-        .map(|value| value.as_nanos().to_string())
-        .unwrap_or_default();
+        .map_or_else(Default::default, |value| value.as_nanos().to_string());
     format!("{modified}:{}", stamp.len)
 }
 
@@ -386,12 +385,26 @@ mod tests {
             std::process::id(),
             SystemTime::now()
                 .duration_since(SystemTime::UNIX_EPOCH)
-                .map(|value| value.as_nanos())
-                .unwrap_or_default()
+                .map_or_else(|_| 0, |value| value.as_nanos())
         ));
-        fs::create_dir_all(&root).expect("temp root");
-        set_config_dir_override(Some(root.clone()));
-        TempRootGuard(root)
+        let guard = TempRootGuard(root);
+        fs::create_dir_all(&guard.0).expect("temp root");
+        set_config_dir_override(Some(guard.0.clone()));
+        guard
+    }
+
+    #[test]
+    fn temp_root_guard_cleans_during_unwind() {
+        let guard = temp_root("controlled_unwind");
+        let root = guard.0.clone();
+        let path = root.clone();
+        let result = std::panic::catch_unwind(move || {
+            let _guard = guard;
+            fs::write(path.join("fixture.txt"), "owned fixture").expect("write fixture");
+            panic!("controlled fixture unwind");
+        });
+        assert!(result.is_err());
+        assert!(!root.exists(), "unwind must clean owned fixture");
     }
 
     #[test]

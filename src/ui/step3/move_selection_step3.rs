@@ -5,6 +5,9 @@ use std::collections::HashSet;
 
 use crate::app::state::Step3ItemState;
 use crate::app::step3_history::{self, Step3HistoryEntry, Step3TouchedRows};
+use crate::app::step3_separators::{
+    enclosing_separator, first_separator, move_section, section_indices,
+};
 use crate::ui::step3::blocks;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -38,13 +41,20 @@ pub(crate) fn moving_set(
     collapsed_blocks: &[String],
     clicked_idx: usize,
 ) -> Vec<usize> {
+    if let Some(separator) = items.get(clicked_idx).filter(|item| item.is_separator()) {
+        return if collapsed_blocks.contains(&separator.block_id) {
+            section_indices(items, clicked_idx)
+        } else {
+            vec![clicked_idx]
+        };
+    }
     let operands: Vec<usize> = if selected.contains(&clicked_idx)
         || header_of_a_fully_selected_mod(items, selected, clicked_idx)
     {
         selected
             .iter()
             .copied()
-            .filter(|idx| *idx < items.len())
+            .filter(|idx| items.get(*idx).is_some_and(|item| !item.is_separator()))
             .collect()
     } else {
         vec![clicked_idx]
@@ -100,7 +110,10 @@ pub(crate) fn header_of_a_fully_selected_mod(
     selected: &[usize],
     clicked_idx: usize,
 ) -> bool {
-    if !items.get(clicked_idx).is_some_and(|item| item.is_parent) {
+    if !items
+        .get(clicked_idx)
+        .is_some_and(Step3ItemState::is_mod_header)
+    {
         return false;
     }
     let mut children = blocks::block_indices(items, clicked_idx)
@@ -194,12 +207,19 @@ pub(crate) fn expand_blocks_hiding_lit_components(
     selected: &[usize],
     collapsed_blocks: &mut Vec<String>,
 ) {
-    let blocks_to_expand: HashSet<&str> = selected
+    let mut blocks_to_expand: HashSet<&str> = selected
         .iter()
         .filter_map(|idx| items.get(*idx))
         .filter(|item| !item.is_parent)
         .map(|item| item.block_id.as_str())
         .collect();
+    blocks_to_expand.extend(
+        selected
+            .iter()
+            .filter(|idx| **idx < items.len())
+            .filter_map(|idx| enclosing_separator(items, *idx))
+            .map(|separator_idx| items[separator_idx].block_id.as_str()),
+    );
     collapsed_blocks.retain(|block_id| !blocks_to_expand.contains(block_id.as_str()));
 }
 
@@ -225,6 +245,9 @@ pub(crate) fn move_selection(
 ) -> MoveSelectionOutcome {
     if clicked_idx >= ctx.items.len() {
         return MoveSelectionOutcome::NothingToMove;
+    }
+    if ctx.items[clicked_idx].is_separator() {
+        return move_whole_section(ctx, clicked_idx, target);
     }
 
     let moving = moving_set(ctx.items, ctx.selected, ctx.collapsed_blocks, clicked_idx);
@@ -261,6 +284,34 @@ pub(crate) fn move_selection(
     *ctx.selected = recompute_selection(ctx.items, &identities);
     *ctx.anchor = ctx.selected.first().copied();
 
+    MoveSelectionOutcome::Moved
+}
+
+fn move_whole_section(
+    ctx: &mut MoveSelectionContext<'_>,
+    separator_idx: usize,
+    target: MoveSelectionTarget,
+) -> MoveSelectionOutcome {
+    let section = section_indices(ctx.items, separator_idx);
+    if is_locked(ctx.items, &section, ctx.locked_blocks) {
+        return MoveSelectionOutcome::RefusedLocked;
+    }
+    let before = match target {
+        MoveSelectionTarget::Top => first_separator(ctx.items),
+        MoveSelectionTarget::Bottom => None,
+    };
+    let snapshot = ctx.items.clone();
+    if !move_section(ctx.items, separator_idx, before) {
+        return MoveSelectionOutcome::NothingToMove;
+    }
+    step3_history::push_undo_snapshot(
+        &snapshot,
+        capture_identities(&snapshot, &section),
+        ctx.undo_stack,
+        ctx.redo_stack,
+    );
+    ctx.selected.clear();
+    *ctx.anchor = None;
     MoveSelectionOutcome::Moved
 }
 
@@ -821,5 +872,156 @@ mod tests {
         let expected_headers: HashSet<String> = vec!["B::b0".to_string()].into_iter().collect();
         assert_eq!(entry.touched.component_keys, expected_keys);
         assert_eq!(entry.touched.header_blocks, expected_headers);
+    }
+
+    fn separator(name: &str, block_id: &str) -> Step3ItemState {
+        crate::app::step3_separators::separator_row(name, block_id.to_string())
+    }
+
+    fn two_sections() -> Vec<Step3ItemState> {
+        vec![
+            parent("A", "A::b0"),
+            child("A", "A::b0", "1", 1),
+            separator("NPCs", "SEPARATOR::1"),
+            parent("B", "B::b0"),
+            child("B", "B::b0", "1", 2),
+            parent("C", "C::b0"),
+            child("C", "C::b0", "1", 3),
+            separator("Tweaks", "SEPARATOR::2"),
+            parent("D", "D::b0"),
+            child("D", "D::b0", "1", 4),
+        ]
+    }
+
+    #[test]
+    fn closed_separator_moves_its_section() {
+        let items = two_sections();
+        let collapsed = vec!["SEPARATOR::1".to_string()];
+
+        assert_eq!(
+            moving_set(&items, &[1, 9], &collapsed, 2),
+            vec![2, 3, 4, 5, 6]
+        );
+    }
+
+    #[test]
+    fn open_separator_moves_alone() {
+        let items = two_sections();
+        let collapsed = vec!["SEPARATOR::2".to_string()];
+
+        assert_eq!(moving_set(&items, &[2, 3, 4], &collapsed, 2), vec![2]);
+    }
+
+    #[test]
+    fn closed_section_with_locked_mod_is_refused() {
+        let mut items = two_sections();
+        let before = items.clone();
+        let collapsed = vec!["SEPARATOR::1".to_string()];
+        let locked = vec!["C::b0".to_string()];
+        let mut selected = Vec::new();
+        let mut anchor = None;
+        let mut clone_seq = 0usize;
+        let mut undo_stack = Vec::new();
+        let mut redo_stack = Vec::new();
+
+        let moving = moving_set(&items, &selected, &collapsed, 2);
+        assert!(is_locked(&items, &moving, &locked));
+
+        let outcome = {
+            let mut ctx = MoveSelectionContext {
+                items: &mut items,
+                selected: &mut selected,
+                anchor: &mut anchor,
+                clone_seq: &mut clone_seq,
+                locked_blocks: &locked,
+                collapsed_blocks: &collapsed,
+                undo_stack: &mut undo_stack,
+                redo_stack: &mut redo_stack,
+            };
+            move_selection(&mut ctx, 2, MoveSelectionTarget::Bottom)
+        };
+        assert_eq!(outcome, MoveSelectionOutcome::RefusedLocked);
+        assert_eq!(items, before);
+        assert_eq!(undo_stack.len(), 0);
+        assert!(!is_locked(
+            &items,
+            &moving_set(&items, &[], &[], 2),
+            &locked
+        ));
+    }
+
+    fn names(items: &[Step3ItemState]) -> Vec<String> {
+        items
+            .iter()
+            .filter(|item| item.is_parent)
+            .map(|item| item.mod_name.clone())
+            .collect()
+    }
+
+    #[test]
+    fn a_separator_moves_its_whole_section_to_the_top_or_bottom() {
+        let mut items = two_sections();
+        let mut selected = vec![3];
+        let (outcome, undo, _) = run(&mut items, &mut selected, &[], 7, MoveSelectionTarget::Top);
+        assert_eq!(outcome, MoveSelectionOutcome::Moved);
+        assert_eq!(names(&items), ["A", "Tweaks", "D", "NPCs", "B", "C"]);
+        assert_eq!(undo.len(), 1);
+        assert_eq!(undo[0].items, two_sections());
+        assert_eq!(selected, Vec::<usize>::new());
+
+        let mut items = two_sections();
+        let (outcome, ..) = run(
+            &mut items,
+            &mut Vec::new(),
+            &[],
+            2,
+            MoveSelectionTarget::Bottom,
+        );
+        assert_eq!(outcome, MoveSelectionOutcome::Moved);
+        assert_eq!(names(&items), ["A", "Tweaks", "D", "NPCs", "B", "C"]);
+    }
+
+    #[test]
+    fn a_section_already_at_the_top_or_bottom_does_not_move() {
+        for (separator, target) in [
+            (2, MoveSelectionTarget::Top),
+            (7, MoveSelectionTarget::Bottom),
+        ] {
+            let mut items = two_sections();
+            let (outcome, undo, _) = run(&mut items, &mut Vec::new(), &[], separator, target);
+            assert_eq!(outcome, MoveSelectionOutcome::NothingToMove);
+            assert_eq!(items, two_sections());
+            assert_eq!(undo.len(), 0);
+        }
+    }
+
+    #[test]
+    fn an_open_section_holding_a_locked_mod_refuses_to_move() {
+        let mut items = two_sections();
+        let locked = vec!["B::b0".to_string()];
+        let (outcome, ..) = run(
+            &mut items,
+            &mut Vec::new(),
+            &locked,
+            2,
+            MoveSelectionTarget::Bottom,
+        );
+        assert_eq!(outcome, MoveSelectionOutcome::RefusedLocked);
+        assert_eq!(items, two_sections());
+    }
+
+    #[test]
+    fn selection_never_carries_a_separator() {
+        let mut items = two_sections();
+        let mut selected = vec![2, 4, 7, 9];
+
+        assert_eq!(moving_set(&items, &selected, &[], 4), vec![3, 4, 8, 9]);
+
+        let (outcome, ..) = run(&mut items, &mut selected, &[], 9, MoveSelectionTarget::Top);
+        assert_eq!(outcome, MoveSelectionOutcome::Moved);
+        assert!(items[..4].iter().all(|item| !item.is_separator()));
+        assert!(items[6].is_separator());
+        assert!(items[9].is_separator());
+        assert_eq!(selected, vec![0, 1, 2, 3]);
     }
 }

@@ -16,7 +16,11 @@ use crate::app::game_authority::{self, GameSlot};
 use crate::app::language_names::UNTAGGED_LANGUAGE;
 use crate::app::mod_installer_parser::{self, ParserRecognitionRules};
 use crate::app::share_answers::{ShareAnswers, slot_for_key};
-use crate::app::state::WizardState;
+use crate::app::state::{Step3State, WizardState};
+use crate::app::step3_separators::{
+    SeparatorAnchor, capture_separator_anchors, format_separator_log_line,
+    parse_separator_log_line, sanitize_separator_name,
+};
 use crate::app::step5::diagnostics::build_weidu_export_lines;
 
 const SHARE_CODE_PREFIX: &str = "BIO-MODLIST-V1:";
@@ -414,6 +418,11 @@ pub(crate) fn import_modlist_share_code(
     }
     state.step1 = step1;
     state.reset_workflow_keep_step1();
+    queue_imported_separators(
+        &mut state.step3,
+        &state.step1.game_install,
+        &payload.weidu_logs,
+    );
     state
         .parser_choice_phrases
         .clone_from(&preview.parser_choice_phrases);
@@ -692,6 +701,23 @@ fn write_imported_weidu_logs(
             first_slot_weidu_text(&payload.weidu_logs),
             &import_log_target_path(step1, true)?,
         ),
+    }
+}
+
+fn queue_imported_separators(
+    step3: &mut Step3State,
+    game_install: &str,
+    logs: &ModlistShareWeiduLogs,
+) {
+    let (first, second) = match game_install {
+        "EET" => (logs.bgee.as_deref(), logs.bg2ee.as_deref()),
+        "BG2EE" => (None, logs.bg2ee.as_deref()),
+        _ => (first_slot_weidu_text(logs), None),
+    };
+    for (slot, text) in [(GameSlot::First, first), (GameSlot::Second, second)] {
+        if let Some(text) = text {
+            queue_log_separators(step3, slot, text);
+        }
     }
 }
 
@@ -1014,7 +1040,10 @@ fn installed_or_rebuilt_log(dir: &str, items: &[crate::app::state::Step3ItemStat
         return rebuilt_weidu_log_text(items);
     };
     match fs::read_to_string(&path) {
-        Ok(text) if !text.trim().is_empty() => reappend_wlb_inputs(&text, items),
+        Ok(text) if !text.trim().is_empty() => insert_separator_lines(
+            &reappend_wlb_inputs(&text, items),
+            &capture_separator_anchors(items, &[]),
+        ),
         Ok(_) => {
             warn!(
                 target = "share",
@@ -1032,6 +1061,143 @@ fn installed_or_rebuilt_log(dir: &str, items: &[crate::app::state::Step3ItemStat
             rebuilt_weidu_log_text(items)
         }
     }
+}
+
+fn log_line_identity(line: &str) -> Option<(String, String)> {
+    let trimmed = line.trim();
+    if trimmed.starts_with("//") || !trimmed.starts_with('~') {
+        return None;
+    }
+    let component = crate::mods::component::Component::parse_weidu_line(trimmed).ok()?;
+    Some((component.tp_file.to_ascii_uppercase(), component.component))
+}
+
+fn tp2_file_name(tp2: &str) -> &str {
+    tp2.rsplit(['/', '\\']).next().unwrap_or(tp2)
+}
+
+fn identity_matches(identity: &(String, String), pair: &(String, String)) -> bool {
+    identity.1 == pair.1 && tp2_file_name(&identity.0).eq_ignore_ascii_case(tp2_file_name(&pair.0))
+}
+
+#[must_use]
+pub(crate) fn separator_anchors_from_log_text(text: &str) -> Vec<SeparatorAnchor> {
+    let mut anchors = Vec::<SeparatorAnchor>::new();
+    for line in text.lines() {
+        if let Some(raw_name) = parse_separator_log_line(line) {
+            let Some(name) = sanitize_separator_name(&raw_name) else {
+                continue;
+            };
+            anchors.push(SeparatorAnchor {
+                name,
+                block_id: None,
+                collapsed: false,
+                following: Vec::new(),
+            });
+            continue;
+        }
+        let Some(identity) = log_line_identity(line) else {
+            continue;
+        };
+        for anchor in &mut anchors {
+            anchor.following.push(identity.clone());
+        }
+    }
+    anchors
+}
+
+pub(crate) fn queue_log_separators(step3: &mut Step3State, slot: GameSlot, text: &str) {
+    queue_separator_anchors(step3, slot, separator_anchors_from_log_text(text));
+}
+
+pub(crate) fn queue_separator_anchors(
+    step3: &mut Step3State,
+    slot: GameSlot,
+    anchors: Vec<SeparatorAnchor>,
+) {
+    if anchors.is_empty() {
+        return;
+    }
+    step3
+        .pending_separators
+        .retain(|(pending_slot, _)| *pending_slot != slot);
+    step3.pending_separators.push((slot, anchors));
+}
+
+fn split_line_ending(piece: &str) -> (&str, &str) {
+    piece.strip_suffix("\r\n").map_or_else(
+        || {
+            piece
+                .strip_suffix('\n')
+                .map_or((piece, ""), |body| (body, "\n"))
+        },
+        |body| (body, "\r\n"),
+    )
+}
+
+#[must_use]
+pub(crate) fn insert_separator_lines(log_text: &str, anchors: &[SeparatorAnchor]) -> String {
+    if anchors.is_empty() {
+        return log_text.to_string();
+    }
+    let pieces: Vec<(&str, &str)> = log_text
+        .split_inclusive('\n')
+        .map(split_line_ending)
+        .collect();
+    let identities: Vec<Option<(String, String)>> = pieces
+        .iter()
+        .map(|(body, _)| log_line_identity(body))
+        .collect();
+    let positions: Vec<usize> = anchors
+        .iter()
+        .map(|anchor| {
+            anchor
+                .following
+                .iter()
+                .find_map(|pair| {
+                    identities.iter().position(|identity| {
+                        identity
+                            .as_ref()
+                            .is_some_and(|identity| identity_matches(identity, pair))
+                    })
+                })
+                .unwrap_or(pieces.len())
+        })
+        .collect();
+    let default_ending = if log_text.contains("\r\n") {
+        "\r\n"
+    } else {
+        "\n"
+    };
+    let separators_at = |at: usize| {
+        anchors
+            .iter()
+            .zip(&positions)
+            .filter(move |(_, position)| **position == at)
+            .map(|(anchor, _)| format_separator_log_line(&anchor.name))
+    };
+    let mut out = String::with_capacity(log_text.len() + anchors.len() * 32);
+    for (idx, &(body, ending)) in pieces.iter().enumerate() {
+        let separator_ending = if ending.is_empty() {
+            default_ending
+        } else {
+            ending
+        };
+        for line in separators_at(idx) {
+            out.push_str(&line);
+            out.push_str(separator_ending);
+        }
+        out.push_str(body);
+        out.push_str(ending);
+    }
+    for line in separators_at(pieces.len()) {
+        if !out.is_empty() && !out.ends_with('\n') {
+            out.push_str(default_ending);
+        }
+        out.push_str(&line);
+        out.push_str(default_ending);
+    }
+    out
 }
 
 fn reappend_wlb_inputs(log_text: &str, items: &[crate::app::state::Step3ItemState]) -> String {
@@ -1715,6 +1881,7 @@ mod tests {
         let _lock = crate::app::mod_downloads::AMBIENT_TEST_LOCK
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _parser_guard = crate::app::mod_installer_parser::coordinate_parser_test();
         let guard = ConfigDirGuard::new("unreadable_parser");
         let parser = guard.0.join("parser.toml");
         std::fs::write(&parser, "choice_phrase = 42").expect("malformed parser fixture");
@@ -3348,3 +3515,7 @@ mod tests {
 #[cfg(test)]
 #[path = "modlist_share_parser_tests.rs"]
 mod parser_sharing_tests;
+
+#[cfg(test)]
+#[path = "modlist_share_separator_tests.rs"]
+mod separator_tests;

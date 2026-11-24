@@ -12,13 +12,22 @@ pub mod constraints {
         locked_blocks: &[String],
     ) -> usize {
         let at = insert_at.min(remaining.len());
+        if moving.first().is_some_and(Step3ItemState::is_separator) {
+            return if moving.len() > 1 {
+                nearest_section_boundary(remaining, at)
+            } else if at < remaining.len() && !remaining[at].is_parent {
+                nearer_block_edge(remaining, at, &remaining[at].block_id)
+            } else {
+                at
+            };
+        }
         if moving.is_empty() || at == 0 || at >= remaining.len() || remaining[at].is_parent {
             return at;
         }
         if joins_its_own_mod(remaining, at, moving) {
             return at;
         }
-        if remaining[at - 1].is_parent {
+        if remaining[at - 1].is_mod_header() {
             return at - 1;
         }
         let block_id = remaining[at].block_id.clone();
@@ -56,6 +65,17 @@ pub mod constraints {
             end += 1;
         }
         if at - start <= end - at { start } else { end }
+    }
+
+    fn nearest_section_boundary(remaining: &[Step3ItemState], at: usize) -> usize {
+        remaining
+            .iter()
+            .enumerate()
+            .filter(|(_, item)| item.is_separator())
+            .map(|(idx, _)| idx)
+            .chain(std::iter::once(remaining.len()))
+            .min_by_key(|boundary| (boundary.abs_diff(at), *boundary))
+            .unwrap_or(remaining.len())
     }
 
     #[must_use]
@@ -302,6 +322,63 @@ mod tests {
             assert_eq!(resolve_insert_at(&remaining, 6, &moving, &[]), 6);
             assert_eq!(resolve_insert_at(&remaining, 99, &moving, &[]), 6);
             assert_eq!(resolve_insert_at(&remaining, 3, &[], &[]), 3);
+        }
+
+        fn separator(name: &str, block_id: &str) -> Step3ItemState {
+            crate::app::step3_separators::separator_row(name, block_id.to_string())
+        }
+
+        #[test]
+        fn closed_section_snaps_to_section_boundary() {
+            let remaining = vec![
+                row("A", "__PARENT__", true, "A::b0"),
+                row("A", "1", false, "A::b0"),
+                separator("NPCs", "SEPARATOR::2"),
+                row("B", "__PARENT__", true, "B::b0"),
+                row("B", "1", false, "B::b0"),
+                row("B", "2", false, "B::b0"),
+            ];
+            let moving = vec![
+                separator("Tweaks", "SEPARATOR::1"),
+                row("C", "__PARENT__", true, "C::b0"),
+                row("C", "1", false, "C::b0"),
+            ];
+            assert_eq!(resolve_insert_at(&remaining, 0, &moving, &[]), 2);
+            assert_eq!(resolve_insert_at(&remaining, 1, &moving, &[]), 2);
+            assert_eq!(resolve_insert_at(&remaining, 3, &moving, &[]), 2);
+            assert_eq!(resolve_insert_at(&remaining, 4, &moving, &[]), 2);
+            assert_eq!(resolve_insert_at(&remaining, 5, &moving, &[]), 6);
+            assert_eq!(resolve_insert_at(&remaining, 6, &moving, &[]), 6);
+        }
+
+        #[test]
+        fn open_separator_snaps_to_block_edge() {
+            let remaining = default_remaining();
+            let moving = vec![separator("NPCs", "SEPARATOR::1")];
+            assert_eq!(resolve_insert_at(&remaining, 1, &moving, &[]), 0);
+            assert_eq!(resolve_insert_at(&remaining, 2, &moving, &[]), 0);
+            assert_eq!(resolve_insert_at(&remaining, 3, &moving, &[]), 4);
+            assert_eq!(resolve_insert_at(&remaining, 4, &moving, &[]), 4);
+            assert_eq!(resolve_insert_at(&remaining, 5, &moving, &[]), 4);
+            assert_eq!(resolve_insert_at(&remaining, 6, &moving, &[]), 6);
+        }
+
+        #[test]
+        fn mod_dropped_under_separator_stays_below_it() {
+            let remaining = vec![
+                row("A", "__PARENT__", true, "A::b0"),
+                row("A", "1", false, "A::b0"),
+                separator("NPCs", "SEPARATOR::1"),
+                row("B", "2", false, "B::b0"),
+            ];
+            let whole_mod = vec![
+                row("C", "__PARENT__", true, "C::b0"),
+                row("C", "1", false, "C::b0"),
+            ];
+            assert_eq!(resolve_insert_at(&remaining, 3, &whole_mod, &[]), 3);
+
+            let component = vec![row("C", "1", false, "C::b0")];
+            assert_eq!(resolve_insert_at(&remaining, 3, &component, &[]), 3);
         }
     }
 

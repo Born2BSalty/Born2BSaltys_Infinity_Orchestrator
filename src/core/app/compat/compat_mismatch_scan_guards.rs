@@ -8,6 +8,7 @@ use std::time::SystemTime;
 
 use crate::app::compat_tp2_blocks::{
     ComponentFlags, FamilyIdentity, PredicateFlag, PredicateFlagKind, collect_component_flags,
+    collect_verified_component_flags,
 };
 
 use super::super::compat_mismatch_eval::render_requirement_evidence;
@@ -18,16 +19,25 @@ pub(super) struct GuardOrigin {
     line: usize,
     kind: PredicateFlagKind,
     inherited: bool,
+    source_expression: String,
 }
 
 #[derive(Debug, Clone)]
-pub(super) struct RequirementGuard {
-    pub(super) display_line: String,
-    pub(super) eval_text: String,
+pub(in crate::app) struct RequirementGuard {
+    pub(crate) display_line: String,
+    pub(crate) eval_text: String,
     pub(super) origin: Option<GuardOrigin>,
 }
 
 impl RequirementGuard {
+    pub(crate) fn source_expression(&self) -> &str {
+        self.origin
+            .as_ref()
+            .map_or(self.eval_text.as_str(), |origin| {
+                origin.source_expression.as_str()
+            })
+    }
+
     pub(super) fn inherited_provenance(&self) -> Option<String> {
         let origin = self.origin.as_ref().filter(|origin| origin.inherited)?;
         Some(format!(
@@ -65,9 +75,31 @@ fn load_component_guards_uncached(tp2_path: &str) -> HashMap<String, Vec<Require
     else {
         return HashMap::new();
     };
+    guards_from_components(collect_component_flags(&tp2_text), false)
+}
+
+pub(in crate::app) fn guards_from_loaded_text(
+    text: &str,
+) -> Result<HashMap<String, Vec<RequirementGuard>>, String> {
+    Ok(guards_from_components(
+        collect_verified_component_flags(text)?,
+        true,
+    ))
+}
+
+pub(in crate::app) fn ordinary_guards_from_text(
+    text: &str,
+) -> HashMap<String, Vec<RequirementGuard>> {
+    guards_from_components(collect_component_flags(text), true)
+}
+
+fn guards_from_components(
+    components: Vec<ComponentFlags>,
+    retain_empty: bool,
+) -> HashMap<String, Vec<RequirementGuard>> {
     let mut first_requirements = HashMap::<FamilyIdentity, Vec<RequirementGuard>>::new();
     let mut out = HashMap::<String, Vec<RequirementGuard>>::new();
-    for component in collect_component_flags(&tp2_text) {
+    for component in components {
         let mut guards = component_guards(&component);
         if let Some(family) = component.family {
             if let Some(inherited) = first_requirements.get(&family) {
@@ -93,7 +125,7 @@ fn load_component_guards_uncached(tp2_path: &str) -> HashMap<String, Vec<Require
                 );
             }
         }
-        if !guards.is_empty() {
+        if retain_empty || !guards.is_empty() {
             out.insert(component.component_id, guards);
         }
     }
@@ -119,6 +151,7 @@ fn requirement_guard(component_id: &str, flag: &PredicateFlag) -> RequirementGua
             line: flag.line,
             kind: flag.kind,
             inherited: false,
+            source_expression: flag.source_expression.clone(),
         }),
     }
 }

@@ -21,8 +21,7 @@ pub(super) fn write_prompt_calls_json(
         .step2
         .last_scan_report
         .as_ref()
-        .map(tp2_report_map)
-        .unwrap_or_default();
+        .map_or_else(Default::default, tp2_report_map);
 
     let mut groups = Vec::<serde_json::Value>::new();
     append_groups_for_tab("BGEE", &state.step2.bgee_mods, &report_by_tp2, &mut groups);

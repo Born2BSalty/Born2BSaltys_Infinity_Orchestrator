@@ -641,8 +641,9 @@ impl LivePipelineInputs {
         let game = state
             .parsed_preview
             .as_ref()
-            .map(|p| crate::registry::model::Game::from_legacy_string(&p.game_install))
-            .unwrap_or_default();
+            .map_or_else(Default::default, |p| {
+                crate::registry::model::Game::from_legacy_string(&p.game_install)
+            });
         let code = state.import_code.trim().to_string();
         Self {
             destination,
@@ -819,14 +820,13 @@ fn finish_pipeline_arm_after_destination_prep(
                 inputs.workflow,
                 &settings,
             );
-            let mods_archive_folder = orchestrator
-                .settings_store
-                .load()
-                .map(|settings| {
+            let mods_archive_folder = orchestrator.settings_store.load().map_or_else(
+                |_| String::default(),
+                |settings| {
                     let from: crate::app::state::Step1State = settings.step1.into();
                     from.mods_archive_folder
-                })
-                .unwrap_or_default();
+                },
+            );
             auto_build_driver::arm_download_archive_policy(
                 &mut orchestrator.wizard_state,
                 &mods_archive_folder,

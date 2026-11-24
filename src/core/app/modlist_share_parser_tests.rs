@@ -86,6 +86,7 @@ fn combination_all_seven_arrays_public_import_store_reopen_and_actual_preparatio
     let _lock = crate::app::mod_downloads::AMBIENT_TEST_LOCK
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let _parser_guard = crate::app::mod_installer_parser::coordinate_parser_test();
     let fixture = RecognitionTransportFixture::new();
     let app = crate::ui::orchestrator::orchestrator_app::OrchestratorApp::new_isolated_for_test(
         "full-recognition-transport",

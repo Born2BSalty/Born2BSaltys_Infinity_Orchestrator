@@ -19,6 +19,7 @@ pub fn render(
     active_tab: &str,
 ) -> f32 {
     let leaves: Vec<&Step3ItemState> = items.iter().filter(|i| !i.is_parent).collect();
+    let rows = review_rows(items);
 
     let avail = ui.available_size();
     let (box_rect, _) = ui.allocate_exact_size(avail, egui::Sense::hover());
@@ -62,14 +63,30 @@ pub fn render(
             .id_salt(("workspace_step4_review_scroll", active_tab.to_string()))
             .auto_shrink([false, false])
             .show(&mut child, |ui| {
-                for (i, item) in leaves.iter().enumerate() {
-                    weidu_line::render_weidu_line(ui, palette, item, Some(i + 1), lineno_w);
+                for (item, line_number) in &rows {
+                    weidu_line::render_review_line(ui, palette, item, *line_number, lineno_w);
                 }
             });
     }
 
     ui.allocate_rect(box_rect, egui::Sense::hover());
     box_rect.top()
+}
+
+fn review_rows(items: &[Step3ItemState]) -> Vec<(&Step3ItemState, Option<usize>)> {
+    let mut next_number = 0;
+    items
+        .iter()
+        .filter(|item| !item.is_parent || item.is_separator())
+        .map(|item| {
+            if item.is_separator() {
+                (item, None)
+            } else {
+                next_number += 1;
+                (item, Some(next_number))
+            }
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -108,5 +125,27 @@ mod tests {
         let w2 = weidu_line::lineno_column_width(leaves.len().to_string().len());
         let w1 = weidu_line::lineno_column_width(1);
         assert!(w2 > w1, "2-digit column wider than 1-digit");
+    }
+
+    #[test]
+    fn review_rows_number_components_only() {
+        let items = vec![
+            crate::app::step3_separators::separator_row("Fixes", "SEPARATOR::1".to_string()),
+            parent("A.TP2"),
+            leaf("A.TP2", "0", "first"),
+            crate::app::step3_separators::separator_row("NPCs", "SEPARATOR::2".to_string()),
+            leaf("A.TP2", "1", "second"),
+        ];
+
+        let rows = review_rows(&items);
+
+        assert_eq!(
+            rows.iter().map(|(_, number)| *number).collect::<Vec<_>>(),
+            vec![None, Some(1), None, Some(2)]
+        );
+        assert!(rows[0].0.is_separator());
+        assert_eq!(rows[1].0.component_id, "0");
+        assert!(rows[2].0.is_separator());
+        assert_eq!(rows[3].0.component_id, "1");
     }
 }

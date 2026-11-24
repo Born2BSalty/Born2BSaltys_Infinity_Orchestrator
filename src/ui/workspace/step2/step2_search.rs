@@ -59,8 +59,9 @@ impl RowParams {
             .settings_store
             .load()
             .ok()
-            .map(|s| s.step1.effective_global_mods_folder().to_string())
-            .unwrap_or_default();
+            .map_or_else(Default::default, |s| {
+                s.step1.effective_global_mods_folder().to_string()
+            });
         let global_non_empty = !global_mods_folder.trim().is_empty();
         Self {
             is_fork: orchestrator.workspace_view.fork_meta.is_some(),

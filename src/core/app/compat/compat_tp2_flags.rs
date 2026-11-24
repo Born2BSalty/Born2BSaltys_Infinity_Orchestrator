@@ -16,6 +16,7 @@ pub(in crate::app) enum PredicateFlagKind {
 pub(in crate::app) struct PredicateFlag {
     pub(crate) kind: PredicateFlagKind,
     pub(crate) expression: String,
+    pub(crate) source_expression: String,
     pub(crate) prefix: String,
     pub(crate) line: usize,
 }
@@ -69,6 +70,42 @@ impl SourceToken<'_> {
 
 pub(in crate::app) fn collect_component_flags(text: &str) -> Vec<ComponentFlags> {
     let tokens = source_tokens(text);
+    component_flags_from_tokens(&tokens, text, false).0
+}
+
+pub(in crate::app) fn collect_verified_component_flags(
+    text: &str,
+) -> Result<Vec<ComponentFlags>, String> {
+    let tokens = source_tokens_impl(text, true);
+    if tokens.iter().any(|token| token.kind == TokenKind::Invalid) {
+        return Err("incomplete TP2 source token or comment".to_string());
+    }
+    if tokens.iter().enumerate().any(|(index, token)| {
+        token.leading
+            && token.is_word("BEGIN")
+            && !tokens.get(index + 1).is_some_and(SourceToken::is_label)
+    }) {
+        return Err("incomplete TP2 component BEGIN header".to_string());
+    }
+    let (components, complete) = component_flags_from_tokens(&tokens, text, true);
+    if !complete {
+        return Err("ambiguous TP2 component header or predicate boundary".to_string());
+    }
+    let mut seen = std::collections::HashSet::new();
+    if components
+        .iter()
+        .any(|component| !seen.insert(component.component_id.clone()))
+    {
+        return Err("duplicate TP2 component definition".to_string());
+    }
+    Ok(components)
+}
+
+fn component_flags_from_tokens(
+    tokens: &[SourceToken<'_>],
+    text: &str,
+    strict: bool,
+) -> (Vec<ComponentFlags>, bool) {
     let starts: Vec<usize> = tokens
         .iter()
         .enumerate()
@@ -80,12 +117,14 @@ pub(in crate::app) fn collect_component_flags(text: &str) -> Vec<ComponentFlags>
         })
         .collect();
     let mut next_number = 0u64;
-    starts
+    let mut complete = true;
+    let components = starts
         .iter()
         .enumerate()
         .map(|(index, &start)| {
             let end = starts.get(index + 1).copied().unwrap_or(tokens.len());
-            let mut component = parse_header(&tokens[start + 2..end], text);
+            let (mut component, verified) = parse_header(&tokens[start + 2..end], text, strict);
+            complete &= verified;
             if component.component_id.is_empty() {
                 component.component_id = next_number.to_string();
             }
@@ -95,10 +134,11 @@ pub(in crate::app) fn collect_component_flags(text: &str) -> Vec<ComponentFlags>
                 .map_or(next_number, |number| number.saturating_add(1));
             component
         })
-        .collect()
+        .collect();
+    (components, complete)
 }
 
-fn parse_header(tokens: &[SourceToken<'_>], text: &str) -> ComponentFlags {
+fn parse_header(tokens: &[SourceToken<'_>], text: &str, strict: bool) -> (ComponentFlags, bool) {
     let mut component = ComponentFlags {
         component_id: String::new(),
         family: None,
@@ -106,29 +146,38 @@ fn parse_header(tokens: &[SourceToken<'_>], text: &str) -> ComponentFlags {
         forbids: Vec::new(),
     };
     let mut cursor = 0;
+    let mut complete_header = true;
     while let Some(token) = tokens.get(cursor) {
         let upper = token.text.to_ascii_uppercase();
         if token.kind != TokenKind::Word {
+            complete_header = false;
             break;
         }
         match upper.as_str() {
             "LABEL" => {
                 let Some(end) = label_end(tokens, cursor + 1) else {
+                    complete_header = false;
                     break;
                 };
                 cursor = end;
             }
             "FORBID_COMPONENT" => {
                 let Some(flag) = forbid_flag(tokens, cursor, text) else {
+                    complete_header = false;
                     break;
                 };
                 component.forbids.push(flag);
                 cursor += 4;
             }
             "DESIGNATED" => {
+                if strict && !component.component_id.is_empty() {
+                    complete_header = false;
+                    break;
+                }
                 let Some(number) = tokens.get(cursor + 1).filter(|number| {
                     !number.text.is_empty() && number.text.bytes().all(|byte| byte.is_ascii_digit())
                 }) else {
+                    complete_header = false;
                     break;
                 };
                 component.component_id = normalized_number(number.text);
@@ -136,11 +185,12 @@ fn parse_header(tokens: &[SourceToken<'_>], text: &str) -> ComponentFlags {
             }
             "SUBCOMPONENT" | "FORCED_SUBCOMPONENT" | "GROUP" => {
                 let Some(label) = tokens.get(cursor + 1).filter(|label| label.is_label()) else {
+                    complete_header = false;
                     break;
                 };
                 let option = upper != "GROUP";
                 let start = cursor + 2;
-                let (end, complete) = expression_end(tokens, start);
+                let (end, complete) = expression_end_impl(tokens, start, strict);
                 if option {
                     component.family = complete.then(|| family_identity(label)).flatten();
                 }
@@ -148,51 +198,56 @@ fn parse_header(tokens: &[SourceToken<'_>], text: &str) -> ComponentFlags {
                     component.predicates.push(PredicateFlag {
                         kind: PredicateFlagKind::Option,
                         expression: token_text(&tokens[start..end]),
+                        source_expression: expression_text(&tokens[start..end], text),
                         prefix: format!("{} {}", token.text, label.text),
                         line: token.line,
                     });
                 }
                 if !complete {
+                    complete_header = false;
                     break;
                 }
                 cursor = end;
             }
             "REQUIRE_PREDICATE" => {
                 let start = cursor + 1;
-                let (end, complete) = expression_end(tokens, start);
+                let (end, complete) = expression_end_impl(tokens, start, strict);
                 let expression_end = without_message(tokens, start, end);
                 if complete && expression_end > start {
                     component.predicates.push(PredicateFlag {
                         kind: PredicateFlagKind::Requirement,
                         expression: token_text(&tokens[start..expression_end]),
+                        source_expression: expression_text(&tokens[start..expression_end], text),
                         prefix: "REQUIRE_PREDICATE".to_string(),
                         line: token.line,
                     });
                 }
                 if !complete {
+                    complete_header = false;
                     break;
                 }
                 cursor = end;
             }
             _ => {
-                let Some(arguments) = ordinary_flag_arguments(&upper) else {
+                let Some(arguments_end) = ordinary_header_end(tokens, cursor, &upper) else {
+                    complete_header = is_action(token);
                     break;
                 };
-                let Some(arguments_end) = cursor.checked_add(arguments + 1) else {
-                    break;
-                };
-                if arguments_end > tokens.len()
-                    || tokens[cursor + 1..arguments_end]
-                        .iter()
-                        .any(|argument| argument.kind == TokenKind::Invalid || is_flag(argument))
-                {
-                    break;
-                }
                 cursor = arguments_end;
             }
         }
     }
-    component
+    (component, complete_header)
+}
+
+fn ordinary_header_end(tokens: &[SourceToken<'_>], cursor: usize, flag: &str) -> Option<usize> {
+    let arguments = ordinary_flag_arguments(flag)?;
+    let end = cursor.checked_add(arguments + 1)?;
+    let arguments = tokens.get(cursor + 1..end)?;
+    (!arguments
+        .iter()
+        .any(|argument| argument.kind == TokenKind::Invalid || is_flag(argument)))
+    .then_some(end)
 }
 
 fn forbid_flag(tokens: &[SourceToken<'_>], cursor: usize, text: &str) -> Option<ForbidFlag> {
@@ -330,7 +385,7 @@ fn is_action(token: &SourceToken<'_>) -> bool {
         )
 }
 
-fn expression_end(tokens: &[SourceToken<'_>], start: usize) -> (usize, bool) {
+fn expression_end_impl(tokens: &[SourceToken<'_>], start: usize, strict: bool) -> (usize, bool) {
     let mut depth = 0usize;
     for (index, token) in tokens.iter().enumerate().skip(start) {
         if token.kind == TokenKind::Invalid {
@@ -339,12 +394,24 @@ fn expression_end(tokens: &[SourceToken<'_>], start: usize) -> (usize, bool) {
         if depth == 0 && (is_flag(token) || is_action(token)) {
             return (index, true);
         }
+        if strict
+            && depth == 0
+            && index > start
+            && token.leading
+            && token.kind == TokenKind::Symbol
+            && !matches!(
+                token.text,
+                "(" | ")" | "!" | "&&" | "||" | "+" | "-" | "=" | ">" | "<" | "*" | "/" | "&" | "|"
+            )
+        {
+            return (index, false);
+        }
         if depth == 0
             && token.leading
             && token.kind == TokenKind::Word
             && !is_expression_word(token.text)
         {
-            let complete = index == start || !is_dangling_operator(&tokens[index - 1]);
+            let complete = !strict && (index == start || !is_dangling_operator(&tokens[index - 1]));
             return (index, complete);
         }
         if token.text == "(" {
@@ -440,7 +507,18 @@ fn token_text(tokens: &[SourceToken<'_>]) -> String {
         .join(" ")
 }
 
+fn expression_text(tokens: &[SourceToken<'_>], text: &str) -> String {
+    if let (Some(first), Some(last)) = (tokens.first(), tokens.last()) {
+        return text[first.start..last.end].to_string();
+    }
+    token_text(tokens)
+}
+
 fn source_tokens(text: &str) -> Vec<SourceToken<'_>> {
+    source_tokens_impl(text, false)
+}
+
+fn source_tokens_impl(text: &str, strict: bool) -> Vec<SourceToken<'_>> {
     let bytes = text.as_bytes();
     let mut tokens = Vec::new();
     let mut cursor = 0;
@@ -466,6 +544,17 @@ fn source_tokens(text: &str) -> Vec<SourceToken<'_>> {
             continue;
         }
         if text[cursor..].starts_with("/*") {
+            if strict && !text[cursor + 2..].contains("*/") {
+                tokens.push(SourceToken {
+                    text: &text[cursor..],
+                    kind: TokenKind::Invalid,
+                    line,
+                    leading,
+                    start: cursor,
+                    end: bytes.len(),
+                });
+                break;
+            }
             let end = text[cursor + 2..]
                 .find("*/")
                 .map_or(bytes.len(), |end| cursor + end + 4);
@@ -478,24 +567,7 @@ fn source_tokens(text: &str) -> Vec<SourceToken<'_>> {
         let start = cursor;
         let start_line = line;
         let kind = if matches!(bytes[cursor], b'~' | b'"' | b'%') {
-            let quote = bytes[cursor];
-            cursor += 1;
-            while cursor < bytes.len() && bytes[cursor] != quote {
-                if bytes[cursor] == b'\n' {
-                    line += 1;
-                }
-                cursor += 1;
-            }
-            if cursor < bytes.len() {
-                cursor += 1;
-                if quote == b'%' {
-                    TokenKind::Variable
-                } else {
-                    TokenKind::Literal
-                }
-            } else {
-                TokenKind::Invalid
-            }
+            quoted_token_kind(bytes, &mut cursor, &mut line)
         } else if bytes[cursor] == b'@' {
             cursor += 1;
             while cursor < bytes.len() && bytes[cursor].is_ascii_digit() {
@@ -531,5 +603,35 @@ fn source_tokens(text: &str) -> Vec<SourceToken<'_>> {
         });
         leading = false;
     }
+    if strict && inline_file {
+        tokens.push(SourceToken {
+            text: "",
+            kind: TokenKind::Invalid,
+            line,
+            leading,
+            start: cursor,
+            end: cursor,
+        });
+    }
     tokens
+}
+
+const fn quoted_token_kind(bytes: &[u8], cursor: &mut usize, line: &mut usize) -> TokenKind {
+    let quote = bytes[*cursor];
+    *cursor += 1;
+    while *cursor < bytes.len() && bytes[*cursor] != quote {
+        if bytes[*cursor] == b'\n' {
+            *line += 1;
+        }
+        *cursor += 1;
+    }
+    if *cursor == bytes.len() {
+        return TokenKind::Invalid;
+    }
+    *cursor += 1;
+    if quote == b'%' {
+        TokenKind::Variable
+    } else {
+        TokenKind::Literal
+    }
 }

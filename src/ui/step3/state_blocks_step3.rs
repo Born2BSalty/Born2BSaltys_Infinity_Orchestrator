@@ -9,7 +9,7 @@ mod cleanup {
     pub fn prune_empty_parent_blocks(items: &mut Vec<Step3ItemState>, selected: &mut Vec<usize>) {
         let mut remove_indices: Vec<usize> = Vec::new();
         for (idx, item) in items.iter().enumerate() {
-            if !item.is_parent || !item.parent_placeholder {
+            if !item.is_mod_header() || !item.parent_placeholder {
                 continue;
             }
             let has_child = items
@@ -49,7 +49,10 @@ mod cleanup {
             let Some(next_idx) = next_parent else {
                 break;
             };
-            if mod_key(&items[idx]) != mod_key(&items[next_idx]) {
+            if items[idx].is_separator()
+                || items[next_idx].is_separator()
+                || mod_key(&items[idx]) != mod_key(&items[next_idx])
+            {
                 idx = next_idx;
                 continue;
             }
@@ -118,6 +121,9 @@ mod keys {
 
     #[must_use]
     pub fn step3_item_key(item: &Step3ItemState) -> String {
+        if item.is_separator() {
+            return format!("SEPARATOR|{}", item.block_id);
+        }
         format!(
             "{}|{}|{}|{}|{}|{}",
             item.tp_file,
@@ -169,6 +175,7 @@ mod repair {
             }
 
             if let Some(pidx) = nearest_parent_idx
+                && items[pidx].is_mod_header()
                 && mod_key(&items[pidx]) == mod_key(&items[idx])
             {
                 let target_block = items[pidx].block_id.clone();
@@ -187,7 +194,7 @@ mod repair {
             let parent_template = items
                 .iter()
                 .find(|i| {
-                    i.is_parent
+                    i.is_mod_header()
                         && i.mod_name == items[idx].mod_name
                         && i.tp_file == items[idx].tp_file
                 })
@@ -221,7 +228,16 @@ mod visibility {
     #[must_use]
     pub fn visible_indices(items: &[Step3ItemState], collapsed_blocks: &[String]) -> Vec<usize> {
         let mut out = Vec::with_capacity(items.len());
+        let mut section_closed = false;
         for (idx, item) in items.iter().enumerate() {
+            if item.is_separator() {
+                section_closed = collapsed_blocks.contains(&item.block_id);
+                out.push(idx);
+                continue;
+            }
+            if section_closed {
+                continue;
+            }
             if item.is_parent {
                 out.push(idx);
                 continue;
@@ -270,9 +286,10 @@ pub use visibility::{block_indices, count_children_in_block, visible_indices};
 mod tests {
     use super::{
         count_children_in_block, merge_adjacent_same_mod_blocks, prune_empty_parent_blocks,
-        repair_orphan_children,
+        repair_orphan_children, visible_indices,
     };
     use crate::app::state::Step3ItemState;
+    use crate::app::step3_separators::separator_row;
 
     fn row(mod_name: &str, component_id: &str, is_parent: bool, block_id: &str) -> Step3ItemState {
         Step3ItemState {
@@ -448,5 +465,88 @@ mod tests {
 
         assert_eq!(items, before);
         assert_every_component_sits_under_its_own_header(&items);
+    }
+
+    fn separator(name: &str, block_id: &str) -> Step3ItemState {
+        separator_row(name, block_id.to_string())
+    }
+
+    #[test]
+    fn adjacent_same_name_separators_never_merge() {
+        let mut items = vec![
+            separator("Tweaks", "SEPARATOR::1"),
+            separator("Tweaks", "SEPARATOR::2"),
+            row("A", "__PARENT__", true, "A::b0"),
+            row("A", "1", false, "A::b0"),
+        ];
+        let before = items.clone();
+        let mut clone_seq = 1usize;
+        let mut selected = Vec::new();
+
+        tidy(&mut items, &mut clone_seq, &mut selected);
+
+        assert_eq!(items, before);
+    }
+
+    #[test]
+    fn separator_between_same_mod_blocks_stops_merge() {
+        let mut items = vec![
+            row("A", "__PARENT__", true, "A::b0"),
+            row("A", "1", false, "A::b0"),
+            separator("NPCs", "SEPARATOR::1"),
+            row("A", "__PARENT__", true, "A::b0::split1"),
+            row("A", "2", false, "A::b0::split1"),
+        ];
+        let before = items.clone();
+        let mut clone_seq = 2usize;
+        let mut selected = Vec::new();
+
+        tidy(&mut items, &mut clone_seq, &mut selected);
+
+        assert_eq!(items, before);
+        assert_eq!(items.iter().filter(|i| i.is_mod_header()).count(), 2);
+    }
+
+    #[test]
+    fn component_under_separator_gets_split_header() {
+        let mut items = vec![
+            row("A", "__PARENT__", true, "A::b0"),
+            row("A", "1", false, "A::b0"),
+            separator("NPCs", "SEPARATOR::1"),
+            row("A", "2", false, "A::b0"),
+        ];
+        let mut clone_seq = 1usize;
+        let mut selected = Vec::new();
+
+        tidy(&mut items, &mut clone_seq, &mut selected);
+
+        assert_eq!(items.len(), 5);
+        assert!(items[2].is_separator());
+        assert!(items[3].is_mod_header());
+        assert!(items[3].parent_placeholder);
+        assert!(items[3].block_id.contains("::split"));
+        assert_eq!(items[4].component_id, "2");
+        assert_eq!(items[4].block_id, items[3].block_id);
+        assert_eq!(items[1].block_id, "A::b0");
+    }
+
+    #[test]
+    fn closed_section_hides_its_rows() {
+        let items = vec![
+            row("A", "__PARENT__", true, "A::b0"),
+            row("A", "1", false, "A::b0"),
+            separator("NPCs", "SEPARATOR::1"),
+            row("B", "__PARENT__", true, "B::b0"),
+            row("B", "1", false, "B::b0"),
+            separator("Tweaks", "SEPARATOR::2"),
+            row("C", "__PARENT__", true, "C::b0"),
+            row("C", "1", false, "C::b0"),
+        ];
+
+        let closed = vec!["SEPARATOR::1".to_string()];
+        assert_eq!(visible_indices(&items, &closed), vec![0, 1, 2, 5, 6, 7]);
+
+        let both_closed = vec!["SEPARATOR::1".to_string(), "SEPARATOR::2".to_string()];
+        assert_eq!(visible_indices(&items, &both_closed), vec![0, 1, 2, 5]);
     }
 }

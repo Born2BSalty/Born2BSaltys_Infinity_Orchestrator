@@ -14,8 +14,7 @@ pub fn dedup_components(comps: Vec<ScannedComponent>) -> Vec<ScannedComponent> {
         let tp_file_key = component
             .tp_file
             .as_deref()
-            .map(normalize_tp_file)
-            .unwrap_or_default();
+            .map_or_else(Default::default, normalize_tp_file);
         let key = (tp_file_key, component.component_id.clone());
 
         if let Some(existing_idx) = first_index_by_key.get(&key).copied() {

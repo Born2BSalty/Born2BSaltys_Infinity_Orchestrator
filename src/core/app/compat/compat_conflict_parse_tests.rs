@@ -3,10 +3,12 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-struct Fixture(PathBuf);
+struct Fixture(PathBuf, bool);
 impl Drop for Fixture {
     fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
+        if self.1 {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
     }
 }
 fn fixture(text: &str) -> Fixture {
@@ -16,9 +18,11 @@ fn fixture(text: &str) -> Fixture {
         std::process::id(),
         NEXT.fetch_add(1, Ordering::Relaxed)
     ));
-    std::fs::create_dir_all(&dir).expect("fixture directory");
-    std::fs::write(dir.join("fixture.tp2"), text).expect("fixture");
-    Fixture(dir)
+    let mut owned = Fixture(dir, false);
+    std::fs::create_dir(&owned.0).expect("fixture directory");
+    owned.1 = true;
+    std::fs::write(owned.0.join("fixture.tp2"), text).expect("fixture");
+    owned
 }
 fn targets(rules: &HashMap<String, Vec<super::ComponentConflict>>, id: &str) -> Vec<String> {
     let mut out = rules
@@ -132,4 +136,20 @@ fn translation_display_collisions_and_legacy_tra_merge_do_not_mix_families() {
     assert_eq!(targets(&rules, "2"), Vec::<String>::new());
     assert_eq!(targets(&rules, "3"), ["target:0"]);
     assert_eq!(rules["3"][0].message.as_deref(), Some("BEFORE Café"));
+}
+
+#[test]
+fn continuous_regression_parse_fixture_cleans_normal_and_partial_setup_unwind() {
+    let owned = fixture("BEGIN ~A~\n");
+    let root = owned.0.clone();
+    let result = std::panic::catch_unwind(move || {
+        std::fs::write(owned.0.join("missing/file.tp2"), "failure")
+            .expect("controlled partial setup failure");
+    });
+    assert!(result.is_err());
+    assert!(!root.exists());
+    let owned = fixture("BEGIN ~A~\n");
+    let root = owned.0.clone();
+    drop(owned);
+    assert!(!root.exists());
 }

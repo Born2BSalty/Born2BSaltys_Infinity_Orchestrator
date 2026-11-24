@@ -5,10 +5,12 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-struct Fixture(PathBuf);
+struct Fixture(PathBuf, bool);
 impl Drop for Fixture {
     fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
+        if self.1 {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
     }
 }
 fn fixture(files: &[(&str, &str)]) -> Fixture {
@@ -18,11 +20,13 @@ fn fixture(files: &[(&str, &str)]) -> Fixture {
         std::process::id(),
         NEXT.fetch_add(1, Ordering::Relaxed)
     ));
-    std::fs::create_dir_all(&dir).expect("directory");
+    let mut owned = Fixture(dir, false);
+    std::fs::create_dir(&owned.0).expect("directory");
+    owned.1 = true;
     for (name, text) in files {
-        std::fs::write(dir.join(name), text).expect("fixture");
+        std::fs::write(owned.0.join(name), text).expect("fixture");
     }
-    Fixture(dir)
+    owned
 }
 fn item(name: &str, id: &str) -> Step3ItemState {
     Step3ItemState {
@@ -212,4 +216,20 @@ fn step2_suppresses_one_way_order_and_step3_presents_nonblocking_install_order()
     let reversed = [items[1].clone(), items[0].clone()];
     let markers = collect_step3_compat_markers(&state, "BG2EE", &mods, &reversed, &[]);
     assert!(!markers.contains_key(&marker_key(&reversed[0])));
+}
+
+#[test]
+fn continuous_regression_conflict_fixture_cleans_success_and_unwind() {
+    let owned = fixture(&[("a.tp2", "BEGIN ~Test~\n")]);
+    let root = owned.0.clone();
+    drop(owned);
+    assert!(!root.exists());
+    let owned = fixture(&[("a.tp2", "BEGIN ~Test~\n")]);
+    let root = owned.0.clone();
+    let result = std::panic::catch_unwind(move || {
+        let _owned = owned;
+        panic!("controlled reused conflict fixture unwind");
+    });
+    assert!(result.is_err());
+    assert!(!root.exists());
 }

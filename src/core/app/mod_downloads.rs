@@ -1437,8 +1437,7 @@ pub(crate) fn overlay_tp2_key(source: &ModDownloadSourceOverlay) -> String {
     source
         .tp2
         .as_deref()
-        .map(normalize_mod_download_tp2)
-        .unwrap_or_default()
+        .map_or_else(Default::default, normalize_mod_download_tp2)
 }
 
 const fn category_only_overlay(source: &ModDownloadSourceOverlay) -> bool {
@@ -1649,7 +1648,10 @@ fn apply_source_variant_overlay(
             target.github = None;
         } else {
             target.github = Some(trimmed.clone());
-            let current_url = target.url.as_deref().map(str::trim).unwrap_or_default();
+            let current_url = target
+                .url
+                .as_deref()
+                .map_or_else(Default::default, str::trim);
             if current_url.is_empty() {
                 target.url = Some(format!("https://github.com/{trimmed}"));
             }

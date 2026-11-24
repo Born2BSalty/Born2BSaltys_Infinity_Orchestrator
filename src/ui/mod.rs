@@ -2,6 +2,7 @@
 // Copyright (c) 2026 Born2BSalty
 
 pub mod layout;
+pub(crate) mod prompt_planned_path;
 pub mod shared;
 pub mod step1;
 pub mod step2;

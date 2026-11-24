@@ -84,7 +84,7 @@ pub fn build_step3_items(mods: &[Step2ModState]) -> Vec<Step3ItemState> {
 #[must_use]
 pub fn collect_parent_block_ids(items: &[Step3ItemState]) -> Vec<String> {
     let mut out = Vec::new();
-    for item in items.iter().filter(|i| i.is_parent) {
+    for item in items.iter().filter(|i| i.is_mod_header()) {
         if !out.contains(&item.block_id) {
             out.push(item.block_id.clone());
         }

@@ -306,19 +306,10 @@ mod tests {
         id: &str,
         parser: &std::path::Path,
     ) -> Result<Option<String>, String> {
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
-        loop {
-            let result =
-                crate::app::mod_installer_parser::with_parser_path_for_test(parser, || {
-                    app.code_for_share(id)
-                });
-            if !result.as_ref().is_err_and(|error| error.contains("busy"))
-                || std::time::Instant::now() >= deadline
-            {
-                return result;
-            }
-            std::thread::sleep(std::time::Duration::from_millis(10));
-        }
+        let _parser_guard = crate::app::mod_installer_parser::coordinate_parser_test();
+        crate::app::mod_installer_parser::with_parser_path_for_test(parser, || {
+            app.code_for_share(id)
+        })
     }
 
     #[test]

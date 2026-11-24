@@ -73,8 +73,9 @@ pub(crate) fn selected_details_data(state: &WizardState) -> SelectedDetailsData 
         Step2Selection::Mod { tp_file, .. } => mods
             .iter()
             .find(|mod_state| &mod_state.tp_file == tp_file)
-            .map(|mod_state| build_mod_details(state, mod_state))
-            .unwrap_or_default(),
+            .map_or_else(Default::default, |mod_state| {
+                build_mod_details(state, mod_state)
+            }),
         Step2Selection::Component {
             tp_file,
             component_id,
@@ -163,8 +164,7 @@ fn build_component_details(
             component
                 .compat_related_component
                 .as_deref()
-                .map(|component_id| format!(" #{component_id}"))
-                .unwrap_or_default()
+                .map_or_else(Default::default, |component_id| format!(" #{component_id}"))
         )
     });
     let compat_component_block =

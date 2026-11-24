@@ -176,7 +176,7 @@ fn add_subcomponent_family_groups(
                 continue;
             }
         } else {
-            subcomponent_family_headers.insert(parent_id.clone(), header.clone());
+            subcomponent_family_headers.insert(parent_id.clone(), header);
         }
         let family_members = subcomponent_family_members.entry(parent_id).or_default();
         if !family_members.iter().any(|existing| existing == child_id) {
@@ -200,7 +200,7 @@ fn add_subcomponent_family_groups(
             continue;
         };
         out.insert(
-            parent_id.clone(),
+            parent_id,
             DerivedCollapsibleGroup {
                 header: header.clone(),
                 is_umbrella: true,
