@@ -17,6 +17,10 @@ use crate::ui::shared::redesign_tokens::{
     ThemePalette, redesign_text_faint, redesign_text_muted, redesign_text_primary,
 };
 
+const LANGUAGE_HINT: &str = "rescan existing lists after a change";
+const LANGUAGE_HINT_DURING_INSTALL: &str = "available after installation finishes";
+const MOD_DISPLAY_FORMAT_HINT: &str = "how mod names are shown";
+
 pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) {
     let palette = orchestrator.theme_palette;
 
@@ -36,7 +40,7 @@ fn render_mod_display_format_row(
         ui,
         palette,
         "Mod display format",
-        "how mod names appear in lists, the catalog and installs",
+        MOD_DISPLAY_FORMAT_HINT,
         |ui| {
             let current = orchestrator.redesign_settings.mod_display_format;
             if matches!(palette, ThemePalette::Light) {
@@ -136,51 +140,36 @@ fn render_language_row(
     orchestrator: &mut OrchestratorApp,
 ) {
     let available = orchestrator.mod_installation_language_change_available();
-    settings_row(
-        ui,
-        palette,
-        "Mod installation language",
-        "controls component scans and mod installation",
-        |ui| {
-            let current = orchestrator.wizard_state.step1.language.clone();
-            let mut selected = normalize_installation_locale(&current);
-            ui.add_enabled_ui(available, |ui| {
-                if matches!(palette, ThemePalette::Light) {
-                    let widgets = &mut ui.visuals_mut().widgets;
-                    widgets.open.bg_fill = widgets.inactive.bg_fill;
-                    widgets.open.weak_bg_fill = widgets.inactive.weak_bg_fill;
-                }
-                egui::ComboBox::from_id_salt("settings_general_language")
-                    .selected_text(
-                        egui::RichText::new(installation_language_label(&current))
-                            .size(12.0)
-                            .family(egui::FontFamily::Name("poppins_medium".into())),
-                    )
-                    .show_ui(ui, |ui| {
-                        for (locale, label) in INSTALLATION_LANGUAGES {
-                            if ui.selectable_label(selected == *locale, *label).clicked() {
-                                selected = (*locale).to_string();
-                                orchestrator.select_mod_installation_language(locale);
-                            }
-                        }
-                    });
-            });
-        },
-    );
-    ui.add_space(8.0);
     let hint = if available {
-        "Existing lists: use Rescan Mods after a change. Unavailable mod languages fall back to English or another available language."
+        LANGUAGE_HINT
     } else {
-        "Available after installation finishes"
+        LANGUAGE_HINT_DURING_INSTALL
     };
-    ui.add(
-        egui::Label::new(
-            egui::RichText::new(hint)
-                .size(11.0)
-                .color(redesign_text_faint(palette)),
-        )
-        .wrap(),
-    );
+    settings_row(ui, palette, "Mod installation language", hint, |ui| {
+        let current = orchestrator.wizard_state.step1.language.clone();
+        let mut selected = normalize_installation_locale(&current);
+        ui.add_enabled_ui(available, |ui| {
+            if matches!(palette, ThemePalette::Light) {
+                let widgets = &mut ui.visuals_mut().widgets;
+                widgets.open.bg_fill = widgets.inactive.bg_fill;
+                widgets.open.weak_bg_fill = widgets.inactive.weak_bg_fill;
+            }
+            egui::ComboBox::from_id_salt("settings_general_language")
+                .selected_text(
+                    egui::RichText::new(installation_language_label(&current))
+                        .size(12.0)
+                        .family(egui::FontFamily::Name("poppins_medium".into())),
+                )
+                .show_ui(ui, |ui| {
+                    for (locale, label) in INSTALLATION_LANGUAGES {
+                        if ui.selectable_label(selected == *locale, *label).clicked() {
+                            selected = (*locale).to_string();
+                            orchestrator.select_mod_installation_language(locale);
+                        }
+                    }
+                });
+        });
+    });
 }
 
 fn render_validate_on_startup_row(

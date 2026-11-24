@@ -87,41 +87,53 @@ fn render_row(
     busy: bool,
 ) -> CardRow {
     let row_width = ui.available_width();
+    let icons_w = 4.0_f32.mul_add(ICON_SIZE, 3.0 * ICON_GAP);
+    let note = current_note(card);
+    let note_w = if note.is_some() { NOTE_SLOT_W } else { 0.0 };
+    let name_w = 3.0_f32
+        .mul_add(
+            -COLUMN_GAP,
+            row_width - icons_w - selector_width - note_w - DOT_SIZE,
+        )
+        .max(0.0);
+    let text = CardText::new(card);
+    let row_h = text.stack_height(ui, name_w).max(CARD_ROW_H);
     let allocated_h = if card.fetching.is_some() {
-        CARD_ROW_H + FETCH_ROW_EXTRA_H
+        row_h + FETCH_ROW_EXTRA_H
     } else {
-        CARD_ROW_H
+        row_h
     };
     let (allocated_rect, _) =
         ui.allocate_exact_size(egui::vec2(row_width, allocated_h), egui::Sense::hover());
-    let row_rect = egui::Rect::from_min_size(allocated_rect.min, egui::vec2(row_width, CARD_ROW_H));
+    let row_rect = egui::Rect::from_min_size(allocated_rect.min, egui::vec2(row_width, row_h));
+    let band_rect = egui::Rect::from_min_size(
+        egui::pos2(row_rect.left(), row_rect.center().y - CARD_ROW_H / 2.0),
+        egui::vec2(row_width, CARD_ROW_H),
+    );
 
-    let icons_w = 4.0_f32.mul_add(ICON_SIZE, 3.0 * ICON_GAP);
-    let icons_left = row_rect.right() - icons_w;
-    let fetch_rect = icon_slot_rect(icons_left, row_rect, 0);
-    let lock_rect = icon_slot_rect(icons_left, row_rect, 1);
-    let open_rect = icon_slot_rect(icons_left, row_rect, 2);
-    let kebab_rect = icon_slot_rect(icons_left, row_rect, 3);
+    let icons_left = band_rect.right() - icons_w;
+    let fetch_rect = icon_slot_rect(icons_left, band_rect, 0);
+    let lock_rect = icon_slot_rect(icons_left, band_rect, 1);
+    let open_rect = icon_slot_rect(icons_left, band_rect, 2);
+    let kebab_rect = icon_slot_rect(icons_left, band_rect, 3);
 
     let selector_right = icons_left - COLUMN_GAP;
     let selector_rect = egui::Rect::from_min_size(
-        egui::pos2(selector_right - selector_width, row_rect.top()),
+        egui::pos2(selector_right - selector_width, band_rect.top()),
         egui::vec2(selector_width, CARD_ROW_H),
     );
 
-    let dot_rect =
-        egui::Rect::from_min_size(row_rect.left_top(), egui::vec2(DOT_SIZE, row_rect.height()));
-    let note = current_note(card);
-    let note_w = if note.is_some() { NOTE_SLOT_W } else { 0.0 };
-    let name_left = dot_rect.right() + COLUMN_GAP;
-    let name_right = selector_rect.left() - COLUMN_GAP - note_w;
+    let dot_rect = egui::Rect::from_min_size(
+        band_rect.left_top(),
+        egui::vec2(DOT_SIZE, band_rect.height()),
+    );
     let name_rect = egui::Rect::from_min_size(
-        egui::pos2(name_left, row_rect.top()),
-        egui::vec2((name_right - name_left).max(0.0), row_rect.height()),
+        egui::pos2(dot_rect.right() + COLUMN_GAP, row_rect.top()),
+        egui::vec2(name_w, row_rect.height()),
     );
 
     render_dot(ui, palette, dot_rect, card.dot);
-    let anchor_rect = render_main(ui, palette, name_rect, card);
+    let anchor_rect = render_main(ui, palette, name_rect, &text);
     if let Some(phase) = card.fetching {
         let bar_rect = egui::Rect::from_min_size(
             egui::pos2(name_rect.left(), anchor_rect.bottom() + FETCH_BAR_GAP),
@@ -131,8 +143,8 @@ fn render_row(
     }
     if let Some((text, who)) = note {
         let slot_rect = egui::Rect::from_min_size(
-            egui::pos2(selector_rect.left() - NOTE_SLOT_W, row_rect.top()),
-            egui::vec2(NOTE_SLOT_W, row_rect.height()),
+            egui::pos2(selector_rect.left() - NOTE_SLOT_W, band_rect.top()),
+            egui::vec2(NOTE_SLOT_W, band_rect.height()),
         );
         render_note_slot(ui, palette, slot_rect, card, text, who);
     }
@@ -254,28 +266,55 @@ fn render_dot(ui: &egui::Ui, palette: ThemePalette, rect: egui::Rect, dot: CardD
     ui.painter().circle_filled(rect.center(), 4.0, color);
 }
 
+struct CardText {
+    title: String,
+    status: String,
+    name_font: egui::FontId,
+    status_font: egui::FontId,
+}
+
+impl CardText {
+    fn new(card: &VersionCard) -> Self {
+        Self {
+            title: card_title(card),
+            status: status_text(card),
+            name_font: egui::FontId::new(
+                NAME_FONT_SIZE,
+                egui::FontFamily::Name("poppins_medium".into()),
+            ),
+            status_font: egui::FontId::new(
+                STATUS_FONT_SIZE,
+                egui::FontFamily::Name("poppins_light".into()),
+            ),
+        }
+    }
+
+    fn stack_height(&self, ui: &egui::Ui, width: f32) -> f32 {
+        let name_h = ui
+            .painter()
+            .layout(
+                self.title.clone(),
+                self.name_font.clone(),
+                egui::Color32::WHITE,
+                width,
+            )
+            .size()
+            .y;
+        if self.status.is_empty() {
+            name_h
+        } else {
+            name_h + STACK_GAP + text_height(ui, &self.status, &self.status_font)
+        }
+    }
+}
+
 fn render_main(
     ui: &mut egui::Ui,
     palette: ThemePalette,
     rect: egui::Rect,
-    card: &VersionCard,
+    text: &CardText,
 ) -> egui::Rect {
-    let name_font = egui::FontId::new(
-        NAME_FONT_SIZE,
-        egui::FontFamily::Name("poppins_medium".into()),
-    );
-    let status_font = egui::FontId::new(
-        STATUS_FONT_SIZE,
-        egui::FontFamily::Name("poppins_light".into()),
-    );
-    let status = status_text(card);
-    let title = card_title(card);
-    let name_h = text_height(ui, &title, &name_font);
-    let stack_h = if status.is_empty() {
-        name_h
-    } else {
-        name_h + STACK_GAP + text_height(ui, &status, &status_font)
-    };
+    let stack_h = text.stack_height(ui, rect.width());
     let offset = (rect.height() - stack_h) / 2.0;
     let stack_rect = egui::Rect::from_min_size(
         rect.min + egui::vec2(0.0, offset),
@@ -290,21 +329,21 @@ fn render_main(
     let name_rect = child
         .add(
             egui::Label::new(
-                egui::RichText::new(title)
-                    .font(name_font)
+                egui::RichText::new(&text.title)
+                    .font(text.name_font.clone())
                     .color(redesign_text_primary(palette)),
             )
-            .truncate(),
+            .wrap(),
         )
         .rect;
-    if status.is_empty() {
+    if text.status.is_empty() {
         return name_rect;
     }
     child
         .add(
             egui::Label::new(
-                egui::RichText::new(status)
-                    .font(status_font)
+                egui::RichText::new(&text.status)
+                    .font(text.status_font.clone())
                     .color(redesign_text_muted(palette)),
             )
             .truncate(),
@@ -607,6 +646,91 @@ mod tests {
             fetching: phase,
             queued: false,
         }
+    }
+
+    struct CardConfigRoot(std::path::PathBuf);
+
+    impl CardConfigRoot {
+        fn new() -> Self {
+            use std::sync::atomic::{AtomicU64, Ordering};
+            static NEXT: AtomicU64 = AtomicU64::new(0);
+            let root = std::env::temp_dir().join(format!(
+                "bio_versions_card_test_{}_{}",
+                std::process::id(),
+                NEXT.fetch_add(1, Ordering::Relaxed)
+            ));
+            std::fs::create_dir_all(&root).unwrap();
+            crate::platform_defaults::set_config_dir_override(Some(root.clone()));
+            Self(root)
+        }
+    }
+
+    impl Drop for CardConfigRoot {
+        fn drop(&mut self) {
+            crate::platform_defaults::clear_config_dir_override_if(&self.0);
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn rendered_card(tp2: &str) -> (f32, String) {
+        let card = VersionCard {
+            tp2: tp2.to_string(),
+            ..card_in(None)
+        };
+        let mut fonts_ready = false;
+        let mut harness = egui_kittest::Harness::builder()
+            .with_size(egui::vec2(1000.0, 300.0))
+            .build_state(
+                move |ctx, height: &mut f32| {
+                    if !fonts_ready {
+                        crate::ui::shared::redesign_fonts::install_redesign_fonts(ctx);
+                        fonts_ready = true;
+                        ctx.request_repaint();
+                        return;
+                    }
+                    egui::CentralPanel::default().show(ctx, |ui| {
+                        *height = render(ui, ThemePalette::Dark, &card, 430.0, false, false)
+                            .rect
+                            .height();
+                    });
+                },
+                0.0_f32,
+            );
+        harness.run_steps(3);
+        let title = card_title(&VersionCard {
+            tp2: tp2.to_string(),
+            ..card_in(None)
+        });
+        let painted = harness
+            .output()
+            .shapes
+            .iter()
+            .filter_map(|clipped| match &clipped.shape {
+                egui::Shape::Text(text) => Some(text.galley.text().to_string()),
+                _ => None,
+            })
+            .find(|text| title.starts_with(text.as_str()) && !text.is_empty())
+            .unwrap_or_default();
+        (*harness.state(), painted)
+    }
+
+    #[test]
+    fn a_long_card_title_wraps_in_full_and_the_card_grows() {
+        let _root = CardConfigRoot::new();
+        let (short_h, _) = rendered_card("short");
+        let long_tp2 = "a very long mod name that cannot fit in one line of the versions card";
+        let (long_h, painted) = rendered_card(long_tp2);
+        assert_eq!(
+            painted,
+            card_title(&VersionCard {
+                tp2: long_tp2.to_string(),
+                ..card_in(None)
+            })
+        );
+        assert!(
+            long_h > short_h,
+            "long title card {long_h} is not taller than short {short_h}"
+        );
     }
 
     #[test]

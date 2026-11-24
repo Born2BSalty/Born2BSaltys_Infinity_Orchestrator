@@ -227,8 +227,7 @@ fn mod_language_general_displays_step1_and_actionable_wording_without_mutation()
     let mut harness = scene("en_US", UiLanguage::German);
     harness.get_by_label("Mod installation language");
     assert!(painted_text(&harness).contains("English"));
-    harness.get_by_label("controls component scans and mod installation");
-    harness.get_by_label("Existing lists: use Rescan Mods after a change. Unavailable mod languages fall back to English or another available language.");
+    harness.get_by_label(LANGUAGE_HINT);
     assert!(harness.query_by_label("(coming soon)").is_none());
     assert!(
         harness
@@ -293,7 +292,7 @@ fn mod_language_general_active_install_disables_real_combo() {
     let mut harness = scene("en_US", UiLanguage::English);
     harness.state_mut().wizard_state.step5.install_running = true;
     harness.run_steps(2);
-    harness.get_by_label("Available after installation finishes");
+    harness.get_by_label(LANGUAGE_HINT_DURING_INSTALL);
     language_combo(&harness).click();
     harness.run();
     assert!(harness.query_by_label("German").is_none());
@@ -347,30 +346,31 @@ fn mod_language_general_snapshot() {
 }
 
 #[test]
-fn mod_language_general_helper_stays_inside_language_column_below_combo() {
+fn general_hints_are_one_line_left_of_their_combo() {
     let _lock = crate::app::mod_downloads::AMBIENT_TEST_LOCK
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     for width in [960.0, 1280.0] {
         let harness = scene_with_size("de_DE", UiLanguage::English, egui::vec2(width, 820.0));
-        let title = harness
-            .get_by_label("Mod installation language")
-            .bounding_box()
-            .unwrap();
-        let combo = language_combo(&harness).bounding_box().unwrap();
-        let helper = harness.get_by_label("Existing lists: use Rescan Mods after a change. Unavailable mod languages fall back to English or another available language.").bounding_box().unwrap();
-        assert!(
-            helper.x0 >= title.x0 - 1.0,
-            "helper overlaps theme column: {helper:?}"
-        );
-        assert!(
-            helper.x1 <= f64::from(width) - 7.0,
-            "helper escapes screen: {helper:?}"
-        );
-        assert!(
-            helper.y0 >= combo.y1,
-            "helper overlaps combo: {helper:?} {combo:?}"
-        );
+        for (hint_text, combo) in [
+            (LANGUAGE_HINT, language_combo(&harness)),
+            (MOD_DISPLAY_FORMAT_HINT, mod_display_format_combo(&harness)),
+        ] {
+            let combo = combo.bounding_box().unwrap();
+            let hint = harness.get_by_label(hint_text).bounding_box().unwrap();
+            assert!(
+                hint.y1 - hint.y0 < 20.0,
+                "hint wraps past one line: {hint:?}"
+            );
+            assert!(
+                hint.x1 <= combo.x0,
+                "hint runs under its combo: {hint:?} {combo:?}"
+            );
+            assert!(
+                hint.y0 < combo.y1,
+                "hint sits below its row: {hint:?} {combo:?}"
+            );
+        }
     }
 }
 
