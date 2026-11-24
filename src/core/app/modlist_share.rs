@@ -3162,11 +3162,11 @@ mod tests {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let root = ShareImportTestRoot::new("marker");
-        std::fs::write(
-            root.config_dir.join("mod_downloads_user.toml"),
-            "format = 2\n\n",
-        )
-        .unwrap();
+        let user_dir = root
+            .config_dir
+            .join(crate::platform_defaults::CONFIG_USER_FOLDER);
+        std::fs::create_dir_all(&user_dir).unwrap();
+        std::fs::write(user_dir.join("mod_downloads_user.toml"), "format = 2\n\n").unwrap();
 
         let mut state = state_with_one_bgee_component();
         state.step2.bgee_mods = vec![make_step2_mod("moda", "ModA")];

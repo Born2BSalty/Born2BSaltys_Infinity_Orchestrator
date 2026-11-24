@@ -3,6 +3,7 @@
 
 use eframe::egui;
 
+use crate::app::mod_display_name::{catalog_human_name, mod_display_label_with_name};
 use crate::app::step2_action::Step2Action;
 use crate::app::versions_view::{CardDot, FetchOffer, FetchPhase, SourceRowKind, VersionCard};
 use crate::ui::shared::redesign_tokens::{
@@ -268,7 +269,8 @@ fn render_main(
         egui::FontFamily::Name("poppins_light".into()),
     );
     let status = status_text(card);
-    let name_h = text_height(ui, &card.name, &name_font);
+    let title = card_title(card);
+    let name_h = text_height(ui, &title, &name_font);
     let stack_h = if status.is_empty() {
         name_h
     } else {
@@ -288,7 +290,7 @@ fn render_main(
     let name_rect = child
         .add(
             egui::Label::new(
-                egui::RichText::new(&card.name)
+                egui::RichText::new(title)
                     .font(name_font)
                     .color(redesign_text_primary(palette)),
             )
@@ -308,6 +310,14 @@ fn render_main(
             .truncate(),
         )
         .rect
+}
+
+pub(super) fn card_title(card: &VersionCard) -> String {
+    card_title_with(catalog_human_name(&card.tp2).as_deref(), card)
+}
+
+fn card_title_with(human_name: Option<&str>, card: &VersionCard) -> String {
+    mod_display_label_with_name(human_name, &card.tp2)
 }
 
 fn text_height(ui: &egui::Ui, text: &str, font: &egui::FontId) -> f32 {
@@ -597,6 +607,28 @@ mod tests {
             fetching: phase,
             queued: false,
         }
+    }
+
+    #[test]
+    fn versions_card_title_follows_the_display_format() {
+        use crate::app::mod_display_name::set_mod_display_format;
+        use crate::settings::redesign_fields::ModDisplayFormat;
+
+        let card = VersionCard {
+            tp2: "cdtweaks".to_string(),
+            name: "cdtweaks-folder".to_string(),
+            ..card_in(None)
+        };
+        for (format, expected) in [
+            (ModDisplayFormat::NameAndTp2, "Tweaks Anthology (cdtweaks)"),
+            (ModDisplayFormat::Name, "Tweaks Anthology"),
+            (ModDisplayFormat::Tp2, "cdtweaks"),
+        ] {
+            set_mod_display_format(format);
+            assert_eq!(card_title_with(Some("Tweaks Anthology"), &card), expected);
+            assert_eq!(card_title_with(None, &card), "cdtweaks");
+        }
+        set_mod_display_format(ModDisplayFormat::default());
     }
 
     #[test]

@@ -72,6 +72,7 @@ fn main() -> Result<()> {
         }
     }
 
+    bio::app::config_folders_migrate::relocate_config_files_at_launch();
     bio::app::mod_downloads_migrate::migrate_source_files_at_launch();
 
     let options = native_options();

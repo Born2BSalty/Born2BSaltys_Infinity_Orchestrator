@@ -572,7 +572,7 @@ fn render_row_name(
 ) {
     if ui
         .add(
-            egui::Label::new(text(&row.name, 14.0, palette))
+            egui::Label::new(text(row.display_label(), 14.0, palette))
                 .sense(egui::Sense::click())
                 .truncate(),
         )
@@ -680,7 +680,8 @@ fn render_details_content(
         return;
     };
     ui.label(
-        text(&row.name, 20.0, palette).family(egui::FontFamily::Name("poppins_medium".into())),
+        text(row.display_label(), 20.0, palette)
+            .family(egui::FontFamily::Name("poppins_medium".into())),
     );
     ui.label(
         text(

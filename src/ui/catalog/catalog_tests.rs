@@ -380,6 +380,35 @@ fn catalog_counts_unique_rows_across_mixed_alternatives_and_refresh() {
 }
 
 #[test]
+fn catalog_row_label_follows_the_display_format() {
+    use crate::app::mod_display_name::set_mod_display_format;
+    use crate::settings::redesign_fields::ModDisplayFormat;
+
+    let state = fixture_state();
+    let row = state.rows.iter().find(|row| row.tp2 == "tdd").unwrap();
+    for (format, expected) in [
+        (ModDisplayFormat::NameAndTp2, "The Darkest Day (tdd)"),
+        (ModDisplayFormat::Name, "The Darkest Day"),
+        (ModDisplayFormat::Tp2, "tdd"),
+    ] {
+        set_mod_display_format(format);
+        assert_eq!(row.display_label(), expected);
+    }
+    set_mod_display_format(ModDisplayFormat::default());
+    assert_eq!(row.name, "The Darkest Day");
+    assert_eq!(row.tp2, "tdd");
+
+    let mut state = fixture_state();
+    state.query = "darkest day (tdd)".to_string();
+    assert!(
+        state
+            .visible_rows()
+            .iter()
+            .any(|&index| state.rows[index].tp2 == "tdd")
+    );
+}
+
+#[test]
 fn catalog_search_filters_keep_selection_and_focus() {
     let mut state = fixture_state();
     state.focus("setup-tdd.tp2");

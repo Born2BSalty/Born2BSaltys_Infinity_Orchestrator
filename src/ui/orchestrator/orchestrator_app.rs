@@ -1252,6 +1252,13 @@ impl OrchestratorApp {
         self.tick_bio_settings(now);
     }
 
+    fn apply_frame_display_settings(&self, ctx: &egui::Context, palette: ThemePalette) {
+        ctx.set_visuals(crate::ui::shared::redesign_visuals::build_for(palette));
+        crate::app::mod_display_name::set_mod_display_format(
+            self.redesign_settings.mod_display_format,
+        );
+    }
+
     fn bio_settings_snapshot(&self) -> AppSettings {
         AppSettings {
             exe_fingerprint: self.exe_fingerprint.clone(),
@@ -1422,7 +1429,7 @@ fn refresh_source_compatibility(app: &mut OrchestratorApp) {
 impl eframe::App for OrchestratorApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         let palette = self.theme_palette;
-        ctx.set_visuals(crate::ui::shared::redesign_visuals::build_for(palette));
+        self.apply_frame_display_settings(ctx, palette);
         self.sync_diagnostic_mode(ctx);
 
         validate_debounce::tick(self, Instant::now());
@@ -2158,6 +2165,7 @@ mod tests {
             }];
         app.install_screen_state.manual_downloads.rows =
             vec![crate::ui::install::state_install::ManualDownloadRow {
+                tp_file: String::new(),
                 label: "Ascension".to_string(),
                 from: "nexusmods.com".to_string(),
                 page_url: String::new(),
@@ -2235,6 +2243,7 @@ mod tests {
             }];
         app.install_screen_state.manual_downloads.rows =
             vec![crate::ui::install::state_install::ManualDownloadRow {
+                tp_file: String::new(),
                 label: "Ascension".to_string(),
                 from: "nexusmods.com".to_string(),
                 page_url: String::new(),
@@ -2277,6 +2286,7 @@ mod tests {
         let mut app = OrchestratorApp::new_isolated_for_test("manualdl-defer-finish");
         app.install_screen_state.manual_downloads.rows =
             vec![crate::ui::install::state_install::ManualDownloadRow {
+                tp_file: String::new(),
                 label: "Ascension".to_string(),
                 from: "nexusmods.com".to_string(),
                 page_url: String::new(),
@@ -2392,6 +2402,7 @@ mod tests {
 
     fn waiting_manual_row() -> crate::ui::install::state_install::ManualDownloadRow {
         crate::ui::install::state_install::ManualDownloadRow {
+            tp_file: String::new(),
             label: "Ascension".to_string(),
             from: "nexusmods.com".to_string(),
             page_url: String::new(),

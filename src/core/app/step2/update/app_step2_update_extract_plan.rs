@@ -418,8 +418,10 @@ mod tests {
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let root = TestRoot::new("alias_job");
         let archive_dir = root.archive_dir();
+        let user_dir = root.0.join(crate::platform_defaults::CONFIG_USER_FOLDER);
+        fs::create_dir_all(&user_dir).unwrap();
         fs::write(
-            root.0.join("mod_downloads_user.toml"),
+            user_dir.join("mod_downloads_user.toml"),
             "[[mods]]\nname = \"Folder Named\"\ntp2 = \"filename\"\naliases = [\"foldername\"]\n\n  [[mods.sources]]\n  id = \"primary\"\n  type = \"url\"\n  url = \"https://example.test/foldername.zip\"\n",
         )
         .unwrap();

@@ -3,7 +3,7 @@ schema_version = 1
 # BIO-owned default compatibility rules.
 # BIO may replace the AppData copy of this file when you update BIO.
 # Put personal custom rules in:
-# - %APPDATA%/bio/step2_compat_rules_user.toml
+# - %APPDATA%/bio/User/step2_compat_rules_user.toml
 #
 # Compatibility rules for greying out components after scan.
 # BIO applies TP2/scan compat first, then this file is applied after scan.

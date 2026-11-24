@@ -292,9 +292,21 @@ pub(crate) enum ManualRowStatus {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ManualDownloadRow {
     pub(crate) label: String,
+    pub(crate) tp_file: String,
     pub(crate) from: String,
     pub(crate) page_url: String,
     pub(crate) status: ManualRowStatus,
+}
+
+impl ManualDownloadRow {
+    #[must_use]
+    pub(crate) fn shown_label(&self) -> String {
+        if self.tp_file.trim().is_empty() {
+            self.label.clone()
+        } else {
+            crate::app::mod_display_name::mod_display_label(&self.tp_file)
+        }
+    }
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
@@ -487,8 +499,34 @@ impl InstallScreenState {
 mod tests {
     use super::*;
 
+    #[test]
+    fn manual_row_label_follows_the_display_format_and_keeps_its_key() {
+        crate::app::mod_display_name::set_mod_display_format(
+            crate::settings::redesign_fields::ModDisplayFormat::Tp2,
+        );
+        let row = ManualDownloadRow {
+            label: "Some Mod Folder".to_string(),
+            tp_file: "SOMEMOD/SETUP-SOMEMOD.TP2".to_string(),
+            from: String::new(),
+            page_url: String::new(),
+            status: ManualRowStatus::Waiting,
+        };
+        let without_tp2 = ManualDownloadRow {
+            tp_file: String::new(),
+            ..row.clone()
+        };
+        let shown = (row.shown_label(), without_tp2.shown_label());
+        crate::app::mod_display_name::set_mod_display_format(
+            crate::settings::redesign_fields::ModDisplayFormat::default(),
+        );
+        assert_eq!(shown.0, "somemod");
+        assert_eq!(shown.1, "Some Mod Folder");
+        assert_eq!(row.label, "Some Mod Folder");
+    }
+
     fn row(status: ManualRowStatus) -> ManualDownloadRow {
         ManualDownloadRow {
+            tp_file: String::new(),
             label: "Ascension".to_string(),
             from: "nexusmods.com".to_string(),
             page_url: "https://www.nexusmods.com/baldursgate2ee/mods/12".to_string(),

@@ -3,6 +3,7 @@
 
 use eframe::egui;
 
+use crate::app::mod_display_name::mod_display_label;
 use crate::app::state::{Step2ModState, Step2Selection};
 use crate::ui::orchestrator::widgets::{ButtonIcon, render_icon_button};
 use crate::ui::shared::redesign_tokens::ThemePalette;
@@ -57,10 +58,10 @@ pub(crate) fn render_parent_row(
         jump_to_selected_requested,
         palette,
     } = input;
-    let mod_name = mod_state.name.clone();
+    let mod_label = mod_display_label(&mod_state.tp_file);
     let counts = parent_selection_counts(mod_state);
     let mod_header_label = format!(
-        "{mod_name} ({}/{})",
+        "{mod_label} ({}/{})",
         counts.selected_visible_count, counts.mod_visible_count
     );
     let parent_summary = parent_compat_summary(mod_state, palette);

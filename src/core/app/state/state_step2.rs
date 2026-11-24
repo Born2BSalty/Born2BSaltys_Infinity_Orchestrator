@@ -427,6 +427,7 @@ pub struct Step2LogPendingDownload {
 pub struct Step2LogUnticked {
     pub game_tab: String,
     pub mod_name: String,
+    pub tp_file: String,
     pub component_id: String,
     pub reason: String,
 }

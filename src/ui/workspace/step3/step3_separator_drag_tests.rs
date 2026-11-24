@@ -236,11 +236,23 @@ fn header_band_right<T>(harness: &Harness<'_, T>, label: &str) -> f32 {
 
 #[test]
 fn a_mod_drags_by_the_grip_on_the_right_of_its_header() {
+    struct FormatReset;
+    impl Drop for FormatReset {
+        fn drop(&mut self) {
+            crate::app::mod_display_name::set_mod_display_format(
+                crate::settings::redesign_fields::ModDisplayFormat::default(),
+            );
+        }
+    }
+    let _reset = FormatReset;
+    crate::app::mod_display_name::set_mod_display_format(
+        crate::settings::redesign_fields::ModDisplayFormat::Tp2,
+    );
     let mut harness = harness_for(sectioned_list(), Vec::new());
     harness.run_steps(2);
-    let grip_x = header_band_right(&harness, "Heart (2)") - 14.0;
-    let heart_y = label_rect(&harness, "Heart (2)").center().y;
-    let klatu_y = label_rect(&harness, "Klatu (2)").center().y;
+    let grip_x = header_band_right(&harness, "heart (2)") - 14.0;
+    let heart_y = label_rect(&harness, "heart (2)").center().y;
+    let klatu_y = label_rect(&harness, "klatu (2)").center().y;
 
     drag(
         &mut harness,

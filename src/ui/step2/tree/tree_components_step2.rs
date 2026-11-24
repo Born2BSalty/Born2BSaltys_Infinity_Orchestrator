@@ -4,6 +4,7 @@
 use eframe::egui;
 
 use crate::app::state::{Step2ComponentState, Step2ModState, Step2Selection};
+use crate::ui::step2::service_list_ops_step2::mod_name_matches_filter;
 use crate::ui::step2::tree_component_row_step2::{ComponentRowOptions, render_component_row};
 use crate::ui::step2::tree_component_types_step2::{
     CompatPopupTarget, ComponentRenderState, ComponentRowsContext, ComponentRowsResult,
@@ -88,7 +89,7 @@ pub(crate) fn render_component_rows(
     ctx: &mut ComponentRowsContext<'_>,
     mod_state: &mut Step2ModState,
 ) -> ComponentRowsResult {
-    let mod_name_match = ctx.filter.is_empty() || ctx.mod_name.to_lowercase().contains(ctx.filter);
+    let mod_name_match = mod_name_matches_filter(ctx.mod_name, ctx.tp_file, ctx.filter);
     let mut buffers = ComponentRowBuffers::default();
 
     let mut component_idx = 0usize;
@@ -492,7 +493,7 @@ fn render_component_rows_range(
     end_idx: usize,
     render_state: &mut ComponentRenderState<'_>,
 ) {
-    let mod_name_match = ctx.filter.is_empty() || ctx.mod_name.to_lowercase().contains(ctx.filter);
+    let mod_name_match = mod_name_matches_filter(ctx.mod_name, ctx.tp_file, ctx.filter);
     let mut component_idx = start_idx;
     while component_idx < end_idx {
         if let Some(group_end) = render_collapsible_component_group(

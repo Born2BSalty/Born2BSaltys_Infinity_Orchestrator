@@ -45,7 +45,7 @@ fn combination_red_settings_click_home_resume_uses_memory_language() {
             crate::ui::orchestrator::nav_destination::NavDestination::Settings;
         harness.run();
         if harness.query_by_label(label).is_none() {
-            harness.get_by_role(egui::accesskit::Role::ComboBox).click();
+            language_combo(&harness).click();
             harness.run();
         }
         harness
@@ -102,6 +102,69 @@ fn combination_red_settings_click_home_resume_uses_memory_language() {
     }
 }
 
+fn general_combos<'h>(
+    harness: &'h Harness<'_, OrchestratorApp>,
+) -> Vec<egui_kittest::kittest::Node<'h>> {
+    harness
+        .query_all_by_role(egui::accesskit::Role::ComboBox)
+        .collect()
+}
+
+fn language_combo<'h>(
+    harness: &'h Harness<'_, OrchestratorApp>,
+) -> egui_kittest::kittest::Node<'h> {
+    general_combos(harness)
+        .into_iter()
+        .next()
+        .expect("the language combo is the first combo on the General tab")
+}
+
+fn mod_display_format_combo<'h>(
+    harness: &'h Harness<'_, OrchestratorApp>,
+) -> egui_kittest::kittest::Node<'h> {
+    general_combos(harness)
+        .into_iter()
+        .nth(1)
+        .expect("the mod display format combo is the second combo on the General tab")
+}
+
+#[test]
+fn mod_display_format_combo_sets_the_general_setting_and_the_live_format() {
+    let _lock = crate::app::mod_downloads::AMBIENT_TEST_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let mut harness = scene("en_US", UiLanguage::English);
+    harness.get_by_label("Mod display format");
+    assert!(painted_text(&harness).contains("Tweaks Anthology (cdtweaks)"));
+    for format in [
+        crate::settings::redesign_fields::ModDisplayFormat::Tp2,
+        crate::settings::redesign_fields::ModDisplayFormat::Name,
+        crate::settings::redesign_fields::ModDisplayFormat::NameAndTp2,
+    ] {
+        let listed = |harness: &Harness<'_, OrchestratorApp>| {
+            crate::settings::redesign_fields::ModDisplayFormat::all()
+                .iter()
+                .all(|format| harness.query_by_label(format.example()).is_some())
+        };
+        if !listed(&harness) {
+            mod_display_format_combo(&harness).click();
+            harness.run();
+        }
+        harness
+            .query_all_by_label(format.example())
+            .last()
+            .expect("the open combo lists every format")
+            .click();
+        harness.run();
+        assert_eq!(harness.state().redesign_settings.mod_display_format, format);
+        assert_eq!(crate::app::mod_display_name::mod_display_format(), format);
+        assert_eq!(harness.state().wizard_state.step1.language, "en_US");
+    }
+    crate::app::mod_display_name::set_mod_display_format(
+        crate::settings::redesign_fields::ModDisplayFormat::default(),
+    );
+}
+
 fn scene(language: &str, general: UiLanguage) -> Harness<'static, OrchestratorApp> {
     scene_with_size(language, general, egui::vec2(1280.0, 820.0))
 }
@@ -141,7 +204,7 @@ fn mod_language_general_actual_combo_updates_step1_only() {
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     let mut harness = scene("en_US", UiLanguage::English);
-    harness.get_by_role(egui::accesskit::Role::ComboBox).click();
+    language_combo(&harness).click();
     harness.run();
     let option = harness
         .query_by_label("German")
@@ -231,7 +294,7 @@ fn mod_language_general_active_install_disables_real_combo() {
     harness.state_mut().wizard_state.step5.install_running = true;
     harness.run_steps(2);
     harness.get_by_label("Available after installation finishes");
-    harness.get_by_role(egui::accesskit::Role::ComboBox).click();
+    language_combo(&harness).click();
     harness.run();
     assert!(harness.query_by_label("German").is_none());
     assert_eq!(harness.state().wizard_state.step1.language, "en_US");
@@ -272,7 +335,7 @@ fn mod_language_general_snapshot() {
                 .unwrap()
                 .save(output.join(format!("general-language-{theme}-{width:.0}.png")))
                 .unwrap();
-            harness.get_by_role(egui::accesskit::Role::ComboBox).click();
+            language_combo(&harness).click();
             harness.run();
             harness
                 .render()
@@ -294,10 +357,7 @@ fn mod_language_general_helper_stays_inside_language_column_below_combo() {
             .get_by_label("Mod installation language")
             .bounding_box()
             .unwrap();
-        let combo = harness
-            .get_by_role(egui::accesskit::Role::ComboBox)
-            .bounding_box()
-            .unwrap();
+        let combo = language_combo(&harness).bounding_box().unwrap();
         let helper = harness.get_by_label("Existing lists: use Rescan Mods after a change. Unavailable mod languages fall back to English or another available language.").bounding_box().unwrap();
         assert!(
             helper.x0 >= title.x0 - 1.0,
@@ -347,7 +407,7 @@ fn mod_language_general_settings_page_english_german_english_round_trip() {
     ] {
         if harness.state().wizard_state.step1.language != locale {
             if harness.query_by_label(label).is_none() {
-                harness.get_by_role(egui::accesskit::Role::ComboBox).click();
+                language_combo(&harness).click();
                 harness.run();
             }
             harness.get_by_label(label).click();

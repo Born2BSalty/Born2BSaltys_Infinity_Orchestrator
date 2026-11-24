@@ -100,6 +100,7 @@ pub(crate) mod compat_text;
 pub mod compat_tp2_blocks;
 pub mod component_block_preview;
 pub mod component_details;
+pub mod config_folders_migrate;
 #[cfg(test)]
 #[path = "compat/continuous_order_tests.rs"]
 mod continuous_order_tests;
@@ -112,6 +113,7 @@ pub mod github_forks_list;
 pub mod github_release_list;
 pub mod install_language_rewrite;
 pub mod language_names;
+pub mod mod_display_name;
 pub mod mod_downloads;
 pub mod mod_downloads_migrate;
 pub mod mod_installer_parser;

@@ -6,6 +6,7 @@ use std::collections::HashMap;
 
 use crate::app::compat_issue::CompatIssue;
 use crate::app::compat_step3_rules::Step3CompatMarker;
+use crate::app::mod_display_name::mod_display_label;
 use crate::app::prompt_eval_summary_step3;
 use crate::app::state::Step3ItemState;
 use crate::app::step3_history::{self, Step3HistoryEntry, Step3TouchedRows};
@@ -130,7 +131,7 @@ fn render_parent_label(
 ) -> egui::Response {
     let child_count = blocks::count_children_in_block(ctx.items, idx);
     let block_id = ctx.items[idx].block_id.clone();
-    let mod_name = ctx.items[idx].mod_name.clone();
+    let mod_name = parent_display_name(&ctx.items[idx]);
     let parent_placeholder = ctx.items[idx].parent_placeholder;
     let collapsed = ctx.collapsed_blocks.contains(&block_id);
     let mut is_locked = ctx.locked_blocks.contains(&block_id);
@@ -193,6 +194,15 @@ fn render_parent_toggle(
         collapsed_blocks.push(block_id.to_string());
     } else {
         collapsed_blocks.retain(|value| value != block_id);
+    }
+}
+
+#[must_use]
+pub(crate) fn parent_display_name(item: &Step3ItemState) -> String {
+    if item.is_separator() || item.tp_file.trim().is_empty() {
+        item.mod_name.clone()
+    } else {
+        mod_display_label(&item.tp_file)
     }
 }
 

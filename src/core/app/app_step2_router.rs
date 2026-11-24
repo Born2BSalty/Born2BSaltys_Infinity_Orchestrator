@@ -1708,6 +1708,12 @@ mod tests {
         };
         let header = crate::app::mod_downloads::template_mod_header("widget", "Widget");
         let block = crate::app::mod_downloads::complete_source_block(&current);
+        std::fs::create_dir_all(
+            crate::app::mod_downloads::mod_downloads_user_path()
+                .parent()
+                .unwrap(),
+        )
+        .unwrap();
         std::fs::write(
             crate::app::mod_downloads::mod_downloads_user_path(),
             format!("{header}\n\n{block}\n"),
@@ -1783,6 +1789,12 @@ mod tests {
             &current.categories,
         );
         let block = crate::app::mod_downloads::complete_source_block(&current);
+        std::fs::create_dir_all(
+            crate::app::mod_downloads::mod_downloads_user_path()
+                .parent()
+                .unwrap(),
+        )
+        .unwrap();
         std::fs::write(
             crate::app::mod_downloads::mod_downloads_user_path(),
             format!("{header}\n\n{block}\n"),
@@ -1938,6 +1950,12 @@ mod tests {
         };
         let header = crate::app::mod_downloads::template_mod_header("stratagems", "SCS");
         let old_block = crate::app::mod_downloads::complete_source_block(&old_source);
+        std::fs::create_dir_all(
+            crate::app::mod_downloads::mod_downloads_user_path()
+                .parent()
+                .unwrap(),
+        )
+        .unwrap();
         std::fs::write(
             crate::app::mod_downloads::mod_downloads_user_path(),
             format!("{header}\n\n{old_block}\n"),
@@ -2049,6 +2067,12 @@ mod tests {
         };
         let header = crate::app::mod_downloads::template_mod_header("stratagems", "SCS");
         let old_block = crate::app::mod_downloads::complete_source_block(&old_source);
+        std::fs::create_dir_all(
+            crate::app::mod_downloads::mod_downloads_user_path()
+                .parent()
+                .unwrap(),
+        )
+        .unwrap();
         std::fs::write(
             crate::app::mod_downloads::mod_downloads_user_path(),
             format!("{header}\n\n{old_block}\n"),
@@ -2265,6 +2289,7 @@ mod tests {
         let header = crate::app::mod_downloads::template_mod_header("widget", "Widget");
         let block = crate::app::mod_downloads::complete_source_block(&current);
         let global_path = crate::app::mod_downloads::mod_downloads_user_path();
+        std::fs::create_dir_all(global_path.parent().unwrap()).unwrap();
         let global_text = format!("{header}\n\n{block}\n");
         std::fs::write(&global_path, &global_text).unwrap();
 

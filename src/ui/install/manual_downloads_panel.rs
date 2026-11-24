@@ -119,7 +119,7 @@ fn render_grid(
                         sized_label(
                             ui,
                             mod_w,
-                            &row.label,
+                            &row.shown_label(),
                             14.0,
                             "poppins_medium",
                             redesign_text_primary(palette),

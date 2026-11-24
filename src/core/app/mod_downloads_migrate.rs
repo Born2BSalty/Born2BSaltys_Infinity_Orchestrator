@@ -15,8 +15,8 @@ use crate::app::mod_downloads::{
     ModDownloadsOverlayLoad,
 };
 
-const MOD_DOWNLOADS_DEFAULT_FILE_NAME: &str = "mod_downloads_default.toml";
-const COMPAT_RULES_DEFAULT_FILE_NAME: &str = "step2_compat_rules_default.toml";
+pub(crate) const MOD_DOWNLOADS_DEFAULT_FILE_NAME: &str = "mod_downloads_default.toml";
+pub(crate) const COMPAT_RULES_DEFAULT_FILE_NAME: &str = "step2_compat_rules_default.toml";
 const REFERENCE_FILE_HEADER: &str = "# Reference copy of BIO's built-in defaults, provided for reference only.\n# BIO does not read this file. Edits here change nothing and are overwritten when BIO starts.";
 
 fn migrated_header() -> &'static str {
@@ -399,7 +399,9 @@ fn write_reference_file(dir: &Path, name: &str, embedded: &str) {
 }
 
 fn write_reference_files() {
-    let Some(dir) = crate::platform_defaults::app_config_dir() else {
+    let Some(dir) = crate::platform_defaults::app_config_dir()
+        .map(|dir| dir.join(crate::platform_defaults::CONFIG_DEFAULT_FOLDER))
+    else {
         return;
     };
     write_reference_file(
@@ -460,6 +462,15 @@ mod tests {
             fs::create_dir_all(&path).unwrap();
             crate::platform_defaults::set_config_dir_override(Some(path.clone()));
             Self { path }
+        }
+
+        fn user_dir(&self) -> PathBuf {
+            self.path.join(crate::platform_defaults::CONFIG_USER_FOLDER)
+        }
+
+        fn default_dir(&self) -> PathBuf {
+            self.path
+                .join(crate::platform_defaults::CONFIG_DEFAULT_FOLDER)
         }
     }
 
@@ -701,11 +712,17 @@ mod tests {
     #[test]
     fn migration_launch_writes_backup_once_and_writes_reference_files() {
         let root = MigrateTestRoot::new("launch");
-        let user_path = root.path.join("mod_downloads_user.toml");
+        let user_path = root.user_dir().join("mod_downloads_user.toml");
+        fs::create_dir_all(root.user_dir()).unwrap();
         fs::write(&user_path, FIXTURE_USER_TEXT).unwrap();
-        fs::write(root.path.join("mod_downloads_default.toml"), "# stale\n").unwrap();
+        fs::create_dir_all(root.default_dir()).unwrap();
         fs::write(
-            root.path.join("step2_compat_rules_default.toml"),
+            root.default_dir().join("mod_downloads_default.toml"),
+            "# stale\n",
+        )
+        .unwrap();
+        fs::write(
+            root.default_dir().join("step2_compat_rules_default.toml"),
             "# stale\n",
         )
         .unwrap();
@@ -717,7 +734,9 @@ mod tests {
         migrate_source_files_at_launch();
 
         assert!(
-            root.path.join("mod_downloads_user.toml.v1.bak").is_file(),
+            root.user_dir()
+                .join("mod_downloads_user.toml.v1.bak")
+                .is_file(),
             "the user tier must be backed up once"
         );
         assert!(
@@ -726,7 +745,7 @@ mod tests {
                 .is_file(),
             "the modlist tier must be backed up once"
         );
-        assert_reference_files_current(&root.path);
+        assert_reference_files_current(&root.default_dir());
 
         let user_after_first = fs::read_to_string(&user_path).unwrap();
         let modlist_after_first = fs::read_to_string(&modlist_path).unwrap();
@@ -743,7 +762,7 @@ mod tests {
             modlist_after_first,
             "a second launch must not rewrite an already-migrated file"
         );
-        assert_reference_files_current(&root.path);
+        assert_reference_files_current(&root.default_dir());
     }
 
     fn assert_reference_files_current(dir: &Path) {
@@ -779,16 +798,20 @@ mod tests {
         let root = MigrateTestRoot::new("reference");
 
         migrate_source_files_at_launch();
-        assert_reference_files_current(&root.path);
+        assert_reference_files_current(&root.default_dir());
 
-        fs::write(root.path.join("mod_downloads_default.toml"), "# edited\n").unwrap();
         fs::write(
-            root.path.join("step2_compat_rules_default.toml"),
+            root.default_dir().join("mod_downloads_default.toml"),
+            "# edited\n",
+        )
+        .unwrap();
+        fs::write(
+            root.default_dir().join("step2_compat_rules_default.toml"),
             "# edited\n",
         )
         .unwrap();
 
         migrate_source_files_at_launch();
-        assert_reference_files_current(&root.path);
+        assert_reference_files_current(&root.default_dir());
     }
 }

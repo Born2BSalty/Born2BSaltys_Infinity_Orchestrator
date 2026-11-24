@@ -10,7 +10,7 @@ mod tests;
 use crate::settings::installation_language::{
     INSTALLATION_LANGUAGES, installation_language_label, normalize_installation_locale,
 };
-use crate::settings::redesign_fields::ThemeChoice;
+use crate::settings::redesign_fields::{ModDisplayFormat, ThemeChoice};
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::settings::widgets::{name_row, segmented_toggle, toggle_row};
 use crate::ui::shared::redesign_tokens::{
@@ -23,7 +23,46 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) {
     render_name_row(ui, palette, orchestrator);
     ui.add_space(12.0);
     render_theme_language_rows(ui, palette, orchestrator);
+    render_mod_display_format_row(ui, palette, orchestrator);
     render_mode_rows(ui, palette, orchestrator);
+}
+
+fn render_mod_display_format_row(
+    ui: &mut egui::Ui,
+    palette: ThemePalette,
+    orchestrator: &mut OrchestratorApp,
+) {
+    settings_row(
+        ui,
+        palette,
+        "Mod display format",
+        "how mod names appear in lists, the catalog and installs",
+        |ui| {
+            let current = orchestrator.redesign_settings.mod_display_format;
+            if matches!(palette, ThemePalette::Light) {
+                let widgets = &mut ui.visuals_mut().widgets;
+                widgets.open.bg_fill = widgets.inactive.bg_fill;
+                widgets.open.weak_bg_fill = widgets.inactive.weak_bg_fill;
+            }
+            egui::ComboBox::from_id_salt("settings_general_mod_display_format")
+                .selected_text(
+                    egui::RichText::new(current.example())
+                        .size(12.0)
+                        .family(egui::FontFamily::Name("poppins_medium".into())),
+                )
+                .show_ui(ui, |ui| {
+                    for format in ModDisplayFormat::all() {
+                        if ui
+                            .selectable_label(current == *format, format.example())
+                            .clicked()
+                        {
+                            orchestrator.redesign_settings.mod_display_format = *format;
+                            crate::app::mod_display_name::set_mod_display_format(*format);
+                        }
+                    }
+                });
+        },
+    );
 }
 
 fn render_name_row(ui: &mut egui::Ui, palette: ThemePalette, orchestrator: &mut OrchestratorApp) {

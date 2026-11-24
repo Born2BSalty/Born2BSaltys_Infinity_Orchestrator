@@ -11,7 +11,7 @@ use std::sync::{Mutex, OnceLock};
 
 use serde::Deserialize;
 
-use crate::platform_defaults::app_config_file;
+use crate::platform_defaults::app_config_user_file;
 
 static ACTIVE_MODLIST_DIR: OnceLock<Mutex<Option<PathBuf>>> = OnceLock::new();
 
@@ -36,7 +36,7 @@ pub(crate) fn active_modlist_downloads_path() -> Option<PathBuf> {
     active_modlist_dir().map(|d| d.join("mod_downloads_user.toml"))
 }
 
-const MOD_DOWNLOADS_USER_FILE_NAME: &str = "mod_downloads_user.toml";
+pub(crate) const MOD_DOWNLOADS_USER_FILE_NAME: &str = "mod_downloads_user.toml";
 
 #[derive(Debug, Clone, Default, Deserialize)]
 pub(crate) struct ModDownloadsFile {
@@ -233,7 +233,7 @@ impl ModDownloadSource {
 }
 
 pub(crate) fn mod_downloads_user_path() -> PathBuf {
-    app_config_file(MOD_DOWNLOADS_USER_FILE_NAME, "config")
+    app_config_user_file(MOD_DOWNLOADS_USER_FILE_NAME, "config")
 }
 
 pub(crate) fn ensure_mod_downloads_files() -> io::Result<()> {
