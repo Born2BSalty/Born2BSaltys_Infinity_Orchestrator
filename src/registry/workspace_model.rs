@@ -82,6 +82,24 @@ impl SelectionRecovery {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
+pub struct SeparatorBefore {
+    pub tp2: String,
+
+    pub id: i64,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SeparatorRef {
+    pub name: String,
+
+    pub collapsed: bool,
+
+    pub before: Option<SeparatorBefore>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct ModlistWorkspaceState {
     #[serde(skip_serializing_if = "HashMap::is_empty")]
     pub selection_recovery: HashMap<String, SelectionRecovery>,
@@ -91,6 +109,15 @@ pub struct ModlistWorkspaceState {
     pub order_bg2ee: Vec<ComponentRef>,
 
     pub order_iwdee: Vec<ComponentRef>,
+
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub separators_bgee: Vec<SeparatorRef>,
+
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub separators_bg2ee: Vec<SeparatorRef>,
+
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub separators_iwdee: Vec<SeparatorRef>,
 
     pub expand_state: HashMap<String, bool>,
 
@@ -131,6 +158,9 @@ impl ModlistWorkspaceState {
             && self.order_bgee.is_empty()
             && self.order_bg2ee.is_empty()
             && self.order_iwdee.is_empty()
+            && self.separators_bgee.is_empty()
+            && self.separators_bg2ee.is_empty()
+            && self.separators_iwdee.is_empty()
             && self.expand_state.is_empty()
             && self.step3_group_collapse.is_empty()
             && self.prompt_overrides.is_empty()
@@ -175,6 +205,66 @@ mod tests {
         let s = serde_json::to_string_pretty(&w).expect("serialize");
         let w2: ModlistWorkspaceState = serde_json::from_str(&s).expect("deserialize");
         assert_eq!(w, w2);
+    }
+
+    fn separator(name: &str, collapsed: bool, before: Option<(&str, i64)>) -> SeparatorRef {
+        SeparatorRef {
+            name: name.to_string(),
+            collapsed,
+            before: before.map(|(tp2, id)| SeparatorBefore {
+                tp2: tp2.to_string(),
+                id,
+            }),
+        }
+    }
+
+    fn top_level_keys(state: &ModlistWorkspaceState) -> Vec<String> {
+        let value = serde_json::to_value(state).expect("serialize");
+        value.as_object().expect("object").keys().cloned().collect()
+    }
+
+    #[test]
+    fn workspace_without_separators_serialises_unchanged() {
+        let mut w = ModlistWorkspaceState::default();
+        w.order_bgee.push(ComponentRef {
+            tp2: "EET/EET.TP2".to_string(),
+            id: 0,
+            ..ComponentRef::default()
+        });
+        let keys = top_level_keys(&w);
+        assert!(
+            keys.iter().all(|key| !key.starts_with("separators_")),
+            "got: {keys:?}"
+        );
+        let written = serde_json::to_string(&w).expect("serialize");
+        let reread: ModlistWorkspaceState = serde_json::from_str(&written).expect("deserialize");
+        assert_eq!(serde_json::to_string(&reread).expect("serialize"), written);
+
+        w.separators_bg2ee.push(separator("NPCs", false, None));
+        let keys = top_level_keys(&w);
+        assert!(keys.contains(&"separators_bg2ee".to_string()));
+        assert!(!keys.contains(&"separators_bgee".to_string()));
+        assert!(!keys.contains(&"separators_iwdee".to_string()));
+    }
+
+    #[test]
+    fn separator_refs_round_trip() {
+        let w = ModlistWorkspaceState {
+            separators_bgee: vec![
+                separator("Fixes", true, Some(("EEFIXPACK/EEFIXPACK.TP2", 0))),
+                separator("Tail", false, None),
+            ],
+            separators_bg2ee: vec![separator("NPCs", false, Some(("AJANTIS/AJANTIS.TP2", 3)))],
+            separators_iwdee: vec![separator("Quests", true, None)],
+            ..Default::default()
+        };
+        assert!(!w.is_empty(), "a list with separators is not 'empty'");
+        let s = serde_json::to_string_pretty(&w).expect("serialize");
+        let w2: ModlistWorkspaceState = serde_json::from_str(&s).expect("deserialize");
+        assert_eq!(w, w2);
+
+        let partial: SeparatorRef = serde_json::from_str(r#"{"name":"Bare"}"#).expect("parse");
+        assert_eq!(partial, separator("Bare", false, None));
     }
 
     #[test]

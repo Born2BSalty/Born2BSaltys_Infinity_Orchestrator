@@ -2,8 +2,8 @@
 // Copyright (c) 2026 Born2BSalty
 
 use std::collections::btree_map::Entry;
-use std::collections::{BTreeMap, BTreeSet, HashSet};
-use std::path::PathBuf;
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::path::{Path, PathBuf};
 
 use crate::app::added_mods;
 use crate::app::answer_sets::{AnswerBook, AnswerKey, AnswerSide};
@@ -12,6 +12,7 @@ use crate::app::controller::log_apply::{
 };
 use crate::app::game_authority::{self, GameSlot};
 use crate::app::mod_downloads::{self, ModDownloadsLoad, SourceTier, SourceTiers};
+use crate::app::modlist_share::{queue_separator_anchors, separator_anchors_from_log_text};
 use crate::app::state::{
     LogPendingOrigin, Step1State, Step2ComponentState, Step2LogLine, Step2LogLineOutcome,
     Step2LogPendingDownload, Step2LogTarget, Step2LogUnticked, Step2ModState, Step2State,
@@ -92,6 +93,12 @@ pub(crate) fn apply_weidu_log_selection_from_path(
     } else {
         "BG2EE"
     };
+    let slot = if bgee {
+        GameSlot::First
+    } else {
+        GameSlot::Second
+    };
+    let resolved = resolved_log_pairs(&state.step2, slot, &logged);
     replace_tab_lines(&mut state.step2.log_apply.lines, label, logged);
     state
         .step2
@@ -113,7 +120,54 @@ pub(crate) fn apply_weidu_log_selection_from_path(
             "{label} selected from log: {matched}, pending downloads: {pending} (compat rules load failed: {err})"
         ),
     );
+    queue_separators_from_log_file(state, slot, &path, &resolved);
     state.clear_last_step2_sync_signature();
+}
+
+fn resolved_log_pairs(
+    step2: &Step2State,
+    slot: GameSlot,
+    logged: &BTreeMap<usize, LoggedLine>,
+) -> HashMap<ComponentPair, ComponentPair> {
+    let mods = tree_mods(step2, slot);
+    let mut resolved = HashMap::new();
+    for line in logged.values() {
+        let Step2LogLineOutcome::Ticked(targets) = &line.outcome else {
+            continue;
+        };
+        let Some(pair) = targets
+            .iter()
+            .filter(|target| target.tree == slot)
+            .find_map(|target| component_pair(mods, *target))
+        else {
+            continue;
+        };
+        resolved
+            .entry((line.tp_file.to_ascii_uppercase(), line.component_id.clone()))
+            .or_insert(pair);
+    }
+    resolved
+}
+
+fn queue_separators_from_log_file(
+    state: &mut WizardState,
+    slot: GameSlot,
+    path: &Path,
+    resolved: &HashMap<ComponentPair, ComponentPair>,
+) {
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return;
+    };
+    let mut anchors = separator_anchors_from_log_text(&text);
+    for pair in anchors
+        .iter_mut()
+        .flat_map(|anchor| anchor.following.iter_mut())
+    {
+        if let Some(step2_pair) = resolved.get(pair) {
+            pair.clone_from(step2_pair);
+        }
+    }
+    queue_separator_anchors(&mut state.step3, slot, anchors);
 }
 
 fn apply_log_to_trees(
@@ -2274,5 +2328,148 @@ mod tests {
             None
         );
         assert_eq!(requested_version_text("EE and SoD"), None);
+    }
+
+    fn log_anchor(
+        name: &str,
+        following: &[(&str, &str)],
+    ) -> crate::app::step3_separators::SeparatorAnchor {
+        crate::app::step3_separators::SeparatorAnchor {
+            name: name.to_string(),
+            block_id: None,
+            collapsed: false,
+            following: following
+                .iter()
+                .map(|(tp2, id)| ((*tp2).to_string(), (*id).to_string()))
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn weidu_log_import_queues_separators() {
+        let _lock = ambient_lock();
+        let ambient = IsolatedAmbient::create();
+        let mut state = install_state("EET");
+        state.step2.bgee_mods = vec![scanned_mod_with("X", "X/SETUP-X.TP2", &["1", "2"])];
+        state.step2.bg2ee_mods = vec![scanned_mod_with("Y", "Y/SETUP-Y.TP2", &["0"])];
+
+        apply_log_text(
+            &mut state,
+            &ambient.root,
+            true,
+            "// Log of Currently Installed WeiDU Mods\n// ###### Fixes ######\n~X/SETUP-X.TP2~ #0 #1 // X one\n// ###### NPCs ######\n~X/SETUP-X.TP2~ #0 #2 // X two\n",
+        );
+        apply_log_text(
+            &mut state,
+            &ambient.root,
+            false,
+            "// ###### Tweaks ######\n~Y/SETUP-Y.TP2~ #0 #0 // Y zero\n",
+        );
+
+        assert_eq!(state.step3.pending_separators.len(), 2);
+        assert_eq!(
+            pending_for(&state, GameSlot::First),
+            Some(vec![
+                log_anchor("Fixes", &[("SETUP-X.TP2", "1"), ("SETUP-X.TP2", "2")]),
+                log_anchor("NPCs", &[("SETUP-X.TP2", "2")]),
+            ])
+        );
+        assert_eq!(
+            pending_for(&state, GameSlot::Second),
+            Some(vec![log_anchor("Tweaks", &[("SETUP-Y.TP2", "0")])])
+        );
+
+        apply_log_text(
+            &mut state,
+            &ambient.root,
+            true,
+            "// ###### Quests ######\n~X/SETUP-X.TP2~ #0 #2 // X two\n",
+        );
+        apply_log_text(
+            &mut state,
+            &ambient.root,
+            false,
+            "~Y/SETUP-Y.TP2~ #0 #0 // Y zero\n",
+        );
+
+        assert_eq!(state.step3.pending_separators.len(), 2);
+        assert_eq!(
+            pending_for(&state, GameSlot::First),
+            Some(vec![log_anchor("Quests", &[("SETUP-X.TP2", "2")])])
+        );
+        assert_eq!(
+            pending_for(&state, GameSlot::Second),
+            Some(vec![log_anchor("Tweaks", &[("SETUP-Y.TP2", "0")])])
+        );
+        assert!(state.step2.bgee_mods[0].components[1].checked);
+    }
+
+    fn pending_for(
+        state: &WizardState,
+        slot: GameSlot,
+    ) -> Option<Vec<crate::app::step3_separators::SeparatorAnchor>> {
+        state
+            .step3
+            .pending_separators
+            .iter()
+            .find(|(pending_slot, _)| *pending_slot == slot)
+            .map(|(_, anchors)| anchors.clone())
+    }
+
+    #[test]
+    fn log_separator_anchors_follow_alias_matches() {
+        let _lock = ambient_lock();
+        let ambient = IsolatedAmbient::create();
+        let mut state = install_state("BGEE");
+        state.step2.bgee_mods = vec![scanned_mod_with("X", "X/SETUP-X.TP2", &["1", "2"])];
+
+        apply_log_text(
+            &mut state,
+            &ambient.root,
+            true,
+            "// ###### Fixes ######\n~X/X.TP2~ #0 #2 // X two\n",
+        );
+
+        assert!(state.step2.bgee_mods[0].components[1].checked);
+        assert_eq!(
+            pending_for(&state, GameSlot::First),
+            Some(vec![log_anchor("Fixes", &[("SETUP-X.TP2", "2")])])
+        );
+
+        let mut items = vec![
+            crate::app::state::Step3ItemState {
+                tp_file: "SETUP-W.TP2".to_string(),
+                component_id: "0".to_string(),
+                mod_name: "W".to_string(),
+                component_label: "W zero".to_string(),
+                raw_line: String::new(),
+                prompt_summary: None,
+                prompt_events: Vec::new(),
+                selected_order: 0,
+                block_id: "W::segment1".to_string(),
+                is_parent: false,
+                parent_placeholder: false,
+            },
+            crate::app::state::Step3ItemState {
+                tp_file: "SETUP-X.TP2".to_string(),
+                component_id: "2".to_string(),
+                mod_name: "X".to_string(),
+                component_label: "X two".to_string(),
+                raw_line: String::new(),
+                prompt_summary: None,
+                prompt_events: Vec::new(),
+                selected_order: 1,
+                block_id: "X::segment1".to_string(),
+                is_parent: false,
+                parent_placeholder: false,
+            },
+        ];
+        crate::app::step3_separators::insert_separators(
+            &mut items,
+            &pending_for(&state, GameSlot::First).expect("queued"),
+        );
+        assert!(items[1].is_separator());
+        assert_eq!(items[1].mod_name, "Fixes");
+        assert_eq!(items[2].tp_file, "SETUP-X.TP2");
     }
 }

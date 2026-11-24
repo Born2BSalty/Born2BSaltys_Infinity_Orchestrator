@@ -55,8 +55,9 @@ pub const STEP2_SELECT_BG2EE_LOG: &str = "Read BG2EE WeiDU log and tick matching
 pub const STEP2_IMPORT_WEIDU_LOGS: &str = "Read your WeiDU logs and tick matching components.";
 
 pub const STEP3_EXPORT_DIAGNOSTICS: &str = "Export diagnostics from current state.";
-pub const STEP3_EXPAND_ALL: &str = "Expand all parent blocks.";
-pub const STEP3_COLLAPSE_ALL: &str = "Collapse all parent blocks.";
+pub const STEP3_EXPAND_ALL: &str = "Expand all mod blocks.";
+pub const STEP3_COLLAPSE_ALL: &str = "Collapse all mod blocks.";
+pub const STEP3_SEPARATORS_MENU: &str = "Add a separator, or open or close every section.";
 pub const STEP3_REDO: &str = "Redo the most recent undone reorder.";
 pub const STEP3_UNDO: &str = "Undo the most recent reorder.";
 pub const STEP3_LOCK_PARENT: &str = "Lock/unlock this parent block for drag operations.";

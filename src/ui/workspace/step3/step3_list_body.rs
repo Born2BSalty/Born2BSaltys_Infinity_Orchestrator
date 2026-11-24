@@ -5,18 +5,20 @@ use eframe::egui;
 use std::collections::HashMap;
 
 use crate::app::compat_step3_rules::Step3CompatMarker;
+use crate::app::game_authority::{self, GameSlot};
 use crate::app::prompt_eval_summary_step3;
 use crate::app::state::{Step2Selection, Step3ItemState, WizardState};
 use crate::app::step3_history::{self, Step3HistoryEntry, Step3TouchedRows};
 use crate::app::step3_prompt_edit::PromptActionRequest;
+use crate::app::step3_separators::{SeparatorRename, move_section, section_indices};
 use crate::parser::prompt_eval_expr::PromptEvalContext;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::shared::layout_tokens_global::BORDER_THIN;
 use crate::ui::shared::redesign_tokens::{
-    REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_border_strong,
-    redesign_prompt_fill, redesign_prompt_stroke, redesign_prompt_text, redesign_rail_bg,
-    redesign_shell_bg, redesign_text_disabled, redesign_text_faint, redesign_text_fainter,
-    redesign_warning, redesign_with_alpha,
+    REDESIGN_BORDER_RADIUS_U8, REDESIGN_BORDER_WIDTH_PX, ThemePalette, redesign_accent,
+    redesign_border_strong, redesign_prompt_fill, redesign_prompt_stroke, redesign_prompt_text,
+    redesign_rail_bg, redesign_shell_bg, redesign_text_disabled, redesign_text_faint,
+    redesign_text_fainter, redesign_warning, redesign_with_alpha,
 };
 use crate::ui::shared::selected_row::selectable_row;
 use crate::ui::shared::typography_global::{SIZE_PILL_TEXT, strong};
@@ -29,7 +31,14 @@ use crate::ui::step3::move_selection_step3::{
 };
 use crate::ui::step3::service_step3;
 use crate::ui::step3::state_step3;
+use crate::ui::step3::toolbar_support_step3;
 use crate::ui::workspace::widgets::weidu_line;
+
+use super::step3_section_drag as section_drag;
+use super::step3_separator_row::{
+    RenameOutcome, SeparatorRowView, commit_separator_rename, grip_hit_rect, paint_grip,
+    paint_separator_ghost, render_separator_row,
+};
 
 const MOVE_LOCKED_NOTICE: &str = "Locked mods cannot be moved. Unlock them first.";
 
@@ -50,10 +59,16 @@ const HEADER_BAR_VPAD_TOP: f32 = 6.0;
 const HEADER_BAR_VPAD_BOT: f32 = 2.0;
 const HEADER_DOT_STEP_PX: f32 = 7.0;
 const HEADER_DOT_RADIUS: f32 = 0.7;
+const HEADER_LEFT_PAD_PX: f32 = 6.0;
+const HEADER_BAND_HEIGHT_KEY: &str = "step3_header_band_height";
+const SEPARATOR_BAND_SCALE: f32 = 1.1;
+const SECTION_DROP_LINE_PX: f32 = 2.0;
 
 struct RenderCtx<'a> {
     palette: ThemePalette,
     tab_id: &'a str,
+    tab_slot: GameSlot,
+    separator_rename: &'a mut Option<SeparatorRename>,
     prompt_eval: &'a PromptEvalContext,
     compat_markers: &'a HashMap<String, Step3CompatMarker>,
     visible_indices: &'a [usize],
@@ -74,6 +89,7 @@ struct RenderCtx<'a> {
     undo_stack: &'a mut Vec<Step3HistoryEntry>,
     redo_stack: &'a mut Vec<Step3HistoryEntry>,
     current_group_x_bounds: Option<(f32, f32)>,
+    header_band_h: f32,
 }
 
 struct RowAccumulator {
@@ -89,6 +105,14 @@ struct RowAccumulator {
     )>,
     move_request: Option<(usize, MoveSelectionTarget)>,
     drag_refused_locked: bool,
+    separator_request: Option<SeparatorRequest>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SeparatorRequest {
+    AddAbove(usize),
+    Rename(usize),
+    Remove(usize),
 }
 
 impl RowAccumulator {
@@ -101,6 +125,7 @@ impl RowAccumulator {
             open_compat_popup: None,
             move_request: None,
             drag_refused_locked: false,
+            separator_request: None,
         }
     }
 }
@@ -202,6 +227,17 @@ fn run_row_pipeline(
     prompt_eval: &crate::parser::prompt_eval_expr::PromptEvalContext,
     initial_jump: bool,
 ) -> (Option<RowAccumulator>, bool) {
+    let tab_slot = game_authority::slot_for_tab(tab_id);
+    let rename_on_this_tab = state
+        .step3
+        .separator_rename
+        .as_ref()
+        .is_some_and(|rename| rename.tab == tab_slot);
+    let mut separator_rename = if rename_on_this_tab {
+        state.step3.separator_rename.take()
+    } else {
+        None
+    };
     let (
         items,
         selected,
@@ -228,6 +264,11 @@ fn run_row_pipeline(
         );
         return (None, initial_jump);
     }
+    separator_rename.take_if(|rename| {
+        !items
+            .iter()
+            .any(|item| item.is_separator() && item.block_id == rename.block_id)
+    });
 
     let total_child_count = items.iter().filter(|i| !i.is_parent).count();
     let visible_indices = blocks::visible_indices(items, collapsed_blocks);
@@ -236,6 +277,8 @@ fn run_row_pipeline(
     let mut ctx = RenderCtx {
         palette,
         tab_id,
+        tab_slot,
+        separator_rename: &mut separator_rename,
         prompt_eval,
         compat_markers,
         visible_indices: &visible_indices,
@@ -256,6 +299,7 @@ fn run_row_pipeline(
         undo_stack,
         redo_stack,
         current_group_x_bounds: None,
+        header_band_h: remembered_header_band_height(ui),
     };
 
     let lineno_w = lineno_col_width(total_child_count);
@@ -271,6 +315,9 @@ fn run_row_pipeline(
         .inner;
 
     run_drag_pipeline(ui, &mut ctx, &acc.visible_rows);
+    if rename_on_this_tab || separator_rename.is_some() {
+        state.step3.separator_rename = separator_rename;
+    }
 
     (Some(acc), jump_flag)
 }
@@ -317,52 +364,24 @@ fn render_rows(ui: &mut egui::Ui, ctx: &mut RenderCtx<'_>, lineno_w: f32) -> Row
             continue;
         }
 
+        if ctx.items[idx].is_separator() {
+            if !first_group {
+                ui.add_space(GROUP_GAP_PX * 2.0);
+            }
+            first_group = false;
+            render_separator(ui, ctx, idx, &mut acc, list_left_x + group_w);
+            pos += 1;
+            continue;
+        }
+
         if !first_group {
             ui.add_space(GROUP_GAP_PX);
         }
         first_group = false;
 
         let block_id = ctx.items[idx].block_id.clone();
-
-        let top_cursor = ui.cursor().min;
-
-        let bg_shape_id = ui.painter().add(egui::Shape::Noop);
-
-        let scope_resp = ui.scope(|ui| {
-            ui.set_min_width(group_w + SCROLLBAR_RESERVE);
-            ui.add_space(HEADER_BAR_VPAD_TOP);
-            ui.horizontal(|ui| {
-                ui.add_space(6.0);
-                render_header_row(ui, ctx, idx, &mut acc);
-            });
-            ui.add_space(HEADER_BAR_VPAD_BOT);
-        });
+        render_header_band(ui, ctx, idx, &mut acc, group_w);
         pos += 1;
-
-        let header_rect = egui::Rect::from_min_size(
-            top_cursor,
-            egui::vec2(group_w, scope_resp.response.rect.height()),
-        );
-
-        ui.painter().set(
-            bg_shape_id,
-            egui::Shape::rect_filled(
-                header_rect,
-                egui::CornerRadius::ZERO,
-                redesign_rail_bg(ctx.palette),
-            ),
-        );
-
-        let dot_color = redesign_with_alpha(crate::ui::shared::theme_global::accent_path(), 1, 2);
-        paint_dotted_rect(
-            ui,
-            header_rect,
-            dot_color,
-            HEADER_DOT_STEP_PX,
-            HEADER_DOT_RADIUS,
-        );
-
-        ctx.current_group_x_bounds = Some((header_rect.left(), header_rect.right()));
 
         while pos < ctx.visible_indices.len() {
             let child_idx = ctx.visible_indices[pos];
@@ -394,8 +413,113 @@ fn render_rows(ui: &mut egui::Ui, ctx: &mut RenderCtx<'_>, lineno_w: f32) -> Row
         ui.ctx().data_mut(|d| d.insert_temp(tab_w_id, measured));
         ui.ctx().request_repaint();
     }
+    remember_header_band_height(ui, ctx.header_band_h);
 
     acc
+}
+
+fn render_header_band(
+    ui: &mut egui::Ui,
+    ctx: &mut RenderCtx<'_>,
+    idx: usize,
+    acc: &mut RowAccumulator,
+    group_w: f32,
+) {
+    let top_cursor = ui.cursor().min;
+    let bg_shape_id = ui.painter().add(egui::Shape::Noop);
+
+    let scope_resp = ui.scope(|ui| {
+        ui.set_min_width(group_w + SCROLLBAR_RESERVE);
+        ui.add_space(HEADER_BAR_VPAD_TOP);
+        ui.horizontal(|ui| {
+            ui.add_space(HEADER_LEFT_PAD_PX);
+            render_header_row(ui, ctx, idx, acc);
+        });
+        ui.add_space(HEADER_BAR_VPAD_BOT);
+    });
+    let band_height = scope_resp.response.rect.height();
+    ctx.header_band_h = band_height;
+
+    let header_rect =
+        egui::Rect::from_min_size(top_cursor, egui::vec2(group_w.max(0.0), band_height));
+
+    ui.painter().set(
+        bg_shape_id,
+        egui::Shape::rect_filled(
+            header_rect,
+            egui::CornerRadius::ZERO,
+            redesign_rail_bg(ctx.palette),
+        ),
+    );
+
+    let dot_color = redesign_with_alpha(crate::ui::shared::theme_global::accent_path(), 1, 2);
+    paint_dotted_rect(
+        ui,
+        header_rect,
+        dot_color,
+        HEADER_DOT_STEP_PX,
+        HEADER_DOT_RADIUS,
+    );
+    render_header_grip(ui, ctx, idx, acc, header_rect);
+
+    ctx.current_group_x_bounds = Some((header_rect.left(), header_rect.right()));
+}
+
+fn render_header_grip(
+    ui: &egui::Ui,
+    ctx: &mut RenderCtx<'_>,
+    idx: usize,
+    acc: &mut RowAccumulator,
+    header_rect: egui::Rect,
+) {
+    let center_y = acc
+        .visible_rows
+        .iter()
+        .rev()
+        .find(|(row, _)| *row == idx)
+        .map_or_else(|| header_rect.center().y, |(_, rect)| rect.center().y);
+    paint_grip(
+        ui.painter(),
+        header_rect.right(),
+        center_y,
+        redesign_text_faint(ctx.palette),
+    );
+    let grip_id = ui.make_persistent_id(("step3b_drag_parent_grip", ctx.tab_id, idx));
+    let grip = ui.interact(
+        grip_hit_rect(header_rect),
+        grip_id,
+        egui::Sense::click_and_drag(),
+    );
+    if grip.hovered() && ctx.drag_from.is_none() {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
+    }
+    handle_row_selection(ui, ctx, idx, &grip, &grip);
+    if handle_drag_start(ui, ctx, idx, &grip, &acc.visible_rows) == DragStart::RefusedLocked {
+        acc.drag_refused_locked = true;
+    }
+}
+
+fn estimated_header_band_height(ui: &egui::Ui) -> f32 {
+    let spacing = ui.spacing();
+    HEADER_BAR_VPAD_TOP + HEADER_BAR_VPAD_BOT + spacing.interact_size.y + spacing.item_spacing.y
+}
+
+fn remembered_header_band_height(ui: &egui::Ui) -> f32 {
+    ui.ctx()
+        .data(|d| d.get_temp::<f32>(egui::Id::new(HEADER_BAND_HEIGHT_KEY)))
+        .unwrap_or_else(|| estimated_header_band_height(ui))
+}
+
+fn remember_header_band_height(ui: &egui::Ui, measured: f32) {
+    let remembered = ui
+        .ctx()
+        .data(|d| d.get_temp::<f32>(egui::Id::new(HEADER_BAND_HEIGHT_KEY)));
+    if remembered.is_none_or(|old| (measured - old).abs() > 0.5) {
+        ui.ctx().data_mut(|d| {
+            d.insert_temp(egui::Id::new(HEADER_BAND_HEIGHT_KEY), measured);
+        });
+        ui.ctx().request_repaint();
+    }
 }
 
 const fn group_width(viewport_w: f32, remembered: f32) -> f32 {
@@ -507,7 +631,86 @@ fn paint_lock_button(ui: &mut egui::Ui, is_locked: bool, color: egui::Color32) -
     response
 }
 
-fn paint_chevron_button(
+fn render_separator(
+    ui: &mut egui::Ui,
+    ctx: &mut RenderCtx<'_>,
+    idx: usize,
+    acc: &mut RowAccumulator,
+    right_x: f32,
+) {
+    let block_id = ctx.items[idx].block_id.clone();
+    let name = ctx.items[idx].mod_name.clone();
+    let collapsed = ctx.collapsed_blocks.contains(&block_id);
+    let mod_count = section_indices(ctx.items, idx)
+        .into_iter()
+        .filter(|row| ctx.items[*row].is_mod_header())
+        .count();
+    let view = SeparatorRowView {
+        palette: ctx.palette,
+        name: &name,
+        collapsed,
+        mod_count,
+        right_x,
+        band_height: ctx.header_band_h * SEPARATOR_BAND_SCALE,
+    };
+    let rename = ctx
+        .separator_rename
+        .as_mut()
+        .filter(|rename| rename.block_id == block_id);
+    let renaming = rename.is_some();
+    let row = render_separator_row(ui, &view, rename);
+
+    if row.chevron_clicked {
+        toggle_collapsed(ctx, &block_id, collapsed);
+    }
+    match row.rename {
+        Some(RenameOutcome::Commit(text)) => {
+            commit_separator_rename(ctx.items, idx, &text, ctx.undo_stack, ctx.redo_stack);
+            *ctx.separator_rename = None;
+        }
+        Some(RenameOutcome::Cancel) => *ctx.separator_rename = None,
+        Some(RenameOutcome::Editing) | None => {}
+    }
+
+    let drag_id = ui.make_persistent_id(("step3b_drag_separator", ctx.tab_id, idx));
+    let drag_response = ui.interact(row.grab_rect, drag_id, egui::Sense::click_and_drag());
+    if drag_response.hovered() && ctx.drag_from.is_none() {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
+    }
+    let on_name = drag_response
+        .interact_pointer_pos()
+        .is_some_and(|pos| row.name_rect.contains(pos));
+    if !renaming && on_name && drag_response.double_clicked() {
+        *ctx.separator_rename = Some(SeparatorRename {
+            tab: ctx.tab_slot,
+            block_id,
+            text: name,
+            focus_pending: true,
+        });
+    }
+
+    render_separator_context_menu(&drag_response, idx, acc);
+    acc.visible_rows.push((idx, row.row_rect));
+    handle_jump_to_selected(ui, ctx, idx, row.row_rect);
+    handle_row_selection(ui, ctx, idx, &drag_response, &drag_response);
+    if handle_drag_start(ui, ctx, idx, &drag_response, &acc.visible_rows)
+        == DragStart::RefusedLocked
+    {
+        acc.drag_refused_locked = true;
+    }
+}
+
+fn toggle_collapsed(ctx: &mut RenderCtx<'_>, block_id: &str, collapsed: bool) {
+    if collapsed {
+        ctx.collapsed_blocks.retain(|v| v != block_id);
+    } else if !ctx.collapsed_blocks.iter().any(|v| v == block_id) {
+        ctx.collapsed_blocks.push(block_id.to_string());
+    }
+    ctx.selected.clear();
+    *ctx.anchor = None;
+}
+
+pub(super) fn paint_chevron_button(
     ui: &mut egui::Ui,
     collapsed: bool,
     color: egui::Color32,
@@ -880,6 +1083,39 @@ fn render_move_selection_entries(ui: &mut egui::Ui, idx: usize, acc: &mut RowAcc
     ui.separator();
 }
 
+fn render_add_separator_entry(ui: &mut egui::Ui, idx: usize, acc: &mut RowAccumulator) {
+    if ui.button("Add separator above").clicked() {
+        acc.separator_request = Some(SeparatorRequest::AddAbove(idx));
+        ui.close_menu();
+    }
+}
+
+fn render_separator_context_menu(
+    drag_response: &egui::Response,
+    idx: usize,
+    acc: &mut RowAccumulator,
+) {
+    drag_response.context_menu(|ui| {
+        if ui.button("Move separator to top").clicked() {
+            acc.move_request = Some((idx, MoveSelectionTarget::Top));
+            ui.close_menu();
+        }
+        if ui.button("Move separator to bottom").clicked() {
+            acc.move_request = Some((idx, MoveSelectionTarget::Bottom));
+            ui.close_menu();
+        }
+        ui.separator();
+        if ui.button("Rename\u{2026}").clicked() {
+            acc.separator_request = Some(SeparatorRequest::Rename(idx));
+            ui.close_menu();
+        }
+        if ui.button("Remove separator").clicked() {
+            acc.separator_request = Some(SeparatorRequest::Remove(idx));
+            ui.close_menu();
+        }
+    });
+}
+
 fn render_parent_context_menu(
     drag_response: &egui::Response,
     ctx: &mut RenderCtx<'_>,
@@ -888,6 +1124,7 @@ fn render_parent_context_menu(
 ) {
     drag_response.context_menu(|ui| {
         render_move_selection_entries(ui, idx, acc);
+        render_add_separator_entry(ui, idx, acc);
         if ui.button("Clone Parent (empty split target)").clicked() {
             step3_history::push_undo_snapshot(
                 ctx.items,
@@ -913,6 +1150,7 @@ fn render_child_context_menu(
     let mod_name = ctx.items[idx].mod_name.clone();
     drag_response.context_menu(|ui| {
         render_move_selection_entries(ui, idx, acc);
+        render_add_separator_entry(ui, idx, acc);
         if ui.button("Uncheck In Step 2").clicked() {
             acc.uncheck_requests
                 .push((tp_file.clone(), component_id.clone()));
@@ -1035,6 +1273,111 @@ fn update_drag_grab_geometry(
 }
 
 fn run_drag_pipeline(ui: &egui::Ui, ctx: &mut RenderCtx<'_>, visible_rows: &[(usize, egui::Rect)]) {
+    if section_drag::is_section_drag(ctx.items, *ctx.drag_from, ctx.drag_indices) {
+        run_section_drag(ui, ctx, visible_rows);
+    } else {
+        run_row_drag(ui, ctx, visible_rows);
+    }
+
+    let mut finalize_ctx = service_step3::drag_ops::DragFinalizeContext {
+        items: ctx.items,
+        selected: ctx.selected,
+        drag_from: ctx.drag_from,
+        drag_over: ctx.drag_over,
+        drag_indices: ctx.drag_indices,
+        drag_grab_offset: ctx.drag_grab_offset,
+        drag_grab_pos_in_block: ctx.drag_grab_pos_in_block,
+        drag_row_h: ctx.drag_row_h,
+        last_insert_at: ctx.last_insert_at,
+        clone_seq: ctx.clone_seq,
+    };
+    service_step3::drag_ops::finalize_on_release(ui, &mut finalize_ctx);
+}
+
+fn run_section_drag(ui: &egui::Ui, ctx: &mut RenderCtx<'_>, visible_rows: &[(usize, egui::Rect)]) {
+    let Some(separator_idx) = *ctx.drag_from else {
+        return;
+    };
+    let Some(&(_, band)) = visible_rows.iter().find(|(idx, _)| *idx == separator_idx) else {
+        return;
+    };
+    let ghost_and_drop = ui
+        .input(|input| input.pointer.latest_pos())
+        .and_then(|cursor| {
+            let ghost = band.translate(egui::vec2(
+                0.0,
+                cursor.y - *ctx.drag_grab_offset - band.top(),
+            ));
+            section_drag::section_drop_target(
+                ctx.items,
+                visible_rows,
+                ghost.center().y,
+                GROUP_GAP_PX,
+            )
+            .map(|drop| (ghost, drop))
+        });
+
+    if ui.input(|input| input.pointer.any_released()) {
+        let moved = ghost_and_drop
+            .is_some_and(|(_, drop)| move_section(ctx.items, separator_idx, drop.before));
+        if !moved
+            && ctx
+                .undo_stack
+                .last()
+                .is_some_and(|entry| entry.items == *ctx.items)
+        {
+            ctx.undo_stack.pop();
+        }
+        ctx.selected.clear();
+        *ctx.anchor = None;
+        return;
+    }
+    let Some((ghost, drop)) = ghost_and_drop else {
+        return;
+    };
+
+    let clip = ui.clip_rect();
+    let painter = ui
+        .ctx()
+        .layer_painter(egui::LayerId::new(
+            egui::Order::Tooltip,
+            egui::Id::new(("step3_section_drag", ctx.tab_id)),
+        ))
+        .with_clip_rect(clip);
+    painter.rect_filled(
+        band,
+        egui::CornerRadius::ZERO,
+        redesign_with_alpha(redesign_shell_bg(ctx.palette), 3, 5),
+    );
+    painter.line_segment(
+        [
+            egui::pos2(clip.left(), drop.line_y),
+            egui::pos2(
+                (clip.right() - SCROLLBAR_RESERVE).max(clip.left()),
+                drop.line_y,
+            ),
+        ],
+        egui::Stroke::new(SECTION_DROP_LINE_PX, redesign_accent(ctx.palette)),
+    );
+    let mod_count = section_indices(ctx.items, separator_idx)
+        .into_iter()
+        .filter(|row| ctx.items[*row].is_mod_header())
+        .count();
+    paint_separator_ghost(
+        ui,
+        &painter,
+        ctx.palette,
+        ghost,
+        &ctx.items[separator_idx].mod_name,
+        mod_count,
+    );
+    ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
+}
+
+fn run_row_drag(ui: &egui::Ui, ctx: &mut RenderCtx<'_>, visible_rows: &[(usize, egui::Rect)]) {
+    if ctx.drag_from.is_some() && ui.input(|input| input.pointer.primary_down()) {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
+    }
     let mut pointer_ctx = service_step3::drag_ops::DragPointerContext {
         items: ctx.items,
         drag_from: ctx.drag_from.as_ref(),
@@ -1049,7 +1392,9 @@ fn run_drag_pipeline(ui: &egui::Ui, ctx: &mut RenderCtx<'_>, visible_rows: &[(us
     paint_insert_marker_full_width(
         ui,
         ctx.items,
-        ctx.drag_from.is_some(),
+        ctx.drag_from
+            .and_then(|grabbed| ctx.items.get(grabbed))
+            .is_some_and(|grabbed| !grabbed.is_separator()),
         *ctx.drag_over,
         visible_rows,
     );
@@ -1066,20 +1411,6 @@ fn run_drag_pipeline(ui: &egui::Ui, ctx: &mut RenderCtx<'_>, visible_rows: &[(us
         visible_rows,
     };
     service_step3::drag_ops::apply_live_reorder(ui, &mut reorder_ctx);
-
-    let mut finalize_ctx = service_step3::drag_ops::DragFinalizeContext {
-        items: ctx.items,
-        selected: ctx.selected,
-        drag_from: ctx.drag_from,
-        drag_over: ctx.drag_over,
-        drag_indices: ctx.drag_indices,
-        drag_grab_offset: ctx.drag_grab_offset,
-        drag_grab_pos_in_block: ctx.drag_grab_pos_in_block,
-        drag_row_h: ctx.drag_row_h,
-        last_insert_at: ctx.last_insert_at,
-        clone_seq: ctx.clone_seq,
-    };
-    service_step3::drag_ops::finalize_on_release(ui, &mut finalize_ctx);
 }
 
 fn flush_row_outcome(
@@ -1109,6 +1440,18 @@ fn flush_row_outcome(
     }
     if !acc.prompt_requests.is_empty() {
         service_step3::prompt_actions::apply_prompt_actions(state, &acc.prompt_requests);
+    }
+    match acc.separator_request.take() {
+        Some(SeparatorRequest::AddAbove(idx)) => {
+            toolbar_support_step3::add_separator_active(state, Some(idx));
+        }
+        Some(SeparatorRequest::Rename(idx)) => {
+            toolbar_support_step3::start_separator_rename_active(state, idx);
+        }
+        Some(SeparatorRequest::Remove(idx)) => {
+            toolbar_support_step3::remove_separator_active(state, idx);
+        }
+        None => {}
     }
     let Some((clicked_idx, target)) = acc.move_request.take() else {
         return acc
