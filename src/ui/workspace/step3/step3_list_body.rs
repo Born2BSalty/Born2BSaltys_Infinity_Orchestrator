@@ -1636,22 +1636,18 @@ mod tests {
 
     impl Drop for DisplayFormatReset {
         fn drop(&mut self) {
-            crate::app::mod_display_name::set_mod_display_format(
-                crate::settings::redesign_fields::ModDisplayFormat::default(),
-            );
+            crate::app::mod_display_name::set_display_mod_names(false);
         }
     }
 
-    fn with_display_format(
-        format: crate::settings::redesign_fields::ModDisplayFormat,
-    ) -> DisplayFormatReset {
-        crate::app::mod_display_name::set_mod_display_format(format);
+    fn with_display_format(show_names: bool) -> DisplayFormatReset {
+        crate::app::mod_display_name::set_display_mod_names(show_names);
         DisplayFormatReset
     }
 
     #[test]
     fn step3_separator_title_is_never_formatted() {
-        let _reset = with_display_format(crate::settings::redesign_fields::ModDisplayFormat::Tp2);
+        let _reset = with_display_format(false);
         let separator = crate::app::step3_separators::separator_row(
             "My Setup-Fixes.tp2 Section",
             "SEPARATOR::1".to_string(),
@@ -1664,7 +1660,7 @@ mod tests {
 
     #[test]
     fn step3_mod_header_title_follows_the_display_format() {
-        let _reset = with_display_format(crate::settings::redesign_fields::ModDisplayFormat::Tp2);
+        let _reset = with_display_format(false);
         let mut header = mod_item("FolderName");
         header.tp_file = "FolderName/Setup-CdTweaks.tp2".to_string();
         let title = build_parent_title(&parent_display_name(&header), false, 4, false);

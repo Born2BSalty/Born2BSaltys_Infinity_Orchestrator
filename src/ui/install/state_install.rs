@@ -501,9 +501,7 @@ mod tests {
 
     #[test]
     fn manual_row_label_follows_the_display_format_and_keeps_its_key() {
-        crate::app::mod_display_name::set_mod_display_format(
-            crate::settings::redesign_fields::ModDisplayFormat::Tp2,
-        );
+        crate::app::mod_display_name::set_display_mod_names(false);
         let row = ManualDownloadRow {
             label: "Some Mod Folder".to_string(),
             tp_file: "SOMEMOD/SETUP-SOMEMOD.TP2".to_string(),
@@ -516,9 +514,7 @@ mod tests {
             ..row.clone()
         };
         let shown = (row.shown_label(), without_tp2.shown_label());
-        crate::app::mod_display_name::set_mod_display_format(
-            crate::settings::redesign_fields::ModDisplayFormat::default(),
-        );
+        crate::app::mod_display_name::set_display_mod_names(false);
         assert_eq!(shown.0, "somemod");
         assert_eq!(shown.1, "Some Mod Folder");
         assert_eq!(row.label, "Some Mod Folder");

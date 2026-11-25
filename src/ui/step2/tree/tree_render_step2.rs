@@ -16,6 +16,7 @@ pub struct ModTreeRenderResult {
     pub open_compat_for_component: Option<(String, String, String)>,
     pub open_prompt_popup: Option<(String, String)>,
     pub open_details: bool,
+    pub rename_mod: Option<String>,
 }
 
 pub struct ModTreeRenderContext<'a> {
@@ -36,6 +37,7 @@ struct ModTreePending {
     open_compat_for_component: Option<(String, String, String)>,
     open_prompt_popup: Option<(String, String)>,
     open_details: bool,
+    rename_mod: Option<String>,
 }
 
 pub fn render_mod_tree(
@@ -136,6 +138,7 @@ fn finish_mod_tree_result(
         open_compat_for_component: pending.open_compat_for_component,
         open_prompt_popup: pending.open_prompt_popup,
         open_details: pending.open_details,
+        rename_mod: pending.rename_mod,
     })
 }
 
@@ -148,6 +151,9 @@ impl ModTreePending {
             self.open_compat_for_component = result.open_compat_for_component;
         }
         self.open_details |= result.open_details;
+        if result.rename_mod.is_some() {
+            self.rename_mod = result.rename_mod;
+        }
     }
 
     fn apply_components(&mut self, result: ComponentRowsResult) {
@@ -168,6 +174,7 @@ impl ModTreePending {
             || self.open_compat_for_component.is_some()
             || self.open_prompt_popup.is_some()
             || self.open_details
+            || self.rename_mod.is_some()
     }
 }
 

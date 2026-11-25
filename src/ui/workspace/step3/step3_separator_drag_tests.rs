@@ -239,15 +239,11 @@ fn a_mod_drags_by_the_grip_on_the_right_of_its_header() {
     struct FormatReset;
     impl Drop for FormatReset {
         fn drop(&mut self) {
-            crate::app::mod_display_name::set_mod_display_format(
-                crate::settings::redesign_fields::ModDisplayFormat::default(),
-            );
+            crate::app::mod_display_name::set_display_mod_names(false);
         }
     }
     let _reset = FormatReset;
-    crate::app::mod_display_name::set_mod_display_format(
-        crate::settings::redesign_fields::ModDisplayFormat::Tp2,
-    );
+    crate::app::mod_display_name::set_display_mod_names(false);
     let mut harness = harness_for(sectioned_list(), Vec::new());
     harness.run_steps(2);
     let grip_x = header_band_right(&harness, "heart (2)") - 14.0;

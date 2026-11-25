@@ -735,24 +735,19 @@ mod tests {
 
     #[test]
     fn versions_card_title_follows_the_display_format() {
-        use crate::app::mod_display_name::set_mod_display_format;
-        use crate::settings::redesign_fields::ModDisplayFormat;
+        use crate::app::mod_display_name::{NamesShownForTest, set_display_mod_names};
 
         let card = VersionCard {
             tp2: "cdtweaks".to_string(),
             name: "cdtweaks-folder".to_string(),
             ..card_in(None)
         };
-        for (format, expected) in [
-            (ModDisplayFormat::NameAndTp2, "Tweaks Anthology (cdtweaks)"),
-            (ModDisplayFormat::Name, "Tweaks Anthology"),
-            (ModDisplayFormat::Tp2, "cdtweaks"),
-        ] {
-            set_mod_display_format(format);
+        let _names = NamesShownForTest::new(false);
+        for (show_names, expected) in [(true, "Tweaks Anthology"), (false, "cdtweaks")] {
+            set_display_mod_names(show_names);
             assert_eq!(card_title_with(Some("Tweaks Anthology"), &card), expected);
             assert_eq!(card_title_with(None, &card), "cdtweaks");
         }
-        set_mod_display_format(ModDisplayFormat::default());
     }
 
     #[test]

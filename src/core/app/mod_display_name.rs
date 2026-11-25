@@ -2,12 +2,12 @@
 // Copyright (c) 2026 Born2BSalty
 
 use std::cell::{Cell, RefCell};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
 use std::time::{Duration, Instant, SystemTime};
 
 use crate::app::mod_downloads::{self, ModDownloadsLoad, normalize_mod_download_tp2};
-use crate::settings::redesign_fields::ModDisplayFormat;
+use crate::app::mod_rename::user_mod_renames;
 
 const NAMES_RECHECK_INTERVAL: Duration = Duration::from_secs(1);
 
@@ -18,20 +18,15 @@ pub(crate) fn mod_tp2_key(tp_file: &str) -> String {
 
 #[must_use]
 pub(crate) fn format_mod_display_name(
-    format: ModDisplayFormat,
+    show_names: bool,
     human_name: Option<&str>,
     tp_file: &str,
 ) -> String {
     let tp2 = mod_tp2_key(tp_file);
-    let human = human_name
+    human_name
         .map(str::trim)
-        .filter(|name| !name.is_empty() && !name.eq_ignore_ascii_case(&tp2));
-    match (format, human) {
-        (ModDisplayFormat::NameAndTp2, Some(name)) if tp2.is_empty() => name.to_string(),
-        (ModDisplayFormat::NameAndTp2, Some(name)) => format!("{name} ({tp2})"),
-        (ModDisplayFormat::Name, Some(name)) => name.to_string(),
-        (ModDisplayFormat::Tp2 | ModDisplayFormat::NameAndTp2 | ModDisplayFormat::Name, _) => tp2,
-    }
+        .filter(|name| show_names && !name.is_empty())
+        .map_or(tp2, str::to_string)
 }
 
 #[must_use]
@@ -51,9 +46,34 @@ pub(crate) fn human_names_from_load(load: &ModDownloadsLoad) -> HashMap<String, 
     names
 }
 
+fn canonical_tp2s_from_load(load: &ModDownloadsLoad) -> HashMap<String, String> {
+    let mut canonical = HashMap::new();
+    for source in &load.sources {
+        let tp2 = normalize_mod_download_tp2(&source.tp2);
+        if !tp2.is_empty() {
+            canonical.entry(tp2.clone()).or_insert(tp2);
+        }
+    }
+    for source in &load.sources {
+        let tp2 = normalize_mod_download_tp2(&source.tp2);
+        if tp2.is_empty() {
+            continue;
+        }
+        for alias in source.declared_tp2_names() {
+            let alias = normalize_mod_download_tp2(&alias);
+            if !alias.is_empty() {
+                canonical.entry(alias).or_insert_with(|| tp2.clone());
+            }
+        }
+    }
+    canonical
+}
+
 #[derive(Default)]
 struct NamesCache {
     names: HashMap<String, String>,
+    renames: BTreeMap<String, String>,
+    canonical: HashMap<String, String>,
     stamp: Option<CatalogStamp>,
     checked_at: Option<Instant>,
 }
@@ -93,39 +113,74 @@ impl NamesCache {
         if self.stamp.as_ref() == Some(&stamp) {
             return;
         }
-        self.names = human_names_from_load(&mod_downloads::load_mod_download_sources());
+        let load = mod_downloads::load_mod_download_sources();
+        self.names = human_names_from_load(&load);
+        self.canonical = canonical_tp2s_from_load(&load);
+        self.renames = user_mod_renames();
         self.stamp = Some(stamp);
+    }
+
+    fn rename_key(&self, tp_file: &str) -> String {
+        let key = mod_tp2_key(tp_file);
+        self.canonical.get(&key).cloned().unwrap_or(key)
+    }
+
+    fn rename(&self, tp_file: &str) -> Option<String> {
+        self.renames.get(&self.rename_key(tp_file)).cloned()
     }
 }
 
 thread_local! {
-    static FORMAT: Cell<ModDisplayFormat> = const { Cell::new(ModDisplayFormat::NameAndTp2) };
+    static SHOW_NAMES: Cell<bool> = const { Cell::new(false) };
     static NAMES: RefCell<NamesCache> = RefCell::new(NamesCache::default());
 }
 
-pub(crate) fn set_mod_display_format(format: ModDisplayFormat) {
-    FORMAT.with(|slot| slot.set(format));
+fn with_names<T>(read: impl FnOnce(&NamesCache) -> T) -> T {
+    NAMES.with(|cache| {
+        let mut cache = cache.borrow_mut();
+        cache.refresh_if_due();
+        read(&cache)
+    })
+}
+
+pub(crate) fn set_display_mod_names(show_names: bool) {
+    SHOW_NAMES.with(|slot| slot.set(show_names));
 }
 
 #[must_use]
-pub(crate) fn mod_display_format() -> ModDisplayFormat {
-    FORMAT.with(Cell::get)
+pub(crate) fn display_mod_names() -> bool {
+    SHOW_NAMES.with(Cell::get)
+}
+
+pub(crate) fn invalidate_names() {
+    NAMES.with(|cache| {
+        let mut cache = cache.borrow_mut();
+        cache.stamp = None;
+        cache.checked_at = None;
+    });
+}
+
+#[must_use]
+pub(crate) fn rename_key(tp_file: &str) -> String {
+    with_names(|cache| cache.rename_key(tp_file))
 }
 
 #[must_use]
 pub(crate) fn catalog_human_name(tp_file: &str) -> Option<String> {
-    let key = mod_tp2_key(tp_file);
-    NAMES.with(|cache| {
-        let mut cache = cache.borrow_mut();
-        cache.refresh_if_due();
-        cache.names.get(&key).cloned()
+    with_names(|cache| {
+        cache
+            .rename(tp_file)
+            .or_else(|| cache.names.get(&mod_tp2_key(tp_file)).cloned())
     })
 }
 
 #[must_use]
 pub(crate) fn mod_display_label(tp_file: &str) -> String {
+    if !display_mod_names() {
+        return mod_tp2_key(tp_file);
+    }
     format_mod_display_name(
-        mod_display_format(),
+        display_mod_names(),
         catalog_human_name(tp_file).as_deref(),
         tp_file,
     )
@@ -133,7 +188,41 @@ pub(crate) fn mod_display_label(tp_file: &str) -> String {
 
 #[must_use]
 pub(crate) fn mod_display_label_with_name(human_name: Option<&str>, tp_file: &str) -> String {
-    format_mod_display_name(mod_display_format(), human_name, tp_file)
+    if !display_mod_names() {
+        return format_mod_display_name(false, human_name, tp_file);
+    }
+    let rename = with_names(|cache| cache.rename(tp_file));
+    format_mod_display_name(true, rename.as_deref().or(human_name), tp_file)
+}
+
+#[cfg(test)]
+pub(crate) struct NamesShownForTest(PathBuf);
+
+#[cfg(test)]
+impl NamesShownForTest {
+    pub(crate) fn new(show_names: bool) -> Self {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static NEXT: AtomicU64 = AtomicU64::new(0);
+        let root = std::env::temp_dir().join(format!(
+            "bio_mod_names_{}_{}",
+            std::process::id(),
+            NEXT.fetch_add(1, Ordering::Relaxed)
+        ));
+        crate::platform_defaults::set_config_dir_override(Some(root.clone()));
+        set_display_mod_names(show_names);
+        invalidate_names();
+        Self(root)
+    }
+}
+
+#[cfg(test)]
+impl Drop for NamesShownForTest {
+    fn drop(&mut self) {
+        set_display_mod_names(false);
+        crate::platform_defaults::clear_config_dir_override_if(&self.0);
+        invalidate_names();
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
 }
 
 #[cfg(test)]
@@ -141,60 +230,52 @@ mod tests {
     use super::*;
 
     #[test]
-    fn name_and_tp2_is_the_default_format() {
-        assert_eq!(ModDisplayFormat::default(), ModDisplayFormat::NameAndTp2);
-    }
-
-    #[test]
-    fn each_format_renders_its_shape() {
-        let cases = [
-            (ModDisplayFormat::NameAndTp2, "Tweaks Anthology (cdtweaks)"),
-            (ModDisplayFormat::Name, "Tweaks Anthology"),
-            (ModDisplayFormat::Tp2, "cdtweaks"),
-        ];
-        for (format, expected) in cases {
-            assert_eq!(
-                format_mod_display_name(format, Some("Tweaks Anthology"), "setup-cdtweaks.tp2"),
-                expected
-            );
-        }
-    }
-
-    #[test]
-    fn every_format_falls_back_to_the_tp2_without_a_human_name() {
-        for format in ModDisplayFormat::all() {
-            assert_eq!(
-                format_mod_display_name(*format, None, "CDTWEAKS/SETUP-CDTWEAKS.TP2"),
-                "cdtweaks"
-            );
-            assert_eq!(
-                format_mod_display_name(*format, Some("  "), "setup-cdtweaks.tp2"),
-                "cdtweaks"
-            );
-        }
-    }
-
-    #[test]
-    fn a_human_name_equal_to_the_tp2_is_not_repeated() {
-        assert_eq!(
-            format_mod_display_name(ModDisplayFormat::NameAndTp2, Some("CDTweaks"), "cdtweaks"),
-            "cdtweaks"
-        );
-    }
-
-    #[test]
-    fn the_label_follows_the_chosen_format() {
-        set_mod_display_format(ModDisplayFormat::Tp2);
+    fn tp2_names_are_shown_by_default() {
+        assert!(!display_mod_names());
         assert_eq!(
             mod_display_label_with_name(Some("Tweaks Anthology"), "setup-cdtweaks.tp2"),
             "cdtweaks"
         );
-        set_mod_display_format(ModDisplayFormat::Name);
+    }
+
+    #[test]
+    fn each_setting_renders_its_shape() {
+        assert_eq!(
+            format_mod_display_name(true, Some("Tweaks Anthology"), "setup-cdtweaks.tp2"),
+            "Tweaks Anthology"
+        );
+        assert_eq!(
+            format_mod_display_name(false, Some("Tweaks Anthology"), "setup-cdtweaks.tp2"),
+            "cdtweaks"
+        );
+    }
+
+    #[test]
+    fn mod_names_fall_back_to_the_tp2_without_a_human_name() {
+        for show_names in [false, true] {
+            assert_eq!(
+                format_mod_display_name(show_names, None, "CDTWEAKS/SETUP-CDTWEAKS.TP2"),
+                "cdtweaks"
+            );
+            assert_eq!(
+                format_mod_display_name(show_names, Some("  "), "setup-cdtweaks.tp2"),
+                "cdtweaks"
+            );
+        }
+    }
+
+    #[test]
+    fn the_label_follows_the_setting() {
+        let _names = NamesShownForTest::new(true);
         assert_eq!(
             mod_display_label_with_name(Some("Tweaks Anthology"), "setup-cdtweaks.tp2"),
             "Tweaks Anthology"
         );
-        set_mod_display_format(ModDisplayFormat::default());
+        set_display_mod_names(false);
+        assert_eq!(
+            mod_display_label_with_name(Some("Tweaks Anthology"), "setup-cdtweaks.tp2"),
+            "cdtweaks"
+        );
     }
 
     #[test]
@@ -212,6 +293,15 @@ mod tests {
         assert_eq!(
             names.get("foldername").map(String::as_str),
             Some("Folder Named")
+        );
+        let canonical = canonical_tp2s_from_load(&load);
+        assert_eq!(
+            canonical.get("foldername").map(String::as_str),
+            Some("filename")
+        );
+        assert_eq!(
+            canonical.get("filename").map(String::as_str),
+            Some("filename")
         );
     }
 }

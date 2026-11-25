@@ -1068,17 +1068,13 @@ mod tests {
 
     #[test]
     fn grouped_toast_names_mods_in_the_display_format() {
-        crate::app::mod_display_name::set_mod_display_format(
-            crate::settings::redesign_fields::ModDisplayFormat::Tp2,
-        );
+        crate::app::mod_display_name::set_display_mod_names(false);
         let entry = Step2LogUnticked {
             tp_file: "SETUP-Y.TP2".to_string(),
             ..unticked("Folder Y", "0", "mod not on disk")
         };
         let text = grouped_unticked_text(&[entry]);
-        crate::app::mod_display_name::set_mod_display_format(
-            crate::settings::redesign_fields::ModDisplayFormat::default(),
-        );
+        crate::app::mod_display_name::set_display_mod_names(false);
         assert_eq!(
             text.as_deref(),
             Some("1 logged component(s) could not be ticked\ny: mod not on disk: #0")

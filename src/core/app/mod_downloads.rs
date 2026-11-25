@@ -899,14 +899,11 @@ fn new_source_parent_error() -> String {
 fn remove_source_block(content: &str, tp2: &str, source_id: &str) -> String {
     let target = normalize_mod_download_tp2(tp2);
     let ranges = mod_block_ranges(content);
-
-    let preamble = if ranges.is_empty() {
-        ""
-    } else {
-        &content[..ranges[0].0]
+    let Some(&(first_start, _)) = ranges.first() else {
+        return content.to_string();
     };
 
-    let mut out = preamble.trim_end().to_string();
+    let mut out = content[..first_start].trim_end().to_string();
     for (start, end) in &ranges {
         let block = &content[*start..*end];
         let maybe_text = if block_tp2_matches(block, &target) {
@@ -1855,6 +1852,14 @@ pub(crate) fn merge_load_errors(left: Option<String>, right: Option<String>) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn removing_a_source_from_a_file_without_mods_keeps_the_file() {
+        let content = "format = 2
+names.cdtweaks = \"My Tweaks\"
+";
+        assert_eq!(remove_source_block(content, "cdtweaks", "primary"), content);
+    }
 
     fn argent77_source() -> ModDownloadSource {
         ModDownloadSource {

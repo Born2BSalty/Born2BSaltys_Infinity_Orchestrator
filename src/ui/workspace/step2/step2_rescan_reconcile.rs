@@ -594,13 +594,9 @@ mod tests {
         assert_eq!(unrestored[0].mod_name, "Oli's Roleplay");
         assert_eq!(unrestored[0].component_id, "7");
         assert_eq!(unrestored[0].reason, "Conditional on component #3");
-        crate::app::mod_display_name::set_mod_display_format(
-            crate::settings::redesign_fields::ModDisplayFormat::Tp2,
-        );
+        crate::app::mod_display_name::set_display_mod_names(false);
         let notification = format_unrestored_notification(&unrestored);
-        crate::app::mod_display_name::set_mod_display_format(
-            crate::settings::redesign_fields::ModDisplayFormat::default(),
-        );
+        crate::app::mod_display_name::set_display_mod_names(false);
         assert_eq!(
             notification,
             "1 saved component(s) could not be restored\nolirp #7: Conditional on component #3"

@@ -62,36 +62,6 @@ impl UiLanguage {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
-#[serde(rename_all = "snake_case")]
-pub enum ModDisplayFormat {
-    #[default]
-    NameAndTp2,
-    Name,
-    Tp2,
-}
-
-impl ModDisplayFormat {
-    #[must_use]
-    pub const fn example(self) -> &'static str {
-        match self {
-            Self::NameAndTp2 => "Tweaks Anthology (cdtweaks)",
-            Self::Name => "Tweaks Anthology",
-            Self::Tp2 => "cdtweaks",
-        }
-    }
-
-    #[must_use]
-    pub const fn all() -> &'static [Self] {
-        const ALL: [ModDisplayFormat; 3] = [
-            ModDisplayFormat::NameAndTp2,
-            ModDisplayFormat::Name,
-            ModDisplayFormat::Tp2,
-        ];
-        &ALL
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct RedesignSettings {
@@ -101,7 +71,7 @@ pub struct RedesignSettings {
 
     pub language: UiLanguage,
 
-    pub mod_display_format: ModDisplayFormat,
+    pub display_mod_names: bool,
 
     pub diagnostic_mode: bool,
 
@@ -122,7 +92,7 @@ impl Default for RedesignSettings {
             user_name: String::new(),
             theme_palette: ThemeChoice::default(),
             language: UiLanguage::default(),
-            mod_display_format: ModDisplayFormat::default(),
+            display_mod_names: false,
             diagnostic_mode: false,
             validate_paths_on_startup: true,
             step2_details_width: None,
@@ -149,7 +119,7 @@ mod tests {
         assert_eq!(s.user_name, "");
         assert_eq!(s.theme_palette, ThemeChoice::Dark);
         assert_eq!(s.language, UiLanguage::English);
-        assert_eq!(s.mod_display_format, ModDisplayFormat::NameAndTp2);
+        assert!(!s.display_mod_names);
         assert!(!s.diagnostic_mode);
         assert!(s.validate_paths_on_startup);
         assert!(s.step2_details_width.is_none());
@@ -161,7 +131,7 @@ mod tests {
             user_name: "Tester".to_string(),
             theme_palette: ThemeChoice::Light,
             language: UiLanguage::French,
-            mod_display_format: ModDisplayFormat::Tp2,
+            display_mod_names: true,
             diagnostic_mode: true,
             validate_paths_on_startup: false,
             step2_details_width: Some(700),
@@ -172,20 +142,16 @@ mod tests {
     }
 
     #[test]
-    fn mod_display_format_persists_under_its_own_key() {
-        for (format, word) in [
-            (ModDisplayFormat::NameAndTp2, "name_and_tp2"),
-            (ModDisplayFormat::Name, "name"),
-            (ModDisplayFormat::Tp2, "tp2"),
-        ] {
+    fn display_mod_names_persists_under_its_own_key() {
+        for on in [false, true] {
             let s = RedesignSettings {
-                mod_display_format: format,
+                display_mod_names: on,
                 ..RedesignSettings::default()
             };
             let raw = serde_json::to_string(&s).expect("serialize");
-            assert!(raw.contains(&format!("\"mod_display_format\":\"{word}\"")));
+            assert!(raw.contains(&format!("\"display_mod_names\":{on}")));
             let s2: RedesignSettings = serde_json::from_str(&raw).expect("deserialize");
-            assert_eq!(s2.mod_display_format, format);
+            assert_eq!(s2.display_mod_names, on);
         }
     }
 

@@ -3,6 +3,7 @@ use std::path::PathBuf;
 
 use eframe::egui;
 
+use crate::app::mod_display_name::display_mod_names;
 use crate::app::mod_downloads;
 use crate::app::state::VersionsSheet;
 use crate::app::step2_action::Step2Action;
@@ -555,12 +556,25 @@ fn render_row(
         if row_response.clicked() {
             app.catalog_screen_state.focus(&row.tp2);
         }
+        render_rename_menu(&row_response, app, &row.tp2);
     });
     ui.painter().hline(
         ui.max_rect().x_range(),
         ui.cursor().top(),
         egui::Stroke::new(1.0_f32, redesign_border_soft(palette)),
     );
+}
+
+fn render_rename_menu(response: &egui::Response, app: &mut OrchestratorApp, tp2: &str) {
+    if !display_mod_names() {
+        return;
+    }
+    response.context_menu(|ui| {
+        if ui.button("Rename").clicked() {
+            app.open_rename_mod(tp2);
+            ui.close_menu();
+        }
+    });
 }
 
 fn render_row_name(
@@ -570,16 +584,15 @@ fn render_row_name(
     row: &CatalogRow,
     source: &mod_downloads::ModDownloadSource,
 ) {
-    if ui
-        .add(
-            egui::Label::new(text(row.display_label(), 14.0, palette))
-                .sense(egui::Sense::click())
-                .truncate(),
-        )
-        .clicked()
-    {
+    let name_response = ui.add(
+        egui::Label::new(text(row.display_label(), 14.0, palette))
+            .sense(egui::Sense::click())
+            .truncate(),
+    );
+    if name_response.clicked() {
         app.catalog_screen_state.focus(&row.tp2);
     }
+    render_rename_menu(&name_response, app, &row.tp2);
     let owner = source
         .github
         .as_deref()

@@ -10,7 +10,7 @@ mod tests;
 use crate::settings::installation_language::{
     INSTALLATION_LANGUAGES, installation_language_label, normalize_installation_locale,
 };
-use crate::settings::redesign_fields::{ModDisplayFormat, ThemeChoice};
+use crate::settings::redesign_fields::ThemeChoice;
 use crate::ui::orchestrator::orchestrator_app::OrchestratorApp;
 use crate::ui::settings::widgets::{name_row, segmented_toggle, toggle_row};
 use crate::ui::shared::redesign_tokens::{
@@ -19,7 +19,8 @@ use crate::ui::shared::redesign_tokens::{
 
 const LANGUAGE_HINT: &str = "rescan existing lists after a change";
 const LANGUAGE_HINT_DURING_INSTALL: &str = "available after installation finishes";
-const MOD_DISPLAY_FORMAT_HINT: &str = "how mod names are shown";
+const DISPLAY_MOD_NAMES_LABEL: &str = "Display mod names instead of tp2 names?";
+const DISPLAY_MOD_NAMES_HINT: &str = "e.g. Tweaks Anthology instead of cdtweaks";
 
 pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) {
     let palette = orchestrator.theme_palette;
@@ -27,11 +28,11 @@ pub fn render(ui: &mut egui::Ui, orchestrator: &mut OrchestratorApp) {
     render_name_row(ui, palette, orchestrator);
     ui.add_space(12.0);
     render_theme_language_rows(ui, palette, orchestrator);
-    render_mod_display_format_row(ui, palette, orchestrator);
+    render_display_mod_names_row(ui, palette, orchestrator);
     render_mode_rows(ui, palette, orchestrator);
 }
 
-fn render_mod_display_format_row(
+fn render_display_mod_names_row(
     ui: &mut egui::Ui,
     palette: ThemePalette,
     orchestrator: &mut OrchestratorApp,
@@ -39,32 +40,16 @@ fn render_mod_display_format_row(
     settings_row(
         ui,
         palette,
-        "Mod display format",
-        MOD_DISPLAY_FORMAT_HINT,
+        DISPLAY_MOD_NAMES_LABEL,
+        DISPLAY_MOD_NAMES_HINT,
         |ui| {
-            let current = orchestrator.redesign_settings.mod_display_format;
-            if matches!(palette, ThemePalette::Light) {
-                let widgets = &mut ui.visuals_mut().widgets;
-                widgets.open.bg_fill = widgets.inactive.bg_fill;
-                widgets.open.weak_bg_fill = widgets.inactive.weak_bg_fill;
+            let mut on = orchestrator.redesign_settings.display_mod_names;
+            let mut changed = false;
+            toggle_row::render(ui, palette, "", &mut on, None, || changed = true);
+            if changed {
+                orchestrator.redesign_settings.display_mod_names = on;
+                crate::app::mod_display_name::set_display_mod_names(on);
             }
-            egui::ComboBox::from_id_salt("settings_general_mod_display_format")
-                .selected_text(
-                    egui::RichText::new(current.example())
-                        .size(12.0)
-                        .family(egui::FontFamily::Name("poppins_medium".into())),
-                )
-                .show_ui(ui, |ui| {
-                    for format in ModDisplayFormat::all() {
-                        if ui
-                            .selectable_label(current == *format, format.example())
-                            .clicked()
-                        {
-                            orchestrator.redesign_settings.mod_display_format = *format;
-                            crate::app::mod_display_name::set_mod_display_format(*format);
-                        }
-                    }
-                });
         },
     );
 }

@@ -119,50 +119,42 @@ fn language_combo<'h>(
         .expect("the language combo is the first combo on the General tab")
 }
 
-fn mod_display_format_combo<'h>(
+fn display_mod_names_toggle<'h>(
     harness: &'h Harness<'_, OrchestratorApp>,
 ) -> egui_kittest::kittest::Node<'h> {
-    general_combos(harness)
-        .into_iter()
-        .nth(1)
-        .expect("the mod display format combo is the second combo on the General tab")
+    let label = harness
+        .get_by_label(DISPLAY_MOD_NAMES_LABEL)
+        .bounding_box()
+        .unwrap();
+    harness
+        .query_all(egui_kittest::kittest::by().predicate(move |node| {
+            node.role() != egui::accesskit::Role::Label
+                && node.bounding_box().is_some_and(|rect| {
+                    rect.x0 > label.x1 && rect.y0 < label.y1 + 20.0 && rect.y1 > label.y0
+                })
+        }))
+        .next()
+        .expect("the display-mod-names toggle sits on its label's row")
 }
 
 #[test]
-fn mod_display_format_combo_sets_the_general_setting_and_the_live_format() {
+fn display_mod_names_toggle_defaults_off_and_sets_the_live_setting() {
     let _lock = crate::app::mod_downloads::AMBIENT_TEST_LOCK
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     let mut harness = scene("en_US", UiLanguage::English);
-    harness.get_by_label("Mod display format");
-    assert!(painted_text(&harness).contains("Tweaks Anthology (cdtweaks)"));
-    for format in [
-        crate::settings::redesign_fields::ModDisplayFormat::Tp2,
-        crate::settings::redesign_fields::ModDisplayFormat::Name,
-        crate::settings::redesign_fields::ModDisplayFormat::NameAndTp2,
-    ] {
-        let listed = |harness: &Harness<'_, OrchestratorApp>| {
-            crate::settings::redesign_fields::ModDisplayFormat::all()
-                .iter()
-                .all(|format| harness.query_by_label(format.example()).is_some())
-        };
-        if !listed(&harness) {
-            mod_display_format_combo(&harness).click();
-            harness.run();
-        }
-        harness
-            .query_all_by_label(format.example())
-            .last()
-            .expect("the open combo lists every format")
-            .click();
+    assert!(!harness.state().redesign_settings.display_mod_names);
+    for expected in [true, false] {
+        display_mod_names_toggle(&harness).click();
         harness.run();
-        assert_eq!(harness.state().redesign_settings.mod_display_format, format);
-        assert_eq!(crate::app::mod_display_name::mod_display_format(), format);
+        assert_eq!(
+            harness.state().redesign_settings.display_mod_names,
+            expected
+        );
+        assert_eq!(crate::app::mod_display_name::display_mod_names(), expected);
         assert_eq!(harness.state().wizard_state.step1.language, "en_US");
     }
-    crate::app::mod_display_name::set_mod_display_format(
-        crate::settings::redesign_fields::ModDisplayFormat::default(),
-    );
+    crate::app::mod_display_name::set_display_mod_names(false);
 }
 
 fn scene(language: &str, general: UiLanguage) -> Harness<'static, OrchestratorApp> {
@@ -346,29 +338,29 @@ fn mod_language_general_snapshot() {
 }
 
 #[test]
-fn general_hints_are_one_line_left_of_their_combo() {
+fn general_hints_are_one_line_left_of_their_control() {
     let _lock = crate::app::mod_downloads::AMBIENT_TEST_LOCK
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     for width in [960.0, 1280.0] {
         let harness = scene_with_size("de_DE", UiLanguage::English, egui::vec2(width, 820.0));
-        for (hint_text, combo) in [
+        for (hint_text, control) in [
             (LANGUAGE_HINT, language_combo(&harness)),
-            (MOD_DISPLAY_FORMAT_HINT, mod_display_format_combo(&harness)),
+            (DISPLAY_MOD_NAMES_HINT, display_mod_names_toggle(&harness)),
         ] {
-            let combo = combo.bounding_box().unwrap();
+            let control = control.bounding_box().unwrap();
             let hint = harness.get_by_label(hint_text).bounding_box().unwrap();
             assert!(
                 hint.y1 - hint.y0 < 20.0,
                 "hint wraps past one line: {hint:?}"
             );
             assert!(
-                hint.x1 <= combo.x0,
-                "hint runs under its combo: {hint:?} {combo:?}"
+                hint.x1 <= control.x0,
+                "hint runs under its control: {hint:?} {control:?}"
             );
             assert!(
-                hint.y0 < combo.y1,
-                "hint sits below its row: {hint:?} {combo:?}"
+                hint.y0 < control.y1,
+                "hint sits below its row: {hint:?} {control:?}"
             );
         }
     }

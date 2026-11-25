@@ -72,4 +72,7 @@ pub enum Step2Action {
         component_id: String,
         component_key: String,
     },
+    RenameMod {
+        tp_file: String,
+    },
 }

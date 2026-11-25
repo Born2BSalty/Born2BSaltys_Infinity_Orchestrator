@@ -173,9 +173,7 @@ mod tests {
     impl Drop for CatalogFixtureRoot {
         fn drop(&mut self) {
             crate::platform_defaults::clear_config_dir_override_if(&self.0);
-            crate::app::mod_display_name::set_mod_display_format(
-                crate::settings::redesign_fields::ModDisplayFormat::default(),
-            );
+            crate::app::mod_display_name::set_display_mod_names(false);
             let _ = std::fs::remove_dir_all(&self.0);
         }
     }
@@ -183,9 +181,7 @@ mod tests {
     #[test]
     fn step2_filter_matches_the_formatted_name() {
         let _root = CatalogFixtureRoot::new();
-        crate::app::mod_display_name::set_mod_display_format(
-            crate::settings::redesign_fields::ModDisplayFormat::Name,
-        );
+        crate::app::mod_display_name::set_display_mod_names(true);
         let mut mod_state = mod_with_one_checked_component();
         mod_state.name = "FixtureFolder".to_string();
         mod_state.tp_file = "FixtureFolder/Setup-FixtureMod.tp2".to_string();

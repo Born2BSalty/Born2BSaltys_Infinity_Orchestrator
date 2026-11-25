@@ -12,5 +12,6 @@ pub mod redesign_dot_background;
 pub mod redesign_fonts;
 pub mod redesign_tokens;
 pub mod redesign_visuals;
+pub mod rename_mod_dialog;
 pub mod selected_row;
 pub mod tab_open_seam;

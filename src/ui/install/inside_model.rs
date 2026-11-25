@@ -700,8 +700,7 @@ tp2 = "eeex"
 
     #[test]
     fn included_mods_header_uses_the_catalog_name_in_the_chosen_format() {
-        use crate::app::mod_display_name::set_mod_display_format;
-        use crate::settings::redesign_fields::ModDisplayFormat;
+        use crate::app::mod_display_name::{NamesShownForTest, set_display_mod_names};
 
         let default_text = "[[mods]]\nname = \"Tweaks Anthology\"\ntp2 = \"cdtweaks\"\n\n  [[mods.sources]]\n  id = \"main\"\n  label = \"Main\"\n  type = \"github\"\n  url = \"https://github.com/Owner/Repo\"\n";
         let tiers = source_tiers_from_texts(default_text, "", "");
@@ -710,17 +709,13 @@ tp2 = "eeex"
 ~UNLISTED\\UNLISTED.TP2~ #0 #0 // Other: v1";
         let groups = parse(text, &tiers, &empty_refs());
 
-        set_mod_display_format(ModDisplayFormat::NameAndTp2);
-        assert_eq!(groups[0].display_label(), "Tweaks Anthology (cdtweaks)");
-        assert_eq!(groups[1].display_label(), "unlisted");
-        assert!(group_matches(&groups[0], "anthology (cd"));
-        set_mod_display_format(ModDisplayFormat::Name);
+        let _names = NamesShownForTest::new(true);
         assert_eq!(groups[0].display_label(), "Tweaks Anthology");
         assert_eq!(groups[1].display_label(), "unlisted");
-        set_mod_display_format(ModDisplayFormat::Tp2);
+        assert!(group_matches(&groups[0], "anthology"));
+        set_display_mod_names(false);
         assert_eq!(groups[0].display_label(), "cdtweaks");
         assert_eq!(groups[1].display_label(), "unlisted");
-        set_mod_display_format(ModDisplayFormat::default());
 
         assert_eq!(groups[0].folder, "CDTWEAKS");
         assert_eq!(groups[0].tp_file, "SETUP-CDTWEAKS.TP2");

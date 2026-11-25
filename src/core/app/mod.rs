@@ -117,6 +117,7 @@ pub mod mod_display_name;
 pub mod mod_downloads;
 pub mod mod_downloads_migrate;
 pub mod mod_installer_parser;
+pub mod mod_rename;
 pub mod mod_source_history;
 #[path = "step2/update/mod_update_locks.rs"]
 pub mod mod_update_locks;

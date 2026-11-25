@@ -53,6 +53,7 @@ use crate::ui::settings::oauth_glue;
 use crate::ui::settings::state_settings::SettingsScreenState;
 use crate::ui::settings::validate_debounce;
 use crate::ui::shared::redesign_tokens::{REDESIGN_NAV_WIDTH_PX, ThemePalette};
+use crate::ui::shared::rename_mod_dialog::{self, RenameModState, RenameOutcome};
 use crate::ui::shell::shell_chrome;
 use crate::ui::shell::shell_statusbar::RunningInstallStatus;
 use crate::ui::step5::state_step5::Step5ConsoleViewState;
@@ -316,6 +317,8 @@ pub struct OrchestratorApp {
 
     pub(crate) share_name_buffer: String,
 
+    pub(crate) rename_mod: Option<RenameModState>,
+
     #[cfg(test)]
     pub(crate) isolated_test_config_root: Option<std::path::PathBuf>,
 }
@@ -514,6 +517,7 @@ impl OrchestratorApp {
             hash_progress: Arc::new(std::sync::Mutex::new(None)),
             pending_folder_deletes: Vec::new(),
             share_name_buffer: String::new(),
+            rename_mod: None,
             #[cfg(test)]
             isolated_test_config_root: None,
         };
@@ -1254,8 +1258,8 @@ impl OrchestratorApp {
 
     fn apply_frame_display_settings(&self, ctx: &egui::Context, palette: ThemePalette) {
         ctx.set_visuals(crate::ui::shared::redesign_visuals::build_for(palette));
-        crate::app::mod_display_name::set_mod_display_format(
-            self.redesign_settings.mod_display_format,
+        crate::app::mod_display_name::set_display_mod_names(
+            self.redesign_settings.display_mod_names,
         );
     }
 
@@ -1528,7 +1532,7 @@ impl eframe::App for OrchestratorApp {
         );
         self.drive_notifications(ctx, palette, history_clicked);
 
-        oauth_glue::render_github_popup_if_open(self, ctx);
+        self.render_popups(ctx);
 
         step5_requested_repaint |= self.start_step5_and_check_focus();
         schedule_repaint_if_needed(
@@ -1604,6 +1608,40 @@ impl Drop for OrchestratorApp {
 }
 
 impl OrchestratorApp {
+    pub(crate) fn open_rename_mod(&mut self, tp_file: &str) {
+        self.rename_mod = Some(RenameModState {
+            tp2: crate::app::mod_display_name::rename_key(tp_file),
+            buffer: crate::app::mod_display_name::catalog_human_name(tp_file).unwrap_or_default(),
+            focus_pending: true,
+            error: None,
+        });
+    }
+
+    pub(crate) fn render_rename_mod_dialog(&mut self, ctx: &egui::Context) {
+        let palette = self.theme_palette;
+        let Some(state) = self.rename_mod.as_mut() else {
+            return;
+        };
+        match rename_mod_dialog::render(ctx, palette, state) {
+            RenameOutcome::Saved => {
+                match crate::app::mod_rename::set_user_mod_name(&state.tp2, &state.buffer) {
+                    Ok(()) => {
+                        self.rename_mod = None;
+                        self.catalog_screen_state.loaded = false;
+                    }
+                    Err(error) => state.error = Some(error),
+                }
+            }
+            RenameOutcome::Cancelled => self.rename_mod = None,
+            RenameOutcome::Pending => {}
+        }
+    }
+
+    fn render_popups(&mut self, ctx: &egui::Context) {
+        oauth_glue::render_github_popup_if_open(self, ctx);
+        self.render_rename_mod_dialog(ctx);
+    }
+
     fn reconcile_scan_and_advance_log_imports(&mut self) {
         let scan_completed =
             crate::ui::workspace::step2::step2_rescan_reconcile::reconcile_on_scan_complete(self);
