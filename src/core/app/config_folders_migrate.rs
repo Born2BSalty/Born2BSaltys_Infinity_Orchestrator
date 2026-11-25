@@ -16,6 +16,7 @@ use crate::platform_defaults::{CONFIG_USER_FOLDER, app_config_dir};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ConfigRelocation {
     Moved { from: PathBuf, to: PathBuf },
+    ReplacedPlaceholder { from: PathBuf, to: PathBuf },
     LeftInPlace { stale: PathBuf, kept: PathBuf },
     RemovedFlatReference(PathBuf),
     SkippedNotAFile(PathBuf),
@@ -49,6 +50,47 @@ fn move_file(from: &Path, to: &Path) -> std::io::Result<()> {
     fs::remove_file(from)
 }
 
+const EXAMPLE_MOD_TP2: &str = "examplemod";
+
+fn mod_downloads_entry_is_example(entry: &toml::Value) -> bool {
+    entry
+        .get("tp2")
+        .and_then(toml::Value::as_str)
+        .is_some_and(|tp2| tp2.trim().eq_ignore_ascii_case(EXAMPLE_MOD_TP2))
+}
+
+fn mod_downloads_holds_user_content(table: &toml::Table) -> bool {
+    table.iter().any(|(key, value)| match key.as_str() {
+        "format" => false,
+        "mods" => value
+            .as_array()
+            .is_none_or(|entries| !entries.iter().all(mod_downloads_entry_is_example)),
+        _ => true,
+    })
+}
+
+fn compat_rules_holds_user_content(table: &toml::Table) -> bool {
+    table.iter().any(|(key, value)| match key.as_str() {
+        "schema_version" => false,
+        "rules" => value.as_array().is_none_or(|rules| !rules.is_empty()),
+        _ => true,
+    })
+}
+
+fn holds_user_content(path: &Path, name: &str) -> bool {
+    let Ok(text) = fs::read_to_string(path) else {
+        return true;
+    };
+    let Ok(table) = text.parse::<toml::Table>() else {
+        return true;
+    };
+    match name {
+        MOD_DOWNLOADS_USER_FILE_NAME => mod_downloads_holds_user_content(&table),
+        COMPAT_RULES_USER_FILE_NAME => compat_rules_holds_user_content(&table),
+        _ => true,
+    }
+}
+
 fn relocate_user_file(config_dir: &Path, name: &str) -> Option<ConfigRelocation> {
     let from = config_dir.join(name);
     if fs::symlink_metadata(&from).is_err() {
@@ -58,13 +100,26 @@ fn relocate_user_file(config_dir: &Path, name: &str) -> Option<ConfigRelocation>
         return Some(ConfigRelocation::SkippedNotAFile(from));
     }
     let to = config_dir.join(CONFIG_USER_FOLDER).join(name);
-    if to.exists() {
-        return Some(ConfigRelocation::LeftInPlace {
-            stale: from,
-            kept: to,
-        });
+    let replaces_placeholder = to.exists();
+    if replaces_placeholder {
+        if !is_regular_file(&to)
+            || holds_user_content(&to, name)
+            || !holds_user_content(&from, name)
+        {
+            return Some(ConfigRelocation::LeftInPlace {
+                stale: from,
+                kept: to,
+            });
+        }
+        if let Err(err) = fs::remove_file(&to) {
+            return Some(ConfigRelocation::Failed {
+                path: from,
+                error: err.to_string(),
+            });
+        }
     }
     Some(match move_file(&from, &to) {
+        Ok(()) if replaces_placeholder => ConfigRelocation::ReplacedPlaceholder { from, to },
         Ok(()) => ConfigRelocation::Moved { from, to },
         Err(err) => ConfigRelocation::Failed {
             path: from,
@@ -91,7 +146,7 @@ fn remove_flat_reference(config_dir: &Path, name: &str) -> Option<ConfigRelocati
 pub fn relocate_config_files(config_dir: &Path) -> Vec<ConfigRelocation> {
     let main = relocate_user_file(config_dir, MOD_DOWNLOADS_USER_FILE_NAME);
     let backup_follows_main = match &main {
-        Some(ConfigRelocation::Moved { .. }) => true,
+        Some(ConfigRelocation::Moved { .. } | ConfigRelocation::ReplacedPlaceholder { .. }) => true,
         None => !config_dir
             .join(CONFIG_USER_FOLDER)
             .join(MOD_DOWNLOADS_USER_FILE_NAME)
@@ -122,6 +177,12 @@ fn log_relocation(outcome: &ConfigRelocation) {
         ConfigRelocation::Moved { from, to } => info!(
             target = "orchestrator",
             "moved {} to {}",
+            from.display(),
+            to.display()
+        ),
+        ConfigRelocation::ReplacedPlaceholder { from, to } => info!(
+            target = "orchestrator",
+            "moved {} to {}, replacing an empty placeholder",
             from.display(),
             to.display()
         ),
@@ -276,19 +337,108 @@ mod tests {
         );
     }
 
+    const PLACEHOLDER_MOD_DOWNLOADS: &str = include_str!("../config/user_mod_downloads.toml");
+    const CUSTOM_MOD_DOWNLOADS: &str = "format = 2\n\n[[mods]]\nname = \"Mine\"\ntp2 = \"mymod\"\n";
+
+    #[test]
+    fn a_placeholder_user_folder_file_is_replaced_by_the_flat_one() {
+        let root = RelocateTestRoot::new("placeholder");
+        let user_dir = root.0.join(CONFIG_USER_FOLDER);
+        fs::create_dir_all(&user_dir).unwrap();
+        fs::write(
+            user_dir.join("mod_downloads_user.toml"),
+            PLACEHOLDER_MOD_DOWNLOADS,
+        )
+        .unwrap();
+        fs::write(
+            user_dir.join("step2_compat_rules_user.toml"),
+            "schema_version = 1\n# placeholder\n",
+        )
+        .unwrap();
+        fs::write(root.0.join("mod_downloads_user.toml"), CUSTOM_MOD_DOWNLOADS).unwrap();
+        fs::write(root.0.join("mod_downloads_user.toml.v1.bak"), "# backup\n").unwrap();
+        let my_rules = "schema_version = 1\n\n[[rules]]\nmod = \"mymod\"\nkind = \"allow\"\n";
+        fs::write(root.0.join("step2_compat_rules_user.toml"), my_rules).unwrap();
+
+        let outcomes = relocate_config_files(&root.0);
+
+        assert_eq!(
+            fs::read_to_string(user_dir.join("mod_downloads_user.toml")).unwrap(),
+            CUSTOM_MOD_DOWNLOADS
+        );
+        assert_eq!(
+            fs::read_to_string(user_dir.join("step2_compat_rules_user.toml")).unwrap(),
+            my_rules
+        );
+        assert!(user_dir.join("mod_downloads_user.toml.v1.bak").is_file());
+        assert!(!root.0.join("mod_downloads_user.toml").exists());
+        assert!(!root.0.join("step2_compat_rules_user.toml").exists());
+        assert!(
+            outcomes
+                .iter()
+                .any(|outcome| matches!(outcome, ConfigRelocation::ReplacedPlaceholder { .. }))
+        );
+    }
+
+    #[test]
+    fn a_flat_placeholder_never_replaces_a_user_folder_file() {
+        let root = RelocateTestRoot::new("flat_placeholder");
+        let user_dir = root.0.join(CONFIG_USER_FOLDER);
+        fs::create_dir_all(&user_dir).unwrap();
+        fs::write(
+            user_dir.join("mod_downloads_user.toml"),
+            CUSTOM_MOD_DOWNLOADS,
+        )
+        .unwrap();
+        fs::write(
+            root.0.join("mod_downloads_user.toml"),
+            PLACEHOLDER_MOD_DOWNLOADS,
+        )
+        .unwrap();
+
+        let _ = relocate_config_files(&root.0);
+
+        assert_eq!(
+            fs::read_to_string(user_dir.join("mod_downloads_user.toml")).unwrap(),
+            CUSTOM_MOD_DOWNLOADS
+        );
+    }
+
+    #[test]
+    fn a_user_folder_file_with_a_rename_is_not_a_placeholder() {
+        let root = RelocateTestRoot::new("renamed_placeholder");
+        let user_dir = root.0.join(CONFIG_USER_FOLDER);
+        fs::create_dir_all(&user_dir).unwrap();
+        let renamed = format!("names.mymod = \"Mine\"\n{PLACEHOLDER_MOD_DOWNLOADS}");
+        fs::write(user_dir.join("mod_downloads_user.toml"), &renamed).unwrap();
+        fs::write(root.0.join("mod_downloads_user.toml"), CUSTOM_MOD_DOWNLOADS).unwrap();
+
+        let _ = relocate_config_files(&root.0);
+
+        assert_eq!(
+            fs::read_to_string(user_dir.join("mod_downloads_user.toml")).unwrap(),
+            renamed
+        );
+        assert!(root.0.join("mod_downloads_user.toml").is_file());
+    }
+
     #[test]
     fn an_existing_user_folder_file_wins_and_the_flat_one_is_left_alone() {
         let root = RelocateTestRoot::new("both");
         let user_dir = root.0.join(CONFIG_USER_FOLDER);
         fs::create_dir_all(&user_dir).unwrap();
-        fs::write(user_dir.join("mod_downloads_user.toml"), "# new\n").unwrap();
+        fs::write(
+            user_dir.join("mod_downloads_user.toml"),
+            CUSTOM_MOD_DOWNLOADS,
+        )
+        .unwrap();
         fs::write(root.0.join("mod_downloads_user.toml"), "# old\n").unwrap();
 
         let outcomes = relocate_config_files(&root.0);
 
         assert_eq!(
             fs::read_to_string(user_dir.join("mod_downloads_user.toml")).unwrap(),
-            "# new\n"
+            CUSTOM_MOD_DOWNLOADS
         );
         assert_eq!(
             fs::read_to_string(root.0.join("mod_downloads_user.toml")).unwrap(),

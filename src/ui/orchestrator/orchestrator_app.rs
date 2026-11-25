@@ -1567,6 +1567,8 @@ impl OrchestratorApp {
             ISOLATED_TEST_SEQ.fetch_add(1, Ordering::Relaxed)
         );
         let dir = std::env::temp_dir();
+        let config_root = dir.join(format!("{stem}_config"));
+        crate::platform_defaults::set_config_dir_override(Some(config_root.clone()));
         let mut app = Self::new(false);
         app.registry_store =
             RegistryStore::new_with_path(dir.join(format!("{stem}_registry.json")));
@@ -1581,8 +1583,6 @@ impl OrchestratorApp {
             step1: app.wizard_state.step1.clone().into(),
             general: app.redesign_settings.clone(),
         };
-        let config_root = dir.join(format!("{stem}_config"));
-        crate::platform_defaults::set_config_dir_override(Some(config_root.clone()));
         app.isolated_test_config_root = Some(config_root);
         app
     }
@@ -1736,6 +1736,24 @@ fn next_debounce_due_in(app: &OrchestratorApp) -> Option<std::time::Duration> {
 mod tests {
     use super::*;
     use std::sync::mpsc::TryRecvError;
+
+    #[test]
+    fn an_isolated_app_starts_up_inside_its_own_config_dir() {
+        let app = OrchestratorApp::new_isolated_for_test("isolated_startup");
+        let root = app.isolated_test_config_root.clone().unwrap();
+        assert_eq!(
+            crate::platform_defaults::app_config_dir(),
+            Some(root.clone())
+        );
+        assert!(
+            root.join(crate::platform_defaults::CONFIG_USER_FOLDER)
+                .join(crate::app::mod_downloads::MOD_DOWNLOADS_USER_FILE_NAME)
+                .is_file()
+        );
+        assert_eq!(app.redesign_settings, RedesignSettings::default());
+        drop(app);
+        assert!(!root.exists());
+    }
 
     #[test]
     fn source_probe_waits_for_the_bgee_source_debounce() {
