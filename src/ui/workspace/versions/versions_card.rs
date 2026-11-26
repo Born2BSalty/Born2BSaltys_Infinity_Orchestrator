@@ -738,15 +738,15 @@ mod tests {
         use crate::app::mod_display_name::{NamesShownForTest, set_display_mod_names};
 
         let card = VersionCard {
-            tp2: "cdtweaks".to_string(),
-            name: "cdtweaks-folder".to_string(),
+            tp2: "biocardtweaks".to_string(),
+            name: "biocardtweaks-folder".to_string(),
             ..card_in(None)
         };
         let _names = NamesShownForTest::new(false);
-        for (show_names, expected) in [(true, "Tweaks Anthology"), (false, "cdtweaks")] {
+        for (show_names, expected) in [(true, "Tweaks Anthology"), (false, "biocardtweaks")] {
             set_display_mod_names(show_names);
             assert_eq!(card_title_with(Some("Tweaks Anthology"), &card), expected);
-            assert_eq!(card_title_with(None, &card), "cdtweaks");
+            assert_eq!(card_title_with(None, &card), "biocardtweaks");
         }
     }
 

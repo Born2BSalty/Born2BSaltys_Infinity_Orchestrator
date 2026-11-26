@@ -87,7 +87,27 @@ fn old_two_tier_from_overlays(
         categories,
         sources,
         error,
+        ..ModDownloadsLoad::default()
     }
+}
+
+fn has_own_name(overlay: &ModDownloadSourceOverlay, tp2_key: &str) -> bool {
+    overlay
+        .name
+        .as_deref()
+        .map(str::trim)
+        .is_some_and(|name| !name.is_empty() && !mod_downloads::name_is_the_tp2(name, tp2_key))
+}
+
+fn metadata_header(tp2: &str, name: &str, categories: Option<&Vec<String>>) -> String {
+    let header =
+        mod_downloads::mod_header_with_categories(tp2, name, categories.map_or(&[], Vec::as_slice));
+    if categories.is_some() {
+        return header;
+    }
+    header
+        .strip_suffix("\ncategories = []")
+        .map_or_else(|| header.clone(), str::to_string)
 }
 
 const fn old_overlay_has_version_selector(overlay: &ModDownloadSourceOverlay) -> bool {
@@ -228,13 +248,18 @@ pub(crate) fn migrate_source_text(
             old_two_tier_from_overlays(default_load, mapped_own_overlays)
         }
         MigrateTier::Modlist => {
-            let default_load =
-                mod_downloads::load_source_overlays_from_str(default_text, "default");
-            let user_load = mod_downloads::load_source_overlays_from_str(user_text, "user");
             let mut base = if text_format_at_least_2(user_text) {
-                mod_downloads::two_tier_from_overlays(default_load, user_load)
+                mod_downloads::two_tier_from_overlays(
+                    mod_downloads::load_source_overlays_from_str(default_text, "default"),
+                    mod_downloads::load_source_overlays_from_str(user_text, "user"),
+                )
             } else {
-                old_two_tier_from_overlays(default_load, map_channel_words_in_overlays(user_load))
+                old_two_tier_from_overlays(
+                    mod_downloads::load_source_overlays_from_str(default_text, "default"),
+                    map_channel_words_in_overlays(mod_downloads::load_source_overlays_from_str(
+                        user_text, "user",
+                    )),
+                )
             };
             old_apply_modlist_overlay(&mut base, mapped_own_overlays);
             base
@@ -289,26 +314,40 @@ pub(crate) fn migrate_source_text(
             out.push_str(&mod_downloads::complete_source_block(source));
         }
     }
-    let mut metadata_parents = BTreeSet::new();
-    for overlay in &own_overlays.sources {
-        let key = mod_downloads::overlay_tp2_key(overlay);
-        if grouped.contains_key(&key) || !metadata_parents.insert(key.clone()) {
-            continue;
-        }
-        if let Some(categories) = resolved.categories.get(&key) {
-            let tp2 = overlay.tp2.as_deref().unwrap_or_default();
-            let name = overlay.name.as_deref().unwrap_or(tp2);
-            out.push_str("\n\n");
-            out.push_str(&mod_downloads::mod_header_with_categories(
-                tp2, name, categories,
-            ));
-        }
-    }
+    push_metadata_parents(
+        &mut out,
+        &own_overlays.sources,
+        &grouped,
+        &resolved.categories,
+    );
     out.push_str("\n\n");
     out.push_str(mod_downloads::user_template_cheat_sheet());
     out.push('\n');
 
     MigrateResult::Rewritten(out)
+}
+
+fn push_metadata_parents(
+    out: &mut String,
+    own_overlays: &[mod_downloads::ModDownloadSourceOverlay],
+    grouped: &BTreeMap<String, Vec<ModDownloadSource>>,
+    resolved_categories: &BTreeMap<String, Vec<String>>,
+) {
+    let mut metadata_parents = BTreeSet::new();
+    for overlay in own_overlays {
+        let key = mod_downloads::overlay_tp2_key(overlay);
+        if grouped.contains_key(&key) || !metadata_parents.insert(key.clone()) {
+            continue;
+        }
+        let categories = resolved_categories.get(&key);
+        if categories.is_none() && (key.is_empty() || !has_own_name(overlay, &key)) {
+            continue;
+        }
+        let tp2 = overlay.tp2.as_deref().unwrap_or_default();
+        let name = overlay.name.as_deref().unwrap_or(tp2);
+        out.push_str("\n\n");
+        out.push_str(&metadata_header(tp2, name, categories));
+    }
 }
 
 fn backup_path_for(path: &Path) -> PathBuf {
@@ -587,6 +626,30 @@ mod tests {
     }
 
     #[test]
+    fn a_flat_old_format_pin_with_a_name_still_pins_the_catalog_source() {
+        let default_text = "[[mods]]\nname = \"ModP\"\ntp2 = \"modp\"\n\n  [[mods.sources]]\n  id = \"primary\"\n  label = \"Primary\"\n  type = \"github\"\n  url = \"https://github.com/Owner/ModP\"\n  repo = \"Owner/ModP\"\n";
+        let user_text = "[[mods]]\nname = \"ModP\"\ntp2 = \"modp\"\ntag = \"v2.0\"\n";
+        let old_before = resolve_old_rules(default_text, user_text, "");
+
+        let MigrateResult::Rewritten(user_migrated) =
+            migrate_source_text(user_text, default_text, "", MigrateTier::User)
+        else {
+            panic!("expected the user tier to be rewritten")
+        };
+        let new_after =
+            mod_downloads::load_mod_download_sources_from_texts(default_text, &user_migrated, "");
+
+        let old_source = old_before
+            .resolve_source("modp", Some("primary"))
+            .expect("old rules resolve the pinned source");
+        let new_source = new_after
+            .resolve_source("modp", Some("primary"))
+            .expect("migrated file resolves the pinned source");
+        assert_eq!(old_source.tag.as_deref(), Some("v2.0"));
+        assert_same_meaning("modp|primary", &old_source, &new_source);
+    }
+
+    #[test]
     fn modlist_import_does_not_remap_a_new_format_user_pre_release() {
         let default_text = "[[mods]]\nname = \"SCS\"\ntp2 = \"scs\"\n\n  [[mods.sources]]\n  id = \"main\"\n  label = \"Main\"\n  type = \"github\"\n  url = \"https://github.com/Owner/SCS\"\n  repo = \"Owner/SCS\"\n";
         let user_text = "format = 2\n\n[[mods]]\nname = \"SCS\"\ntp2 = \"scs\"\n\n  [[mods.sources]]\n  id = \"main\"\n  label = \"Main\"\n  type = \"github\"\n  url = \"https://github.com/Owner/SCS\"\n  repo = \"Owner/SCS\"\n  channel = \"pre-release\"\n  default = true\n";
@@ -791,6 +854,68 @@ mod tests {
                 "{name} must hold the header followed by the embedded text unchanged"
             );
         }
+    }
+
+    const NAME_ONLY_V1_TEXT: &str = "[[mods]]\nname = \"Bio Sourced\"\ntp2 = \"biomigratesourced\"\n\n  [[mods.sources]]\n  id = \"main\"\n  label = \"Main\"\n  type = \"url\"\n  url = \"https://example.test/biomigratesourced.zip\"\n\n[[mods]]\nname = \"Bio Named Only\"\ntp2 = \"biomigratenamed\"\n";
+
+    fn name_only_entries(text: &str) -> Vec<toml::Table> {
+        toml::from_str::<toml::Table>(text)
+            .unwrap()
+            .get("mods")
+            .and_then(toml::Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(toml::Value::as_table)
+            .filter(|entry| {
+                entry.get("tp2").and_then(toml::Value::as_str) == Some("biomigratenamed")
+            })
+            .cloned()
+            .collect()
+    }
+
+    fn assert_name_only_entry_kept(text: &str, load: &ModDownloadsLoad) {
+        assert!(text_format_at_least_2(text), "got:\n{text}");
+        let entries = name_only_entries(text);
+        assert_eq!(entries.len(), 1, "got:\n{text}");
+        assert_eq!(
+            entries[0].get("name").and_then(toml::Value::as_str),
+            Some("Bio Named Only")
+        );
+        for key in ["sources", "source_id", "url", "github", "categories"] {
+            assert!(!entries[0].contains_key(key), "{key} in:\n{text}");
+        }
+        assert_eq!(load.find_sources("biomigratenamed").len(), 0);
+        assert_eq!(
+            load.mod_name("biomigratenamed").as_deref(),
+            Some("Bio Named Only")
+        );
+        assert_eq!(load.find_sources("biomigratesourced").len(), 1);
+    }
+
+    #[test]
+    fn a_name_only_entry_survives_the_launch_migration() {
+        let root = MigrateTestRoot::new("name_only");
+        let user_path = root.user_dir().join("mod_downloads_user.toml");
+        fs::create_dir_all(root.user_dir()).unwrap();
+        fs::write(&user_path, NAME_ONLY_V1_TEXT).unwrap();
+        let modlist_dir = root.path.join("modlists").join("list1");
+        fs::create_dir_all(&modlist_dir).unwrap();
+        let modlist_path = modlist_dir.join("mod_downloads_user.toml");
+        fs::write(&modlist_path, NAME_ONLY_V1_TEXT).unwrap();
+
+        migrate_source_files_at_launch();
+
+        let default_text = mod_downloads::default_mod_downloads_content();
+        let user_after = fs::read_to_string(&user_path).unwrap();
+        assert_name_only_entry_kept(
+            &user_after,
+            &mod_downloads::load_mod_download_sources_from_texts(default_text, &user_after, ""),
+        );
+        let modlist_after = fs::read_to_string(&modlist_path).unwrap();
+        assert_name_only_entry_kept(
+            &modlist_after,
+            &mod_downloads::load_mod_download_sources_from_texts(default_text, "", &modlist_after),
+        );
     }
 
     #[test]

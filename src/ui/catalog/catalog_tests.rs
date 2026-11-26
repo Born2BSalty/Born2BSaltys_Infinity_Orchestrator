@@ -6378,17 +6378,17 @@ fn custom_tag_suggestion_blank_known_partial_and_trimmed_values() {
 #[test]
 fn catalog_search_finds_a_mod_by_its_rename() {
     let _names = crate::app::mod_display_name::NamesShownForTest::new(true);
-    let path = crate::app::mod_downloads::mod_downloads_user_path();
-    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-    std::fs::write(
-        &path,
+    let mut state = CatalogScreenState::default();
+    state.replace_from_texts(
+        &source_text(&fixture_sources()),
         "format = 2
-names.tdd = \"Long Night Saga\"
+
+[[mods]]
+name = \"Long Night Saga\"
+tp2 = \"tdd\"
 ",
-    )
-    .unwrap();
-    crate::app::mod_display_name::invalidate_names();
-    let mut state = fixture_state();
+    );
+    assert!(state.error.is_none(), "{:?}", state.error);
     state.query = "long night".to_string();
     assert!(
         state

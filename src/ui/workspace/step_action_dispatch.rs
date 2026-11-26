@@ -29,7 +29,10 @@ pub fn dispatch_step2(action: Step2Action, orchestrator: &mut OrchestratorApp) {
                 step2_log_glue::import_weidu_logs(orchestrator, form);
             }
         }
-        Step2Action::RenameMod { tp_file } => orchestrator.open_rename_mod(&tp_file),
+        Step2Action::RenameMod { tp_file } => orchestrator.open_rename_mod(
+            &tp_file,
+            crate::ui::shared::rename_mod_dialog::RenameTarget::ActiveModlist,
+        ),
 
         Step2Action::DownloadUpdates
         | Step2Action::DownloadMissingFromLogs

@@ -53,7 +53,7 @@ use crate::ui::settings::oauth_glue;
 use crate::ui::settings::state_settings::SettingsScreenState;
 use crate::ui::settings::validate_debounce;
 use crate::ui::shared::redesign_tokens::{REDESIGN_NAV_WIDTH_PX, ThemePalette};
-use crate::ui::shared::rename_mod_dialog::{self, RenameModState, RenameOutcome};
+use crate::ui::shared::rename_mod_dialog::{self, RenameModState, RenameOutcome, RenameTarget};
 use crate::ui::shell::shell_chrome;
 use crate::ui::shell::shell_statusbar::RunningInstallStatus;
 use crate::ui::step5::state_step5::Step5ConsoleViewState;
@@ -1597,6 +1597,15 @@ impl OrchestratorApp {
     }
 }
 
+fn save_mod_rename(state: &RenameModState) -> Result<(), String> {
+    let target = match state.target {
+        RenameTarget::UserFile => Some(crate::app::mod_downloads::mod_downloads_user_path()),
+        RenameTarget::ActiveModlist => crate::app::mod_downloads::active_modlist_downloads_path(),
+    }
+    .ok_or_else(|| "Open a modlist first".to_string())?;
+    crate::app::mod_rename::set_mod_name(&target, &state.tp2, &state.buffer)
+}
+
 impl Drop for OrchestratorApp {
     fn drop(&mut self) {
         self.catalog_runtime.cancel();
@@ -1608,10 +1617,20 @@ impl Drop for OrchestratorApp {
 }
 
 impl OrchestratorApp {
-    pub(crate) fn open_rename_mod(&mut self, tp_file: &str) {
+    pub(crate) fn open_rename_mod(&mut self, tp_file: &str, target: RenameTarget) {
+        let tp2 = crate::app::mod_display_name::rename_key(tp_file);
+        let current_name = match target {
+            RenameTarget::UserFile => {
+                crate::app::mod_downloads::load_two_tier_sources().mod_name(&tp2)
+            }
+            RenameTarget::ActiveModlist => {
+                crate::app::mod_display_name::catalog_human_name(tp_file)
+            }
+        };
         self.rename_mod = Some(RenameModState {
-            tp2: crate::app::mod_display_name::rename_key(tp_file),
-            buffer: crate::app::mod_display_name::catalog_human_name(tp_file).unwrap_or_default(),
+            tp2,
+            buffer: current_name.unwrap_or_default(),
+            target,
             focus_pending: true,
             error: None,
         });
@@ -1623,15 +1642,13 @@ impl OrchestratorApp {
             return;
         };
         match rename_mod_dialog::render(ctx, palette, state) {
-            RenameOutcome::Saved => {
-                match crate::app::mod_rename::set_user_mod_name(&state.tp2, &state.buffer) {
-                    Ok(()) => {
-                        self.rename_mod = None;
-                        self.catalog_screen_state.loaded = false;
-                    }
-                    Err(error) => state.error = Some(error),
+            RenameOutcome::Saved => match save_mod_rename(state) {
+                Ok(()) => {
+                    self.rename_mod = None;
+                    self.catalog_screen_state.loaded = false;
                 }
-            }
+                Err(error) => state.error = Some(error),
+            },
             RenameOutcome::Cancelled => self.rename_mod = None,
             RenameOutcome::Pending => {}
         }

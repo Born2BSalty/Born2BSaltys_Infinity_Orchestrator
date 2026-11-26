@@ -2,12 +2,11 @@
 // Copyright (c) 2026 Born2BSalty
 
 use std::cell::{Cell, RefCell};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeSet, HashMap};
 use std::path::PathBuf;
 use std::time::{Duration, Instant, SystemTime};
 
 use crate::app::mod_downloads::{self, ModDownloadsLoad, normalize_mod_download_tp2};
-use crate::app::mod_rename::user_mod_renames;
 
 const NAMES_RECHECK_INTERVAL: Duration = Duration::from_secs(1);
 
@@ -43,6 +42,9 @@ pub(crate) fn human_names_from_load(load: &ModDownloadsLoad) -> HashMap<String, 
                 .or_insert_with(|| name.to_string());
         }
     }
+    for (key, name) in load.layer_names.iter_highest_first() {
+        names.entry(key.clone()).or_insert_with(|| name.clone());
+    }
     names
 }
 
@@ -72,7 +74,6 @@ fn canonical_tp2s_from_load(load: &ModDownloadsLoad) -> HashMap<String, String> 
 #[derive(Default)]
 struct NamesCache {
     names: HashMap<String, String>,
-    renames: BTreeMap<String, String>,
     canonical: HashMap<String, String>,
     stamp: Option<CatalogStamp>,
     checked_at: Option<Instant>,
@@ -116,7 +117,6 @@ impl NamesCache {
         let load = mod_downloads::load_mod_download_sources();
         self.names = human_names_from_load(&load);
         self.canonical = canonical_tp2s_from_load(&load);
-        self.renames = user_mod_renames();
         self.stamp = Some(stamp);
     }
 
@@ -125,8 +125,17 @@ impl NamesCache {
         self.canonical.get(&key).cloned().unwrap_or(key)
     }
 
-    fn rename(&self, tp_file: &str) -> Option<String> {
-        self.renames.get(&self.rename_key(tp_file)).cloned()
+    fn tp2_names_of(&self, key: &str) -> BTreeSet<String> {
+        self.canonical
+            .iter()
+            .filter(|(_, canonical)| canonical.as_str() == key)
+            .map(|(name, _)| name.clone())
+            .chain(std::iter::once(key.to_string()))
+            .collect()
+    }
+
+    fn name(&self, tp_file: &str) -> Option<String> {
+        self.names.get(&mod_tp2_key(tp_file)).cloned()
     }
 }
 
@@ -166,12 +175,13 @@ pub(crate) fn rename_key(tp_file: &str) -> String {
 }
 
 #[must_use]
+pub(crate) fn tp2_names_of(key: &str) -> BTreeSet<String> {
+    with_names(|cache| cache.tp2_names_of(key))
+}
+
+#[must_use]
 pub(crate) fn catalog_human_name(tp_file: &str) -> Option<String> {
-    with_names(|cache| {
-        cache
-            .rename(tp_file)
-            .or_else(|| cache.names.get(&mod_tp2_key(tp_file)).cloned())
-    })
+    with_names(|cache| cache.name(tp_file))
 }
 
 #[must_use]
@@ -191,8 +201,11 @@ pub(crate) fn mod_display_label_with_name(human_name: Option<&str>, tp_file: &st
     if !display_mod_names() {
         return format_mod_display_name(false, human_name, tp_file);
     }
-    let rename = with_names(|cache| cache.rename(tp_file));
-    format_mod_display_name(true, rename.as_deref().or(human_name), tp_file)
+    let given = human_name.map(str::trim).filter(|name| !name.is_empty());
+    if given.is_some() {
+        return format_mod_display_name(true, given, tp_file);
+    }
+    format_mod_display_name(true, catalog_human_name(tp_file).as_deref(), tp_file)
 }
 
 #[cfg(test)]
@@ -268,13 +281,13 @@ mod tests {
     fn the_label_follows_the_setting() {
         let _names = NamesShownForTest::new(true);
         assert_eq!(
-            mod_display_label_with_name(Some("Tweaks Anthology"), "setup-cdtweaks.tp2"),
+            mod_display_label_with_name(Some("Tweaks Anthology"), "setup-biolabeltweaks.tp2"),
             "Tweaks Anthology"
         );
         set_display_mod_names(false);
         assert_eq!(
-            mod_display_label_with_name(Some("Tweaks Anthology"), "setup-cdtweaks.tp2"),
-            "cdtweaks"
+            mod_display_label_with_name(Some("Tweaks Anthology"), "setup-biolabeltweaks.tp2"),
+            "biolabeltweaks"
         );
     }
 

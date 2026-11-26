@@ -702,10 +702,10 @@ tp2 = "eeex"
     fn included_mods_header_uses_the_catalog_name_in_the_chosen_format() {
         use crate::app::mod_display_name::{NamesShownForTest, set_display_mod_names};
 
-        let default_text = "[[mods]]\nname = \"Tweaks Anthology\"\ntp2 = \"cdtweaks\"\n\n  [[mods.sources]]\n  id = \"main\"\n  label = \"Main\"\n  type = \"github\"\n  url = \"https://github.com/Owner/Repo\"\n";
+        let default_text = "[[mods]]\nname = \"Tweaks Anthology\"\ntp2 = \"biotweaks\"\n\n  [[mods.sources]]\n  id = \"main\"\n  label = \"Main\"\n  type = \"github\"\n  url = \"https://github.com/Owner/Repo\"\n";
         let tiers = source_tiers_from_texts(default_text, "", "");
         let text = "\
-~CDTWEAKS\\SETUP-CDTWEAKS.TP2~ #0 #0 // Tweak one: v1
+~BIOTWEAKS\\SETUP-BIOTWEAKS.TP2~ #0 #0 // Tweak one: v1
 ~UNLISTED\\UNLISTED.TP2~ #0 #0 // Other: v1";
         let groups = parse(text, &tiers, &empty_refs());
 
@@ -714,11 +714,34 @@ tp2 = "eeex"
         assert_eq!(groups[1].display_label(), "unlisted");
         assert!(group_matches(&groups[0], "anthology"));
         set_display_mod_names(false);
-        assert_eq!(groups[0].display_label(), "cdtweaks");
+        assert_eq!(groups[0].display_label(), "biotweaks");
         assert_eq!(groups[1].display_label(), "unlisted");
 
-        assert_eq!(groups[0].folder, "CDTWEAKS");
-        assert_eq!(groups[0].tp_file, "SETUP-CDTWEAKS.TP2");
+        assert_eq!(groups[0].folder, "BIOTWEAKS");
+        assert_eq!(groups[0].tp_file, "SETUP-BIOTWEAKS.TP2");
+    }
+
+    #[test]
+    fn a_share_preview_shows_the_codes_name_over_a_local_rename() {
+        use crate::app::mod_display_name::{NamesShownForTest, mod_display_label};
+
+        let _lock = crate::app::mod_downloads::AMBIENT_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _names = NamesShownForTest::new(true);
+        let user = crate::app::mod_downloads::mod_downloads_user_path();
+        crate::app::mod_rename::set_mod_name(&user, "biosharetweaks", "My Tweaks").unwrap();
+        assert_eq!(mod_display_label("SETUP-BIOSHARETWEAKS.TP2"), "My Tweaks");
+
+        let group = ModGroup {
+            folder: "BIOSHARETWEAKS".to_string(),
+            tp_file: "SETUP-BIOSHARETWEAKS.TP2".to_string(),
+            human_name: Some("Other".to_string()),
+            version: String::new(),
+            source: ResolvedSource::None,
+            components: Vec::new(),
+        };
+        assert_eq!(group.display_label(), "Other");
     }
 
     #[test]

@@ -1506,9 +1506,20 @@ mod tests {
         );
 
         let written = std::fs::read_to_string(target_dir.join("mod_downloads_user.toml")).unwrap();
+        let own_name = crate::app::mod_downloads::load_mod_download_sources_from_texts(
+            crate::app::mod_downloads::default_mod_downloads_content(),
+            "",
+            "",
+        )
+        .mod_name("stratagems")
+        .expect("the catalog names stratagems");
         assert!(
-            written.contains("name = \"SCS Mod\""),
+            written.contains(&format!("name = \"{own_name}\"")),
             "written file must keep the mod's own name:\n{written}"
+        );
+        assert!(
+            !written.contains("name = \"SCS Mod\""),
+            "written file must not take the form's name:\n{written}"
         );
         assert!(
             !written.contains("name = \"Gibberlings3\""),

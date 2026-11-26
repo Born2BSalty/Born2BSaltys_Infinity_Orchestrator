@@ -10,10 +10,18 @@ use crate::ui::shared::redesign_tokens::{
     redesign_text_primary,
 };
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) enum RenameTarget {
+    #[default]
+    UserFile,
+    ActiveModlist,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct RenameModState {
     pub(crate) tp2: String,
     pub(crate) buffer: String,
+    pub(crate) target: RenameTarget,
     pub(crate) focus_pending: bool,
     pub(crate) error: Option<String>,
 }

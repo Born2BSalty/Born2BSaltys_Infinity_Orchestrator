@@ -571,7 +571,10 @@ fn render_rename_menu(response: &egui::Response, app: &mut OrchestratorApp, tp2:
     }
     response.context_menu(|ui| {
         if ui.button("Rename").clicked() {
-            app.open_rename_mod(tp2);
+            app.open_rename_mod(
+                tp2,
+                crate::ui::shared::rename_mod_dialog::RenameTarget::UserFile,
+            );
             ui.close_menu();
         }
     });
