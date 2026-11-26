@@ -9,6 +9,7 @@ use std::sync::mpsc::TryRecvError;
 use std::time::Duration;
 
 use crate::app::app_step2_update_download::{self, DownloadRefusal};
+use crate::app::mod_display_name::mod_display_label;
 use crate::app::state::{
     DownloadOrigin, ManualDownloadReason, ManualDownloadRequest, Step2State, Step2UpdateAsset,
     WizardState,
@@ -111,6 +112,7 @@ const fn status_sort_key(s: ModDownloadStatus) -> u8 {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModDownloadRow {
     pub name: String,
+    pub tp_file: String,
     pub source: String,
     pub status: ModDownloadStatus,
     pub per_byte: Option<(u64, Option<u64>)>,
@@ -118,6 +120,15 @@ pub struct ModDownloadRow {
 }
 
 impl ModDownloadRow {
+    #[must_use]
+    pub fn display_name(&self) -> String {
+        if self.tp_file.trim().is_empty() {
+            self.name.clone()
+        } else {
+            mod_display_label(&self.tp_file)
+        }
+    }
+
     #[must_use]
     pub fn bar_fraction(&self) -> f32 {
         if self.status == ModDownloadStatus::Downloading {
@@ -255,6 +266,7 @@ impl DownloadProgress {
                     .or_else(|| skipped_by_label.get(a.label.as_str()).and_then(|s| s.size));
                 ModDownloadRow {
                     name: a.label.clone(),
+                    tp_file: a.tp_file.clone(),
                     source: a.source_id.clone(),
                     status,
                     per_byte: s2.update_selected_download_bytes.get(&i).copied(),
@@ -926,6 +938,7 @@ fn manual_row_from_request(request: &ManualDownloadRequest) -> ManualDownloadRow
         display_name.to_string()
     };
     ManualDownloadRow {
+        tp_file: request.tp_file.clone(),
         label,
         from,
         page_url: request.page_url.clone(),
@@ -1481,7 +1494,7 @@ pub(super) fn render_manual_confirm_dialog(
         .rows
         .iter()
         .filter(|row| row.status != ManualRowStatus::Found)
-        .map(|row| row.label.clone())
+        .map(ManualDownloadRow::shown_label)
         .collect();
     let title = manual_continue_without_title(pending);
     let body = format!(
@@ -2423,7 +2436,14 @@ fn render_grid_row(
     } else {
         redesign_text_primary(palette)
     };
-    sized_label(ui, mod_w, &row.name, 14.0, "poppins_medium", name_color);
+    sized_label(
+        ui,
+        mod_w,
+        &row.display_name(),
+        14.0,
+        "poppins_medium",
+        name_color,
+    );
 
     sized_label(
         ui,
@@ -2652,6 +2672,7 @@ mod tests {
     fn row(name: &str, status: ModDownloadStatus) -> ModDownloadRow {
         ModDownloadRow {
             name: name.to_string(),
+            tp_file: String::new(),
             source: "src".to_string(),
             status,
             per_byte: None,
@@ -2662,6 +2683,7 @@ mod tests {
     fn row_b(status: ModDownloadStatus, per_byte: Option<(u64, Option<u64>)>) -> ModDownloadRow {
         ModDownloadRow {
             name: "m".to_string(),
+            tp_file: String::new(),
             source: "src".to_string(),
             status,
             per_byte,
@@ -2676,6 +2698,7 @@ mod tests {
     ) -> ModDownloadRow {
         ModDownloadRow {
             name: "m".to_string(),
+            tp_file: String::new(),
             source: "src".to_string(),
             status,
             per_byte,
@@ -4301,12 +4324,14 @@ mod tests {
         app.wizard_state.step1.mods_archive_folder = archive_dir.to_string_lossy().into_owned();
         app.install_screen_state.manual_downloads.rows = vec![
             ManualDownloadRow {
+                tp_file: String::new(),
                 label: "Ascension".to_string(),
                 from: "nexusmods.com".to_string(),
                 page_url: String::new(),
                 status: ManualRowStatus::Waiting,
             },
             ManualDownloadRow {
+                tp_file: String::new(),
                 label: "Ascension".to_string(),
                 from: "nexusmods.com".to_string(),
                 page_url: String::new(),
@@ -4361,12 +4386,14 @@ mod tests {
         app.wizard_state.step1.mods_archive_folder = archive_dir.to_string_lossy().into_owned();
         app.install_screen_state.manual_downloads.rows = vec![
             ManualDownloadRow {
+                tp_file: String::new(),
                 label: "eet".to_string(),
                 from: "nexusmods.com".to_string(),
                 page_url: String::new(),
                 status: ManualRowStatus::Waiting,
             },
             ManualDownloadRow {
+                tp_file: String::new(),
                 label: "eet_end".to_string(),
                 from: "nexusmods.com".to_string(),
                 page_url: String::new(),
@@ -4418,6 +4445,7 @@ mod tests {
             );
         app.wizard_state.step2.update_selected_manual_downloads = vec![manual_request("Ascension")];
         app.install_screen_state.manual_downloads.rows = vec![ManualDownloadRow {
+            tp_file: String::new(),
             label: "Ascension".to_string(),
             from: "nexusmods.com".to_string(),
             page_url: "https://www.nexusmods.com/baldursgate2ee/mods/1".to_string(),
@@ -4461,6 +4489,7 @@ mod tests {
             );
         app.wizard_state.step1.mods_archive_folder = "   ".to_string();
         app.install_screen_state.manual_downloads.rows = vec![ManualDownloadRow {
+            tp_file: String::new(),
             label: "Ascension".to_string(),
             from: "nexusmods.com".to_string(),
             page_url: "https://www.nexusmods.com/baldursgate2ee/mods/1".to_string(),
@@ -4495,6 +4524,7 @@ mod tests {
         app.wizard_state.step2.update_selected_manual_downloads = vec![request];
         app.wizard_state.step2.update_selected_manual_sources = vec!["Ascension".to_string()];
         app.install_screen_state.manual_downloads.rows = vec![ManualDownloadRow {
+            tp_file: String::new(),
             label: "Ascension".to_string(),
             from: "nexusmods.com".to_string(),
             page_url: "https://www.nexusmods.com/baldursgate2ee/mods/1".to_string(),
@@ -4578,6 +4608,7 @@ mod tests {
         app.wizard_state.step2.update_selected_manual_downloads = vec![request];
         app.wizard_state.step2.update_selected_manual_sources = vec!["Ascension".to_string()];
         app.install_screen_state.manual_downloads.rows = vec![ManualDownloadRow {
+            tp_file: String::new(),
             label: "Ascension".to_string(),
             from: "nexusmods.com".to_string(),
             page_url: "https://www.nexusmods.com/baldursgate2ee/mods/1".to_string(),
@@ -4731,6 +4762,7 @@ mod tests {
         app.wizard_state.step2.update_selected_downloaded_sources =
             vec!["Ascension -> C:/archives/Ascension.zip".to_string()];
         app.install_screen_state.manual_downloads.rows = vec![ManualDownloadRow {
+            tp_file: String::new(),
             label: "Ascension".to_string(),
             from: "nexusmods.com".to_string(),
             page_url: String::new(),

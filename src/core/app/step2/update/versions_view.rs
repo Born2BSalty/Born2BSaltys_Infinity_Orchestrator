@@ -2514,6 +2514,8 @@ mod tests {
         };
         let header = mod_downloads::template_mod_header("mod", "Mod");
         let block = mod_downloads::complete_source_block(&source);
+        std::fs::create_dir_all(mod_downloads::mod_downloads_user_path().parent().unwrap())
+            .unwrap();
         std::fs::write(
             mod_downloads::mod_downloads_user_path(),
             format!("{header}\n\n{block}\n"),

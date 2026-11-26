@@ -194,10 +194,14 @@ fn apply_mod_tree_result(
         open_compat_for_component,
         open_prompt_popup,
         open_details,
+        rename_mod,
     } = result;
     *ctx.selected = Some(selected);
     if open_details {
         *ctx.details_open = true;
+    }
+    if let Some(tp_file) = rename_mod {
+        *action = Some(Step2Action::RenameMod { tp_file });
     }
     if let Some((tp_file, component_id, component_key)) = open_compat_for_component {
         *action = Some(Step2Action::OpenCompatForComponent {

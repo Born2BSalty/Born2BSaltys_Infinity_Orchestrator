@@ -844,6 +844,7 @@ pub fn unticked_log_lines(step2: &Step2State) -> Vec<Step2LogUnticked> {
             Some(Step2LogUnticked {
                 game_tab: line.game_tab.clone(),
                 mod_name,
+                tp_file: line.mod_label.clone(),
                 component_id: line.component_id.clone(),
                 reason,
             })
@@ -1430,12 +1431,14 @@ mod tests {
     fn unticked(
         game_tab: &str,
         mod_name: &str,
+        tp_file: &str,
         component_id: &str,
         reason: &str,
     ) -> Step2LogUnticked {
         Step2LogUnticked {
             game_tab: game_tab.to_string(),
             mod_name: mod_name.to_string(),
+            tp_file: tp_file.to_string(),
             component_id: component_id.to_string(),
             reason: reason.to_string(),
         }
@@ -1877,6 +1880,7 @@ mod tests {
             vec![unticked(
                 "BGEE",
                 "EET",
+                "EET.TP2",
                 "0",
                 &component_exclusion_reason(core)
             )]
@@ -1904,6 +1908,7 @@ mod tests {
             vec![unticked(
                 "BGEE",
                 "X",
+                "SETUP-X.TP2",
                 "1",
                 "excluded by compatibility rules"
             )]
@@ -1937,8 +1942,8 @@ mod tests {
         assert_eq!(
             unticked_log_lines(&step2),
             vec![
-                unticked("BGEE", "SETUP-X.TP2", "1", "mod not on disk"),
-                unticked("BGEE", "SETUP-X.TP2", "1", "mod not on disk"),
+                unticked("BGEE", "SETUP-X.TP2", "SETUP-X.TP2", "1", "mod not on disk"),
+                unticked("BGEE", "SETUP-X.TP2", "SETUP-X.TP2", "1", "mod not on disk"),
             ]
         );
     }
@@ -1949,12 +1954,11 @@ mod tests {
     fn a_compat_excluded_line_lists_the_rule_reason() {
         let _lock = ambient_lock();
         let ambient = IsolatedAmbient::create();
+        let rules_path = crate::app::compat_rules::compat_rules_user_path();
+        std::fs::create_dir_all(rules_path.parent().expect("user folder"))
+            .expect("create user folder");
         std::fs::write(
-            ambient
-                .root
-                .path
-                .join("config")
-                .join("step2_compat_rules_user.toml"),
+            rules_path,
             format!(
                 "[[rules]]\nmod = \"fixturemod\"\ncomponent_id = \"2\"\nkind = \"not_needed\"\nmessage = \"{FIXTURE_RULE_REASON}\"\n"
             ),
@@ -1982,7 +1986,13 @@ mod tests {
         );
         assert_eq!(
             unticked_log_lines(&state.step2),
-            vec![unticked("BGEE", "Fixture Mod", "2", FIXTURE_RULE_REASON)]
+            vec![unticked(
+                "BGEE",
+                "Fixture Mod",
+                "SETUP-FIXTUREMOD.TP2",
+                "2",
+                FIXTURE_RULE_REASON
+            )]
         );
     }
 
@@ -2008,8 +2018,14 @@ mod tests {
         assert_eq!(
             unticked_log_lines(&state.step2),
             vec![
-                unticked("BGEE", "SETUP-Y.TP2", "0", "mod not on disk"),
-                unticked("BG2EE", "SETUP-W.TP2", "3", "mod not on disk"),
+                unticked("BGEE", "SETUP-Y.TP2", "SETUP-Y.TP2", "0", "mod not on disk"),
+                unticked(
+                    "BG2EE",
+                    "SETUP-W.TP2",
+                    "SETUP-W.TP2",
+                    "3",
+                    "mod not on disk"
+                ),
             ]
         );
 
@@ -2022,9 +2038,21 @@ mod tests {
         assert_eq!(
             unticked_log_lines(&state.step2),
             vec![
-                unticked("BGEE", "X", "7", "component not in this version"),
-                unticked("BGEE", "SETUP-Z.TP2", "4", "mod not on disk"),
-                unticked("BG2EE", "SETUP-W.TP2", "3", "mod not on disk"),
+                unticked(
+                    "BGEE",
+                    "X",
+                    "SETUP-X.TP2",
+                    "7",
+                    "component not in this version"
+                ),
+                unticked("BGEE", "SETUP-Z.TP2", "SETUP-Z.TP2", "4", "mod not on disk"),
+                unticked(
+                    "BG2EE",
+                    "SETUP-W.TP2",
+                    "SETUP-W.TP2",
+                    "3",
+                    "mod not on disk"
+                ),
             ]
         );
     }
@@ -2182,12 +2210,11 @@ mod tests {
     fn green_count_reads_logged_lines_ticked_after_rules() {
         let _lock = ambient_lock();
         let ambient = IsolatedAmbient::create();
+        let rules_path = crate::app::compat_rules::compat_rules_user_path();
+        std::fs::create_dir_all(rules_path.parent().expect("user folder"))
+            .expect("create user folder");
         std::fs::write(
-            ambient
-                .root
-                .path
-                .join("config")
-                .join("step2_compat_rules_user.toml"),
+            rules_path,
             format!(
                 "[[rules]]\nmod = \"fixturemod\"\ncomponent_id = \"2\"\nkind = \"not_needed\"\nmessage = \"{FIXTURE_RULE_REASON}\"\n"
             ),

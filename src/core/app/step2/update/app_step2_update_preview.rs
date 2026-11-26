@@ -1070,6 +1070,7 @@ mod tests {
             }],
             categories: BTreeMap::new(),
             error: None,
+            ..ModDownloadsLoad::default()
         }
     }
 
@@ -1295,6 +1296,7 @@ mod tests {
             }],
             categories: BTreeMap::new(),
             error: None,
+            ..ModDownloadsLoad::default()
         };
         let mut rx = None;
         preview_update_selected(&mut state, &mut rx, &sources, UpdateCheckScope::Selection);
@@ -1339,6 +1341,7 @@ mod tests {
             }],
             categories: BTreeMap::new(),
             error: None,
+            ..ModDownloadsLoad::default()
         };
         let mut rx = None;
         preview_update_selected(&mut state, &mut rx, &sources, UpdateCheckScope::Selection);
@@ -1378,6 +1381,7 @@ mod tests {
             }],
             categories: BTreeMap::new(),
             error: None,
+            ..ModDownloadsLoad::default()
         };
         let mut rx = None;
         preview_update_selected_mod(

@@ -71,6 +71,8 @@ pub struct RedesignSettings {
 
     pub language: UiLanguage,
 
+    pub display_mod_names: bool,
+
     pub diagnostic_mode: bool,
 
     #[serde(default = "default_true")]
@@ -90,6 +92,7 @@ impl Default for RedesignSettings {
             user_name: String::new(),
             theme_palette: ThemeChoice::default(),
             language: UiLanguage::default(),
+            display_mod_names: false,
             diagnostic_mode: false,
             validate_paths_on_startup: true,
             step2_details_width: None,
@@ -116,6 +119,7 @@ mod tests {
         assert_eq!(s.user_name, "");
         assert_eq!(s.theme_palette, ThemeChoice::Dark);
         assert_eq!(s.language, UiLanguage::English);
+        assert!(!s.display_mod_names);
         assert!(!s.diagnostic_mode);
         assert!(s.validate_paths_on_startup);
         assert!(s.step2_details_width.is_none());
@@ -127,6 +131,7 @@ mod tests {
             user_name: "Tester".to_string(),
             theme_palette: ThemeChoice::Light,
             language: UiLanguage::French,
+            display_mod_names: true,
             diagnostic_mode: true,
             validate_paths_on_startup: false,
             step2_details_width: Some(700),
@@ -134,6 +139,20 @@ mod tests {
         let raw = serde_json::to_string_pretty(&s).expect("serialize");
         let s2: RedesignSettings = serde_json::from_str(&raw).expect("deserialize");
         assert_eq!(s, s2);
+    }
+
+    #[test]
+    fn display_mod_names_persists_under_its_own_key() {
+        for on in [false, true] {
+            let s = RedesignSettings {
+                display_mod_names: on,
+                ..RedesignSettings::default()
+            };
+            let raw = serde_json::to_string(&s).expect("serialize");
+            assert!(raw.contains(&format!("\"display_mod_names\":{on}")));
+            let s2: RedesignSettings = serde_json::from_str(&raw).expect("deserialize");
+            assert_eq!(s2.display_mod_names, on);
+        }
     }
 
     #[test]

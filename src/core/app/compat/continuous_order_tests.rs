@@ -850,7 +850,7 @@ fn continuous_constraint_legacy_valid_malformed_recovery_does_not_change_builtin
     let path = fixture.source(&format!(
         "BEGIN ~C~ DESIGNATED 0\nREQUIRE_PREDICATE {GUARD} ~Before~\n"
     ));
-    let rules_path = fixture.0.join("config/step2_compat_rules_user.toml");
+    let rules_path = fixture.0.join("config/User/step2_compat_rules_user.toml");
     std::fs::create_dir_all(rules_path.parent().expect("config root")).expect("config directory");
     let mods = [source_mod(&path, &["0"])];
     let items = [item("EET_End.tp2", "0"), item("Continuous_End.tp2", "0")];

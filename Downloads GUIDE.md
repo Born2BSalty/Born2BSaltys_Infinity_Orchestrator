@@ -15,13 +15,14 @@ source = where BIO can download it
 default_mod_downloads.toml
 
 This is BIO’s built-in list.
+Its AppData copy is `bio/Default/mod_downloads_default.toml`.
 Do not edit the AppData copy because BIO may replace it during updates.
 
 ### User source list
 
 mod_downloads_user.toml
 
-This is your personal file.
+This is your personal file. It lives in `bio/User/`.
 Use this for custom sources, forks, fixes, and missing mods.
 
 BIO has buttons in Step 2 to help edit this file.

@@ -6,6 +6,7 @@ use eframe::egui;
 use crate::app::app_step2_router::NEW_MOD_CARD_KEY;
 use crate::app::github_forks_list::ForksStatus;
 use crate::app::github_release_list::ReleaseListState;
+use crate::app::mod_display_name::{mod_display_label, mod_display_label_with_name};
 use crate::app::mod_downloads::{self, ModDownloadSource};
 use crate::app::mod_source_history;
 use crate::app::source_form::{self, SourceForm, SourceFormIdentity, SourceKind};
@@ -296,12 +297,20 @@ pub(crate) fn seed_new_mod_form(this_modlist_name: &str) -> SourceForm {
 }
 
 fn sheet_mod_name(form: &SourceForm) -> String {
-    if !form.name.trim().is_empty() {
+    if !form.tp2.trim().is_empty() {
+        mod_display_label_with_name(Some(&form.name), &form.tp2)
+    } else if !form.name.trim().is_empty() {
         form.name.clone()
-    } else if !form.tp2.trim().is_empty() {
-        form.tp2.clone()
     } else {
         "New mod".to_string()
+    }
+}
+
+fn header_mod_label(tp2: &str, raw_name: &str) -> String {
+    if tp2.trim().is_empty() {
+        raw_name.to_string()
+    } else {
+        mod_display_label(tp2)
     }
 }
 
@@ -595,7 +604,10 @@ pub(crate) fn render_forks_with_backdrop(
                         ui,
                         palette,
                         "Forks",
-                        &step2.mod_download_forks_popup_label,
+                        &header_mod_label(
+                            &step2.mod_download_forks_popup_tp2,
+                            &step2.mod_download_forks_popup_label,
+                        ),
                         outcome,
                     );
                     ui.add_space(12.0);
@@ -780,7 +792,13 @@ pub(crate) fn render_note(
             egui::Frame::default()
                 .inner_margin(egui::Margin::symmetric(22, 18))
                 .show(ui, |ui| {
-                    render_header(ui, palette, "Note", &state.mod_name, outcome);
+                    render_header(
+                        ui,
+                        palette,
+                        "Note",
+                        &header_mod_label(&state.tp2, &state.mod_name),
+                        outcome,
+                    );
                     ui.add_space(12.0);
                     render_note_subtitle(ui, palette, &state);
                     ui.add_space(12.0);

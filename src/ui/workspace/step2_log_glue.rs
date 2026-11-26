@@ -448,9 +448,14 @@ pub(crate) fn grouped_unticked_text(unticked: &[Step2LogUnticked]) -> Option<Str
     if unticked.is_empty() {
         return None;
     }
-    let mut groups: Vec<((&str, &str), Vec<&str>)> = Vec::new();
+    let mut groups: Vec<((String, &str), Vec<&str>)> = Vec::new();
     for entry in unticked {
-        let key = (entry.mod_name.as_str(), entry.reason.as_str());
+        let shown_name = if entry.tp_file.trim().is_empty() {
+            entry.mod_name.clone()
+        } else {
+            crate::app::mod_display_name::mod_display_label(&entry.tp_file)
+        };
+        let key = (shown_name, entry.reason.as_str());
         if let Some((_, ids)) = groups.iter_mut().find(|(group, _)| *group == key) {
             ids.push(entry.component_id.as_str());
         } else {
@@ -622,7 +627,7 @@ mod tests {
     }
 
     const MISSING_X_WARNING: &str =
-        "2 logged component(s) could not be ticked\nSETUP-X.TP2: mod not on disk: #1, #2";
+        "2 logged component(s) could not be ticked\nx: mod not on disk: #1, #2";
 
     fn missing_x_toasts() -> Vec<(egui_toast::ToastKind, String)> {
         vec![
@@ -1055,9 +1060,25 @@ mod tests {
         Step2LogUnticked {
             game_tab: "BGEE".to_string(),
             mod_name: mod_name.to_string(),
+            tp_file: String::new(),
             component_id: component_id.to_string(),
             reason: reason.to_string(),
         }
+    }
+
+    #[test]
+    fn grouped_toast_names_mods_in_the_display_format() {
+        crate::app::mod_display_name::set_display_mod_names(false);
+        let entry = Step2LogUnticked {
+            tp_file: "SETUP-Y.TP2".to_string(),
+            ..unticked("Folder Y", "0", "mod not on disk")
+        };
+        let text = grouped_unticked_text(&[entry]);
+        crate::app::mod_display_name::set_display_mod_names(false);
+        assert_eq!(
+            text.as_deref(),
+            Some("1 logged component(s) could not be ticked\ny: mod not on disk: #0")
+        );
     }
 
     #[test]

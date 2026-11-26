@@ -2,6 +2,7 @@
 // Copyright (c) 2026 Born2BSalty
 
 use crate::app::game_authority::{self, GameSlot};
+use crate::app::mod_display_name::mod_display_label;
 use crate::app::state::{Step2ModState, WizardState};
 use crate::ui::step2::tree_selection_rules_step2::{
     enforce_collapsible_group_umbrella_after_bulk, enforce_subcomponent_single_select_keep_first,
@@ -9,11 +10,15 @@ use crate::ui::step2::tree_selection_rules_step2::{
 };
 
 #[must_use]
+pub(crate) fn mod_name_matches_filter(mod_name: &str, tp_file: &str, filter: &str) -> bool {
+    filter.is_empty()
+        || mod_name.to_lowercase().contains(filter)
+        || mod_display_label(tp_file).to_lowercase().contains(filter)
+}
+
+#[must_use]
 pub fn mod_matches_filter(mod_state: &Step2ModState, filter: &str) -> bool {
-    if filter.is_empty() {
-        return true;
-    }
-    if mod_state.name.to_lowercase().contains(filter) {
+    if mod_name_matches_filter(&mod_state.name, &mod_state.tp_file, filter) {
         return true;
     }
     mod_state
@@ -38,7 +43,7 @@ pub fn select_visible(mods: &mut [Step2ModState], filter: &str, next_selection_o
         if !mod_matches_filter(mod_state, filter) {
             continue;
         }
-        let mod_name_match = filter.is_empty() || mod_state.name.to_lowercase().contains(filter);
+        let mod_name_match = mod_name_matches_filter(&mod_state.name, &mod_state.tp_file, filter);
         for component in &mut mod_state.components {
             let is_visible = mod_name_match || component.label.to_lowercase().contains(filter);
             if !is_visible || component.disabled {
@@ -140,6 +145,54 @@ mod tests {
                 selected_order: Some(1),
             }],
         }
+    }
+
+    struct CatalogFixtureRoot(std::path::PathBuf);
+
+    impl CatalogFixtureRoot {
+        fn new() -> Self {
+            use std::sync::atomic::{AtomicU64, Ordering};
+            static NEXT: AtomicU64 = AtomicU64::new(0);
+            let root = Self(std::env::temp_dir().join(format!(
+                "bio_step2_filter_label_{}_{}",
+                std::process::id(),
+                NEXT.fetch_add(1, Ordering::Relaxed)
+            )));
+            let user_dir = root.0.join(crate::platform_defaults::CONFIG_USER_FOLDER);
+            std::fs::create_dir_all(&user_dir).expect("create user dir");
+            std::fs::write(
+                user_dir.join("mod_downloads_user.toml"),
+                "[[mods]]\nname = \"Fixture Readable\"\ntp2 = \"fixturemod\"\n\n  [[mods.sources]]\n  id = \"primary\"\n  type = \"url\"\n  url = \"https://example.test/fixturemod.zip\"\n",
+            )
+            .expect("write user catalog");
+            crate::platform_defaults::set_config_dir_override(Some(root.0.clone()));
+            root
+        }
+    }
+
+    impl Drop for CatalogFixtureRoot {
+        fn drop(&mut self) {
+            crate::platform_defaults::clear_config_dir_override_if(&self.0);
+            crate::app::mod_display_name::set_display_mod_names(false);
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn step2_filter_matches_the_formatted_name() {
+        let _root = CatalogFixtureRoot::new();
+        crate::app::mod_display_name::set_display_mod_names(true);
+        let mut mod_state = mod_with_one_checked_component();
+        mod_state.name = "FixtureFolder".to_string();
+        mod_state.tp_file = "FixtureFolder/Setup-FixtureMod.tp2".to_string();
+        assert!(mod_matches_filter(&mod_state, "readable"));
+        assert!(mod_matches_filter(&mod_state, "fixturefolder"));
+        assert!(!mod_matches_filter(&mod_state, "unrelated"));
+        assert!(mod_name_matches_filter(
+            &mod_state.name,
+            &mod_state.tp_file,
+            "fixture readable"
+        ));
     }
 
     #[test]

@@ -150,6 +150,14 @@ pub fn app_config_file(file_name: &str, fallback_dir: &str) -> PathBuf {
     PathBuf::from(fallback_dir).join(file_name)
 }
 
+pub const CONFIG_DEFAULT_FOLDER: &str = "Default";
+pub const CONFIG_USER_FOLDER: &str = "User";
+
+#[must_use]
+pub fn app_config_user_file(file_name: &str, fallback_dir: &str) -> PathBuf {
+    app_config_file(CONFIG_USER_FOLDER, fallback_dir).join(file_name)
+}
+
 #[must_use]
 pub fn normalize_tp2_filename(tp_file: &str) -> String {
     let replaced = tp_file.replace('\\', "/");

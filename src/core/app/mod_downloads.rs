@@ -11,7 +11,7 @@ use std::sync::{Mutex, OnceLock};
 
 use serde::Deserialize;
 
-use crate::platform_defaults::app_config_file;
+use crate::platform_defaults::app_config_user_file;
 
 static ACTIVE_MODLIST_DIR: OnceLock<Mutex<Option<PathBuf>>> = OnceLock::new();
 
@@ -36,7 +36,7 @@ pub(crate) fn active_modlist_downloads_path() -> Option<PathBuf> {
     active_modlist_dir().map(|d| d.join("mod_downloads_user.toml"))
 }
 
-const MOD_DOWNLOADS_USER_FILE_NAME: &str = "mod_downloads_user.toml";
+pub(crate) const MOD_DOWNLOADS_USER_FILE_NAME: &str = "mod_downloads_user.toml";
 
 #[derive(Debug, Clone, Default, Deserialize)]
 pub(crate) struct ModDownloadsFile {
@@ -172,6 +172,82 @@ pub(crate) struct ModDownloadsLoad {
     pub(crate) categories: BTreeMap<String, Vec<String>>,
     pub(crate) sources: Vec<ModDownloadSource>,
     pub(crate) error: Option<String>,
+    pub(crate) layer_names: LayerNames,
+}
+
+#[derive(Debug, Clone, Default)]
+pub(crate) struct LayerNames {
+    pub(crate) default: BTreeMap<String, String>,
+    pub(crate) user: BTreeMap<String, String>,
+    pub(crate) modlist: BTreeMap<String, String>,
+}
+
+impl LayerNames {
+    const fn lowest_first(&self) -> [&BTreeMap<String, String>; 3] {
+        [&self.default, &self.user, &self.modlist]
+    }
+
+    #[must_use]
+    pub(crate) fn highest(&self, tp2: &str) -> Option<&str> {
+        let key = normalize_mod_download_tp2(tp2);
+        self.lowest_first()
+            .into_iter()
+            .rev()
+            .find_map(|layer| layer.get(&key))
+            .map(String::as_str)
+    }
+
+    pub(crate) fn iter_highest_first(&self) -> impl Iterator<Item = (&String, &String)> {
+        self.lowest_first().into_iter().rev().flatten()
+    }
+
+    fn apply(&self, sources: &mut [ModDownloadSource]) {
+        for source in sources {
+            for layer in self.lowest_first() {
+                if let Some(name) = layer_name_for_source(layer, source) {
+                    source.name.clone_from(name);
+                }
+            }
+        }
+    }
+}
+
+fn layer_name_for_source<'a>(
+    layer: &'a BTreeMap<String, String>,
+    source: &ModDownloadSource,
+) -> Option<&'a String> {
+    layer
+        .get(&normalize_mod_download_tp2(&source.tp2))
+        .or_else(|| {
+            source
+                .aliases
+                .iter()
+                .find_map(|alias| layer.get(&normalize_mod_download_tp2(alias)))
+        })
+}
+
+pub(crate) fn collect_names(
+    names: &mut BTreeMap<String, String>,
+    overlays: &[ModDownloadSourceOverlay],
+) {
+    for overlay in overlays {
+        let Some(name) = overlay
+            .name
+            .as_deref()
+            .map(str::trim)
+            .filter(|name| !name.is_empty())
+        else {
+            continue;
+        };
+        let key = overlay_tp2_key(overlay);
+        if !key.is_empty() && !name_is_the_tp2(name, &key) {
+            names.insert(key, name.to_string());
+        }
+    }
+}
+
+pub(crate) fn name_is_the_tp2(name: &str, tp2_key: &str) -> bool {
+    name.trim().eq_ignore_ascii_case(tp2_key)
 }
 
 #[derive(Debug, Clone, Default)]
@@ -219,6 +295,15 @@ impl ModDownloadsLoad {
         }
         sources.into_iter().next()
     }
+
+    #[must_use]
+    pub(crate) fn mod_name(&self, tp2: &str) -> Option<String> {
+        self.find_sources(tp2)
+            .into_iter()
+            .map(|source| source.name.trim().to_string())
+            .find(|name| !name.is_empty())
+            .or_else(|| self.layer_names.highest(tp2).map(str::to_string))
+    }
 }
 
 impl ModDownloadSource {
@@ -233,7 +318,7 @@ impl ModDownloadSource {
 }
 
 pub(crate) fn mod_downloads_user_path() -> PathBuf {
-    app_config_file(MOD_DOWNLOADS_USER_FILE_NAME, "config")
+    app_config_user_file(MOD_DOWNLOADS_USER_FILE_NAME, "config")
 }
 
 pub(crate) fn ensure_mod_downloads_files() -> io::Result<()> {
@@ -324,7 +409,8 @@ pub(crate) fn save_source_block_with_context(
         toml::from_str::<ModDownloadsFile>(&content).map_err(|err| err.to_string())?;
     }
     if source_block.trim().is_empty() {
-        let updated = remove_source_block(&content, tp2, source_id);
+        let below = mod_name_below(&path, tp2);
+        let updated = remove_source_block(&content, tp2, source_id, below.as_deref());
         toml::from_str::<ModDownloadsFile>(&updated).map_err(|err| err.to_string())?;
         fs::write(&path, updated).map_err(|err| err.to_string())?;
         return Ok(());
@@ -352,7 +438,11 @@ pub(crate) fn save_source_block_with_context(
         if !source_input.has_mod_parent {
             return Err(new_source_parent_error());
         }
-        let updated = append_mod_block(&content, source_block);
+        let mod_block = mod_name_below(&path, &source_input.tp2).map_or_else(
+            || source_block.to_string(),
+            |name| with_mod_name(source_block, &name),
+        );
+        let updated = append_mod_block(&content, &mod_block);
         toml::from_str::<ModDownloadsFile>(&updated).map_err(|err| err.to_string())?;
         fs::write(&path, updated).map_err(|err| err.to_string())?;
         return Ok(());
@@ -373,9 +463,11 @@ pub(crate) fn save_source_block_with_context(
                     .map(|source| source.categories)
             })
             .unwrap_or_default();
+        let name =
+            mod_name_below(&path, &source_input.tp2).unwrap_or_else(|| source_input.label.clone());
         append_mod_block(
             &content,
-            &mod_header_with_categories(&source_input.tp2, &source_input.label, &categories),
+            &mod_header_with_categories(&source_input.tp2, &name, &categories),
         )
     } else {
         content
@@ -423,6 +515,33 @@ fn apply_category_update(
     Ok(document.to_string())
 }
 
+#[must_use]
+pub(crate) fn mod_name_below(target: &Path, tp2: &str) -> Option<String> {
+    let default_load = load_source_overlays_from_str(default_mod_downloads_content(), "default");
+    let user_path = mod_downloads_user_path();
+    let user_load = if target == user_path {
+        ModDownloadsOverlayLoad::default()
+    } else {
+        load_source_overlays_from_path(&user_path)
+    };
+    two_tier_from_overlays(default_load, user_load).mod_name(tp2)
+}
+
+fn with_mod_name(mod_block: &str, name: &str) -> String {
+    let Ok(mut document) = mod_block.parse::<toml_edit::DocumentMut>() else {
+        return mod_block.to_string();
+    };
+    let Some(parent) = document
+        .get_mut("mods")
+        .and_then(toml_edit::Item::as_array_of_tables_mut)
+        .and_then(|parents| parents.get_mut(0))
+    else {
+        return mod_block.to_string();
+    };
+    parent["name"] = toml_edit::value(name);
+    document.to_string()
+}
+
 pub(crate) fn load_two_tier_sources() -> ModDownloadsLoad {
     let user_path = mod_downloads_user_path();
     let default_load = load_source_overlays_from_str(default_mod_downloads_content(), "default");
@@ -437,6 +556,9 @@ pub(crate) fn two_tier_from_overlays(
     let mut categories = BTreeMap::new();
     collect_categories(&mut categories, &default_load.sources);
     collect_categories(&mut categories, &user_load.sources);
+    let mut layer_names = LayerNames::default();
+    collect_names(&mut layer_names.default, &default_load.sources);
+    collect_names(&mut layer_names.user, &user_load.sources);
     let mut by_source = BTreeMap::<String, ModDownloadSource>::new();
 
     for overlay in default_load.sources {
@@ -476,12 +598,14 @@ pub(crate) fn two_tier_from_overlays(
 
     let mut sources = by_source.into_values().collect::<Vec<_>>();
     apply_categories(&mut sources, &categories);
+    layer_names.apply(&mut sources);
     sort_sources(&mut sources);
     let error = merge_load_errors(default_load.error, user_load.error);
     ModDownloadsLoad {
         categories,
         sources,
         error,
+        layer_names,
     }
 }
 
@@ -516,6 +640,7 @@ pub(crate) fn load_mod_download_sources_from_texts(
 fn apply_modlist_overlay(result: &mut ModDownloadsLoad, per_load: ModDownloadsOverlayLoad) {
     let mut categories = std::mem::take(&mut result.categories);
     collect_categories(&mut categories, &per_load.sources);
+    collect_names(&mut result.layer_names.modlist, &per_load.sources);
     let mut by_source: BTreeMap<String, ModDownloadSource> = result
         .sources
         .drain(..)
@@ -552,6 +677,7 @@ fn apply_modlist_overlay(result: &mut ModDownloadsLoad, per_load: ModDownloadsOv
     }
     result.sources = by_source.into_values().collect();
     apply_categories(&mut result.sources, &categories);
+    result.layer_names.apply(&mut result.sources);
     result.categories = categories;
     sort_sources(&mut result.sources);
     result.error = merge_load_errors(result.error.take(), per_load.error);
@@ -896,21 +1022,32 @@ fn new_source_parent_error() -> String {
         .to_string()
 }
 
-fn remove_source_block(content: &str, tp2: &str, source_id: &str) -> String {
+fn remove_source_block(
+    content: &str,
+    tp2: &str,
+    source_id: &str,
+    name_below: Option<&str>,
+) -> String {
     let target = normalize_mod_download_tp2(tp2);
     let ranges = mod_block_ranges(content);
-
-    let preamble = if ranges.is_empty() {
-        ""
-    } else {
-        &content[..ranges[0].0]
+    let Some(&(first_start, _)) = ranges.first() else {
+        return content.to_string();
     };
+    let unrenamed_name = name_below.map_or_else(|| target.clone(), str::to_string);
+    let mut name_only_written = false;
 
-    let mut out = preamble.trim_end().to_string();
+    let mut out = content[..first_start].trim_end().to_string();
     for (start, end) in &ranges {
         let block = &content[*start..*end];
         let maybe_text = if block_tp2_matches(block, &target) {
-            remove_source_from_mod_block(block, source_id).map(|b| b.trim().to_string())
+            match remove_source_from_mod_block(block, source_id, &unrenamed_name) {
+                Some(BlockAfterRemoval::Kept(text)) => Some(text.trim().to_string()),
+                Some(BlockAfterRemoval::NameOnly(text)) if !name_only_written => {
+                    name_only_written = true;
+                    Some(text)
+                }
+                Some(BlockAfterRemoval::NameOnly(_)) | None => None,
+            }
         } else {
             Some(block.trim().to_string())
         };
@@ -927,7 +1064,16 @@ fn remove_source_block(content: &str, tp2: &str, source_id: &str) -> String {
     out.trim_end().to_string() + "\n"
 }
 
-fn remove_source_from_mod_block(mod_block: &str, source_id: &str) -> Option<String> {
+enum BlockAfterRemoval {
+    Kept(String),
+    NameOnly(String),
+}
+
+fn remove_source_from_mod_block(
+    mod_block: &str,
+    source_id: &str,
+    unrenamed_name: &str,
+) -> Option<BlockAfterRemoval> {
     let target = normalize_source_id(source_id);
     let mut updated = String::new();
     let mut cursor = 0usize;
@@ -942,11 +1088,30 @@ fn remove_source_from_mod_block(mod_block: &str, source_id: &str) -> Option<Stri
         cursor = end;
     }
     updated.push_str(&mod_block[cursor..]);
-    let keeps_categories = toml::from_str::<ModDownloadsFile>(mod_block)
+    let parent = toml::from_str::<ModDownloadsFile>(mod_block)
         .ok()
         .and_then(|parsed| parsed.mods.into_iter().next())
-        .is_some_and(|parent| parent.source.categories.is_some());
-    (kept_source || keeps_categories).then(|| updated.trim_end().to_string())
+        .map(|parent| parent.source);
+    if kept_source
+        || parent
+            .as_ref()
+            .is_some_and(|parent| parent.categories.is_some())
+    {
+        return Some(BlockAfterRemoval::Kept(updated.trim_end().to_string()));
+    }
+    let parent = parent?;
+    let name = parent.name.as_deref().map_or_default(str::trim);
+    let tp2 = parent.tp2.as_deref().map_or_default(str::trim);
+    (!name.is_empty()
+        && name != unrenamed_name.trim()
+        && !name_is_the_tp2(name, &normalize_mod_download_tp2(tp2)))
+    .then(|| {
+        BlockAfterRemoval::NameOnly(format!(
+            "[[mods]]\nname = \"{}\"\ntp2 = \"{}\"",
+            escape_toml_string(name),
+            escape_toml_string(tp2)
+        ))
+    })
 }
 
 fn mod_block_ranges(content: &str) -> Vec<(usize, usize)> {
@@ -1440,15 +1605,37 @@ pub(crate) fn overlay_tp2_key(source: &ModDownloadSourceOverlay) -> String {
         .map_or_else(Default::default, normalize_mod_download_tp2)
 }
 
-const fn category_only_overlay(source: &ModDownloadSourceOverlay) -> bool {
-    source.categories.is_some()
-        && source.source_id.is_none()
-        && source.url.is_none()
-        && source.github.is_none()
+pub(crate) fn metadata_only_overlay(source: &ModDownloadSourceOverlay) -> bool {
+    let has_name = source
+        .name
+        .as_deref()
+        .is_some_and(|name| !name.trim().is_empty());
+    let no_location = source.source_id.is_none() && source.url.is_none() && source.github.is_none();
+    no_location && (source.categories.is_some() || (has_name && !carries_source_fields(source)))
+}
+
+const fn carries_source_fields(source: &ModDownloadSourceOverlay) -> bool {
+    source.aliases.is_some()
+        || source.config_files.is_some()
+        || source.tp2_rename.is_some()
+        || source.source_label.is_some()
+        || source.source_default
+        || source.exact_github.is_some()
+        || source.kind.is_some()
+        || source.channel.is_some()
+        || source.tag.is_some()
+        || source.commit.is_some()
+        || source.branch.is_some()
+        || source.release.is_some()
+        || source.asset.is_some()
+        || source.subdir_require.is_some()
+        || source.pkg_windows.is_some()
+        || source.pkg_linux.is_some()
+        || source.pkg_macos.is_some()
 }
 
 pub(crate) fn overlay_source_key(source: &ModDownloadSourceOverlay) -> String {
-    if category_only_overlay(source) {
+    if metadata_only_overlay(source) {
         return String::new();
     }
     let tp2 = overlay_tp2_key(source);
@@ -1551,7 +1738,7 @@ fn flatten_mod_overlay_entries(
 ) -> Vec<ModDownloadSourceOverlay> {
     if mod_overlay.sources.is_empty() {
         let mut overlay = mod_overlay.source;
-        if category_only_overlay(&overlay) {
+        if metadata_only_overlay(&overlay) {
             return vec![overlay];
         }
         overlay.source_default_explicit = overlay.source_default;
@@ -1855,6 +2042,17 @@ pub(crate) fn merge_load_errors(left: Option<String>, right: Option<String>) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn removing_a_source_from_a_file_without_mods_keeps_the_file() {
+        let content = "format = 2
+names.cdtweaks = \"My Tweaks\"
+";
+        assert_eq!(
+            remove_source_block(content, "cdtweaks", "primary", None),
+            content
+        );
+    }
 
     fn argent77_source() -> ModDownloadSource {
         ModDownloadSource {
@@ -2670,6 +2868,10 @@ mod tests {
             0,
             "removal must excise all duplicate blocks; got:\n{saved}"
         );
+        assert!(
+            !saved.contains("[[mods.sources]]"),
+            "removal must excise every duplicate source; got:\n{saved}"
+        );
 
         let _ = std::fs::remove_dir_all(&tmp_dir);
     }
@@ -2901,5 +3103,103 @@ mod tests {
             source_link_label("http://example.com/mod"),
             "example.com/mod"
         );
+    }
+
+    const NAMED_CATALOG: &str = "format = 2\n\n[[mods]]\nname = \"Catalog Name\"\ntp2 = \"bionamed\"\n\n  [[mods.sources]]\n  id = \"primary\"\n  type = \"url\"\n  url = \"https://example.test/primary.zip\"\n\n  [[mods.sources]]\n  id = \"mirror\"\n  type = \"url\"\n  url = \"https://example.test/mirror.zip\"\n";
+
+    fn name_only(name: &str) -> String {
+        format!("format = 2\n\n[[mods]]\nname = \"{name}\"\ntp2 = \"bionamed\"\n")
+    }
+
+    fn shown_names(load: &ModDownloadsLoad) -> Vec<String> {
+        load.find_sources("bionamed")
+            .into_iter()
+            .map(|source| source.name)
+            .collect()
+    }
+
+    fn resolved_shape(load: &ModDownloadsLoad) -> Vec<(String, String, String, String, bool)> {
+        load.sources
+            .iter()
+            .map(|source| {
+                (
+                    source.tp2.clone(),
+                    source.source_id.clone(),
+                    source.source_label.clone(),
+                    source.url.clone(),
+                    source.source_default,
+                )
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_user_name_renames_every_source_of_the_mod() {
+        let load = load_mod_download_sources_from_texts(NAMED_CATALOG, &name_only("User Name"), "");
+
+        assert_eq!(shown_names(&load), vec!["User Name", "User Name"]);
+        assert_eq!(
+            load.mod_name("setup-bionamed.tp2").as_deref(),
+            Some("User Name")
+        );
+    }
+
+    #[test]
+    fn a_modlist_name_beats_the_user_name_and_the_catalog_name() {
+        let load = load_mod_download_sources_from_texts(
+            NAMED_CATALOG,
+            &name_only("User Name"),
+            &name_only("List Name"),
+        );
+
+        assert_eq!(shown_names(&load), vec!["List Name", "List Name"]);
+        assert_eq!(load.mod_name("bionamed").as_deref(), Some("List Name"));
+    }
+
+    #[test]
+    fn a_modlist_source_without_a_name_keeps_the_user_name() {
+        let modlist_text = "format = 2\n\n[[mods]]\ntp2 = \"bionamed\"\n\n  [[mods.sources]]\n  id = \"primary\"\n  type = \"url\"\n  url = \"https://example.test/list.zip\"\n";
+        let load = load_mod_download_sources_from_texts(
+            NAMED_CATALOG,
+            &name_only("User Name"),
+            modlist_text,
+        );
+
+        assert_eq!(
+            load.resolve_source("bionamed", Some("primary"))
+                .map(|source| source.url)
+                .as_deref(),
+            Some("https://example.test/list.zip")
+        );
+        assert_eq!(shown_names(&load), vec!["User Name", "User Name"]);
+    }
+
+    #[test]
+    fn a_name_that_is_only_the_tp2_is_no_rename() {
+        let modlist_text = "format = 2\n\n[[mods]]\nname = \"BioNamed\"\ntp2 = \"bionamed\"\n\n  [[mods.sources]]\n  id = \"primary\"\n  type = \"url\"\n  url = \"https://example.test/list.zip\"\n";
+        let load = load_mod_download_sources_from_texts(NAMED_CATALOG, "", modlist_text);
+
+        assert_eq!(shown_names(&load), vec!["Catalog Name", "Catalog Name"]);
+    }
+
+    #[test]
+    fn a_name_only_entry_adds_no_source() {
+        let plain = load_mod_download_sources_from_texts(NAMED_CATALOG, "", "");
+        let named = name_only("Renamed");
+        let catalog_with_name = format!("{NAMED_CATALOG}\n{}", named.replace("format = 2", ""));
+        let layered = [
+            load_mod_download_sources_from_texts(&catalog_with_name, "", ""),
+            load_mod_download_sources_from_texts(NAMED_CATALOG, &named, ""),
+            load_mod_download_sources_from_texts(NAMED_CATALOG, "", &named),
+            load_mod_download_sources_from_texts(NAMED_CATALOG, &named, &named),
+        ];
+
+        for load in &layered {
+            assert_eq!(load.error, None);
+            assert_eq!(resolved_shape(load), resolved_shape(&plain));
+        }
+        let tiers = source_tiers_from_texts(NAMED_CATALOG, &named, &named);
+        assert_eq!(tiers.tier_of("bionamed", "primary"), SourceTier::Default);
+        assert_eq!(tiers.tier_of("bionamed", "mirror"), SourceTier::Default);
     }
 }

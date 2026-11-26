@@ -25,6 +25,7 @@ use crate::ui::shared::typography_global::{SIZE_PILL_TEXT, strong};
 use crate::ui::step3::blocks;
 use crate::ui::step3::format_step3;
 use crate::ui::step3::installer_answers_step3::prompt_context_for_tab;
+use crate::ui::step3::list_rows_step3::parent_display_name;
 use crate::ui::step3::move_selection_step3::{
     MoveSelectionContext, MoveSelectionOutcome, MoveSelectionTarget, capture_identities,
     header_of_a_fully_selected_mod, is_locked, move_selection, moving_set,
@@ -578,7 +579,7 @@ fn render_header_row(
                 }
 
                 ui.add_space(GLYPH_GAP_PX);
-                let mod_name = ctx.items[idx].mod_name.clone();
+                let mod_name = parent_display_name(&ctx.items[idx]);
                 let parent_placeholder = ctx.items[idx].parent_placeholder;
                 let title =
                     build_parent_title(&mod_name, parent_placeholder, child_count, is_locked);
@@ -1629,6 +1630,42 @@ mod tests {
     fn build_parent_title_placeholder() {
         let title = build_parent_title("SomeMod", true, 2, false);
         assert_eq!(title, "SomeMod (split target) (2)");
+    }
+
+    struct DisplayFormatReset;
+
+    impl Drop for DisplayFormatReset {
+        fn drop(&mut self) {
+            crate::app::mod_display_name::set_display_mod_names(false);
+        }
+    }
+
+    fn with_display_format(show_names: bool) -> DisplayFormatReset {
+        crate::app::mod_display_name::set_display_mod_names(show_names);
+        DisplayFormatReset
+    }
+
+    #[test]
+    fn step3_separator_title_is_never_formatted() {
+        let _reset = with_display_format(false);
+        let separator = crate::app::step3_separators::separator_row(
+            "My Setup-Fixes.tp2 Section",
+            "SEPARATOR::1".to_string(),
+        );
+        assert_eq!(
+            parent_display_name(&separator),
+            "My Setup-Fixes.tp2 Section"
+        );
+    }
+
+    #[test]
+    fn step3_mod_header_title_follows_the_display_format() {
+        let _reset = with_display_format(false);
+        let mut header = mod_item("FolderName");
+        header.tp_file = "FolderName/Setup-CdTweaks.tp2".to_string();
+        let title = build_parent_title(&parent_display_name(&header), false, 4, false);
+        assert_eq!(title, "cdtweaks (4)");
+        assert_eq!(header.mod_name, "FolderName");
     }
 
     #[test]

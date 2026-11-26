@@ -87,6 +87,7 @@ fn render_title_row(
 pub mod details_pane_content {
     use eframe::egui;
 
+    use crate::app::mod_display_name::mod_display_label;
     use crate::app::state::{WizardState, exact_log_ready_to_install};
     use crate::ui::shared::redesign_tokens::{
         ThemePalette, redesign_error, redesign_pill_warn, redesign_success_bright,
@@ -162,7 +163,11 @@ pub mod details_pane_content {
             .auto_shrink([false, false])
             .show(ui, |ui| {
                 if let Some(mod_name) = &details.mod_name {
-                    render_details_content(ui, mod_name, details, action, palette);
+                    let title = details
+                        .tp_file
+                        .as_deref()
+                        .map_or_else(|| mod_name.clone(), mod_display_label);
+                    render_details_content(ui, &title, details, action, palette);
                 } else {
                     ui.label("Select an item to view details.");
                 }

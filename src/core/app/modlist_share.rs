@@ -1565,7 +1565,10 @@ pub(crate) fn build_resolved_source_overrides_from_texts(
             installed_ids.get(&normalized_tp2).map(String::as_str),
             installed_ref.map(String::as_str),
         );
-        let block = serialize_resolved_mod(&mod_state.tp_file, &mod_state.name, &source);
+        let shown_name = Some(source.name.trim())
+            .filter(|name| !name.is_empty())
+            .unwrap_or(&mod_state.name);
+        let block = serialize_resolved_mod(&mod_state.tp_file, shown_name, &source);
         if !toml_out.is_empty() {
             toml_out.push_str("\n\n");
         }
@@ -2510,6 +2513,77 @@ mod tests {
         crate::app::app_step2_update_source_refs::ModSourceRefsFile::default()
     }
 
+    const SHARED_CATALOG: &str = "format = 2\n\n[[mods]]\nname = \"Catalog Name\"\ntp2 = \"sharedmod\"\n\n  [[mods.sources]]\n  id = \"main\"\n  type = \"url\"\n  url = \"https://example.test/sharedmod.zip\"\n";
+
+    fn rename_text(name: &str) -> String {
+        format!("format = 2\n\n[[mods]]\nname = \"{name}\"\ntp2 = \"sharedmod\"\n")
+    }
+
+    fn exported_with_user_rename(name: &str) -> String {
+        let mut state = WizardState::default();
+        state.step2.bgee_mods = vec![make_step2_mod("sharedmod", "sharedmod")];
+        build_resolved_source_overrides_from_texts(
+            &state,
+            SHARED_CATALOG,
+            &rename_text(name),
+            "",
+            &no_refs(),
+        )
+        .expect("resolve")
+        .toml
+        .expect("the mod is exported")
+    }
+
+    fn exported_names(toml_text: &str) -> Vec<String> {
+        toml::from_str::<toml::Table>(toml_text)
+            .unwrap()
+            .get("mods")
+            .and_then(toml::Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(|entry| entry.get("name").and_then(toml::Value::as_str))
+            .map(str::to_string)
+            .collect()
+    }
+
+    #[test]
+    fn share_export_carries_the_shown_name() {
+        assert_eq!(
+            exported_names(&exported_with_user_rename("Sharer Name")),
+            vec!["Sharer Name"]
+        );
+    }
+
+    #[test]
+    fn share_import_shows_the_sharers_name_over_a_local_rename() {
+        let shared = exported_with_user_rename("Sharer Name");
+        let local_user = rename_text("Local Name");
+        let list_text = match crate::app::mod_downloads_migrate::migrate_source_text(
+            &shared,
+            SHARED_CATALOG,
+            &local_user,
+            crate::app::mod_downloads_migrate::MigrateTier::Modlist,
+        ) {
+            crate::app::mod_downloads_migrate::MigrateResult::Unchanged => shared,
+            crate::app::mod_downloads_migrate::MigrateResult::Rewritten(text) => text,
+            crate::app::mod_downloads_migrate::MigrateResult::Unparseable(err) => panic!("{err}"),
+        };
+
+        let load = crate::app::mod_downloads::load_mod_download_sources_from_texts(
+            SHARED_CATALOG,
+            &local_user,
+            &list_text,
+        );
+
+        assert_eq!(load.mod_name("sharedmod").as_deref(), Some("Sharer Name"));
+        assert_eq!(
+            crate::app::mod_display_name::human_names_from_load(&load)
+                .get("sharedmod")
+                .map(String::as_str),
+            Some("Sharer Name")
+        );
+    }
+
     struct FolderRefsRoot(std::path::PathBuf);
 
     impl FolderRefsRoot {
@@ -3162,11 +3236,11 @@ mod tests {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let root = ShareImportTestRoot::new("marker");
-        std::fs::write(
-            root.config_dir.join("mod_downloads_user.toml"),
-            "format = 2\n\n",
-        )
-        .unwrap();
+        let user_dir = root
+            .config_dir
+            .join(crate::platform_defaults::CONFIG_USER_FOLDER);
+        std::fs::create_dir_all(&user_dir).unwrap();
+        std::fs::write(user_dir.join("mod_downloads_user.toml"), "format = 2\n\n").unwrap();
 
         let mut state = state_with_one_bgee_component();
         state.step2.bgee_mods = vec![make_step2_mod("moda", "ModA")];

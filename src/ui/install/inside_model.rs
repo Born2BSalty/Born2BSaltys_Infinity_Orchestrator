@@ -6,6 +6,7 @@ use std::collections::BTreeMap;
 use crate::app::answer_sets::AnswerSets;
 use crate::app::app_step2_update_source_refs::ModSourceRefsFile;
 use crate::app::game_authority::share_log_key;
+use crate::app::mod_display_name::mod_display_label_with_name;
 use crate::app::mod_downloads::{
     ModDownloadSource, SourceTier, SourceTiers, normalize_mod_download_tp2, source_link_label,
     source_open_url,
@@ -32,9 +33,17 @@ pub(crate) struct GameSection {
 pub(crate) struct ModGroup {
     pub(crate) folder: String,
     pub(crate) tp_file: String,
+    pub(crate) human_name: Option<String>,
     pub(crate) version: String,
     pub(crate) source: ResolvedSource,
     pub(crate) components: Vec<ComponentRow>,
+}
+
+impl ModGroup {
+    #[must_use]
+    pub(crate) fn display_label(&self) -> String {
+        mod_display_label_with_name(self.human_name.as_deref(), &self.tp_file)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -94,6 +103,10 @@ pub(crate) fn section_texts(preview: &ModlistSharePreview) -> Vec<(String, &str)
 pub(crate) fn group_matches(group: &ModGroup, query_lower: &str) -> bool {
     group.folder.to_ascii_lowercase().contains(query_lower)
         || group.tp_file.to_ascii_lowercase().contains(query_lower)
+        || group
+            .display_label()
+            .to_ascii_lowercase()
+            .contains(query_lower)
 }
 
 pub(crate) fn component_matches(row: &ComponentRow, query_lower: &str) -> bool {
@@ -182,9 +195,14 @@ fn parse_section(
             continue;
         }
         let resolved = tiers.resolve(&component.tp_file);
+        let human_name = resolved
+            .as_ref()
+            .map(|(source, _)| source.name.trim().to_string())
+            .filter(|name| !name.is_empty());
         groups.push(ModGroup {
             folder,
             tp_file: component.tp_file.clone(),
+            human_name,
             version: display_version(&component, resolved.as_ref(), installed_refs),
             source: resolve_source(resolved),
             components: vec![row],
@@ -489,6 +507,7 @@ mod tests {
         let group = ModGroup {
             folder: "DlcMerger".to_string(),
             tp_file: "DLCMERGER.TP2".to_string(),
+            human_name: None,
             version: String::new(),
             source: ResolvedSource::None,
             components: Vec::new(),
@@ -513,6 +532,7 @@ mod tests {
                 ModGroup {
                     folder: "FixPack".to_string(),
                     tp_file: "FIXPACK.TP2".to_string(),
+                    human_name: None,
                     version: String::new(),
                     source: ResolvedSource::None,
                     components: vec![
@@ -531,6 +551,7 @@ mod tests {
                 ModGroup {
                     folder: "DlcMerger".to_string(),
                     tp_file: "DLCMERGER.TP2".to_string(),
+                    human_name: None,
                     version: String::new(),
                     source: ResolvedSource::None,
                     components: vec![ComponentRow {
@@ -675,6 +696,52 @@ tp2 = "eeex"
             installed_ref_label("commit@bfd167f7a52dfa6c9e694955a074a85991b0c358"),
             None
         );
+    }
+
+    #[test]
+    fn included_mods_header_uses_the_catalog_name_in_the_chosen_format() {
+        use crate::app::mod_display_name::{NamesShownForTest, set_display_mod_names};
+
+        let default_text = "[[mods]]\nname = \"Tweaks Anthology\"\ntp2 = \"biotweaks\"\n\n  [[mods.sources]]\n  id = \"main\"\n  label = \"Main\"\n  type = \"github\"\n  url = \"https://github.com/Owner/Repo\"\n";
+        let tiers = source_tiers_from_texts(default_text, "", "");
+        let text = "\
+~BIOTWEAKS\\SETUP-BIOTWEAKS.TP2~ #0 #0 // Tweak one: v1
+~UNLISTED\\UNLISTED.TP2~ #0 #0 // Other: v1";
+        let groups = parse(text, &tiers, &empty_refs());
+
+        let _names = NamesShownForTest::new(true);
+        assert_eq!(groups[0].display_label(), "Tweaks Anthology");
+        assert_eq!(groups[1].display_label(), "unlisted");
+        assert!(group_matches(&groups[0], "anthology"));
+        set_display_mod_names(false);
+        assert_eq!(groups[0].display_label(), "biotweaks");
+        assert_eq!(groups[1].display_label(), "unlisted");
+
+        assert_eq!(groups[0].folder, "BIOTWEAKS");
+        assert_eq!(groups[0].tp_file, "SETUP-BIOTWEAKS.TP2");
+    }
+
+    #[test]
+    fn a_share_preview_shows_the_codes_name_over_a_local_rename() {
+        use crate::app::mod_display_name::{NamesShownForTest, mod_display_label};
+
+        let _lock = crate::app::mod_downloads::AMBIENT_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _names = NamesShownForTest::new(true);
+        let user = crate::app::mod_downloads::mod_downloads_user_path();
+        crate::app::mod_rename::set_mod_name(&user, "biosharetweaks", "My Tweaks").unwrap();
+        assert_eq!(mod_display_label("SETUP-BIOSHARETWEAKS.TP2"), "My Tweaks");
+
+        let group = ModGroup {
+            folder: "BIOSHARETWEAKS".to_string(),
+            tp_file: "SETUP-BIOSHARETWEAKS.TP2".to_string(),
+            human_name: Some("Other".to_string()),
+            version: String::new(),
+            source: ResolvedSource::None,
+            components: Vec::new(),
+        };
+        assert_eq!(group.display_label(), "Other");
     }
 
     #[test]

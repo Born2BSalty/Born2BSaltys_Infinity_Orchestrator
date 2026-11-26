@@ -7,6 +7,7 @@ use crate::app::answer_sets::{AnswerBook, AnswerSide, outgoing_for_line, tree_wi
 use crate::app::app_step2_log::component_exclusion_reason;
 use crate::app::controller::step3_sync;
 use crate::app::game_authority::GameSlot;
+use crate::app::mod_display_name::mod_display_label;
 use crate::app::state::{Step2ComponentState, Step2ModState, Step2State, Step3State, WizardState};
 use crate::app::step3_separators::{SeparatorAnchor, capture_separator_anchors};
 use crate::app::wlb_inputs::parse_identity;
@@ -239,6 +240,7 @@ fn tick_settled_log_ticks(orchestrator: &mut OrchestratorApp) {
 
 struct UnrestoredComponent {
     mod_name: String,
+    tp_file: String,
     component_id: String,
     reason: String,
 }
@@ -256,6 +258,7 @@ fn collect_unrestored(
         let Some(first_mod) = matched_mods.first() else {
             out.push(UnrestoredComponent {
                 mod_name: tp2_display_name(&entry.tp2_upper),
+                tp_file: entry.tp2_upper.clone(),
                 component_id: entry.component_id.clone(),
                 reason: "mod no longer present".to_string(),
             });
@@ -274,6 +277,7 @@ fn collect_unrestored(
         let Some(first_match) = matched_components.first().copied() else {
             out.push(UnrestoredComponent {
                 mod_name: first_mod.name.clone(),
+                tp_file: first_mod.tp_file.clone(),
                 component_id: entry.component_id.clone(),
                 reason: "component no longer present".to_string(),
             });
@@ -292,6 +296,7 @@ fn collect_unrestored(
             .unwrap_or(first_match);
         out.push(UnrestoredComponent {
             mod_name: reason_mod.name.clone(),
+            tp_file: reason_mod.tp_file.clone(),
             component_id: entry.component_id.clone(),
             reason: component_exclusion_reason(reason_component),
         });
@@ -326,14 +331,18 @@ fn format_unrestored_status(unrestored: &[UnrestoredComponent]) -> String {
 }
 
 fn format_unrestored_notification(unrestored: &[UnrestoredComponent]) -> String {
+    let labels = unrestored
+        .iter()
+        .map(|entry| mod_display_label(&entry.tp_file))
+        .collect::<Vec<_>>();
     format_component_notification(
         &format!(
             "{} saved component(s) could not be restored",
             unrestored.len()
         ),
-        unrestored.iter().map(|entry| {
+        unrestored.iter().zip(&labels).map(|(entry, label)| {
             (
-                entry.mod_name.as_str(),
+                label.as_str(),
                 entry.component_id.as_str(),
                 entry.reason.as_str(),
             )
@@ -585,9 +594,12 @@ mod tests {
         assert_eq!(unrestored[0].mod_name, "Oli's Roleplay");
         assert_eq!(unrestored[0].component_id, "7");
         assert_eq!(unrestored[0].reason, "Conditional on component #3");
+        crate::app::mod_display_name::set_display_mod_names(false);
+        let notification = format_unrestored_notification(&unrestored);
+        crate::app::mod_display_name::set_display_mod_names(false);
         assert_eq!(
-            format_unrestored_notification(&unrestored),
-            "1 saved component(s) could not be restored\nOli's Roleplay #7: Conditional on component #3"
+            notification,
+            "1 saved component(s) could not be restored\nolirp #7: Conditional on component #3"
         );
     }
 
@@ -667,16 +679,19 @@ mod tests {
         let unrestored = vec![
             UnrestoredComponent {
                 mod_name: "A".to_string(),
+                tp_file: "a.tp2".to_string(),
                 component_id: "1".to_string(),
                 reason: "mod no longer present".to_string(),
             },
             UnrestoredComponent {
                 mod_name: "A".to_string(),
+                tp_file: "a.tp2".to_string(),
                 component_id: "2".to_string(),
                 reason: "component no longer present".to_string(),
             },
             UnrestoredComponent {
                 mod_name: "B".to_string(),
+                tp_file: "b.tp2".to_string(),
                 component_id: "3".to_string(),
                 reason: "excluded by compatibility rules".to_string(),
             },

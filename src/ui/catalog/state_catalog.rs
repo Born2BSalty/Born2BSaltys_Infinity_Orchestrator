@@ -3,6 +3,7 @@ use std::path::PathBuf;
 
 use crate::app::github_forks_list::{ForksListState, ForksStatus};
 use crate::app::github_release_list::{CachedRelease, ReleaseListStatus};
+use crate::app::mod_display_name::mod_display_label_with_name;
 use crate::app::mod_downloads::{self, ModDownloadSource, SourceTiers};
 use crate::app::source_form::{self, SourceFormIdentity};
 use crate::app::state::{Step2DiscoveredFork, Step2State, VersionsSheet};
@@ -98,6 +99,11 @@ impl CatalogRow {
                 Some(key)
             })
             .collect()
+    }
+
+    #[must_use]
+    pub(crate) fn display_label(&self) -> String {
+        mod_display_label_with_name(Some(&self.name), &self.tp2)
     }
 
     fn matches_kind(&self, kind: CatalogKind) -> bool {
@@ -196,9 +202,8 @@ impl CatalogScreenState {
                     .iter()
                     .find(|s| !s.name.trim().is_empty())
                     .map_or_else(|| tp2.clone(), |s| s.name.clone());
-                let search = sources
-                    .iter()
-                    .map(|source| {
+                let search = std::iter::once(format!("{name} {tp2}"))
+                    .chain(sources.iter().map(|source| {
                         format!(
                             "{} {} {} {} {} {} {}",
                             source.name,
@@ -209,7 +214,7 @@ impl CatalogScreenState {
                             source.github.as_deref().unwrap_or(&source.url),
                             source.categories.join(" ")
                         )
-                    })
+                    }))
                     .collect::<Vec<_>>()
                     .join(" ")
                     .to_lowercase();
@@ -264,7 +269,9 @@ impl CatalogScreenState {
             .iter()
             .enumerate()
             .filter(|(_, row)| {
-                (query.is_empty() || row.search.contains(&query))
+                (query.is_empty()
+                    || row.search.contains(&query)
+                    || row.display_label().to_lowercase().contains(&query))
                     && row.matches_kind(self.kind)
                     && (self.selected_types.is_empty()
                         || !self.selected_types.is_disjoint(&row.category_keys))

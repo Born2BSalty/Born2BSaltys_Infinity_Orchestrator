@@ -347,7 +347,7 @@ fn render_group_head(
                 );
                 highlight_label(
                     ui,
-                    &group.folder,
+                    &group.display_label(),
                     query_lower,
                     egui::FontId::new(13.0, egui::FontFamily::Name("poppins_medium".into())),
                     redesign_text_primary(palette),

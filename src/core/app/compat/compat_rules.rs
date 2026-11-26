@@ -9,10 +9,10 @@ use std::time::SystemTime;
 pub(crate) use super::compat_rules_model::{
     COMPAT_RULES_SCHEMA_VERSION, CompatRule, CompatRulesFile, StringOrMany,
 };
-use crate::platform_defaults::app_config_file;
+use crate::platform_defaults::{app_config_file, app_config_user_file};
 
 const COMPAT_RULES_LEGACY_USER_FILE_NAME: &str = "step2_compat_rules.toml";
-const COMPAT_RULES_USER_FILE_NAME: &str = "step2_compat_rules_user.toml";
+pub(crate) const COMPAT_RULES_USER_FILE_NAME: &str = "step2_compat_rules_user.toml";
 pub(crate) const BUILT_IN_RULES_LABEL: &str = "BIO default (built in)";
 
 #[derive(Debug, Clone)]
@@ -43,7 +43,7 @@ pub(crate) struct CompatRulesLoad {
 }
 
 pub(crate) fn compat_rules_user_path() -> PathBuf {
-    app_config_file(COMPAT_RULES_USER_FILE_NAME, "config")
+    app_config_user_file(COMPAT_RULES_USER_FILE_NAME, "config")
 }
 
 pub(crate) fn compat_rules_legacy_user_path() -> PathBuf {
@@ -410,7 +410,13 @@ mod tests {
     #[test]
     fn built_in_rules_load_without_a_default_file() {
         let guard = temp_root("no_default");
-        assert!(!guard.0.join("step2_compat_rules_default.toml").exists());
+        assert!(
+            !guard
+                .0
+                .join(crate::platform_defaults::CONFIG_DEFAULT_FOLDER)
+                .join("step2_compat_rules_default.toml")
+                .exists()
+        );
         let expected = load_rules_from_content(default_step2_rules_content(), BUILT_IN_RULES_LABEL);
         assert_ne!(expected.rules.len(), 0);
         let loaded = load_rules();
@@ -425,7 +431,13 @@ mod tests {
     #[test]
     fn built_in_rules_are_bucketed_default() {
         let guard = temp_root("bucket");
-        assert!(!guard.0.join("step2_compat_rules_default.toml").exists());
+        assert!(
+            !guard
+                .0
+                .join(crate::platform_defaults::CONFIG_DEFAULT_FOLDER)
+                .join("step2_compat_rules_default.toml")
+                .exists()
+        );
         let loaded = load_rules();
         let rule = loaded
             .rules
@@ -438,7 +450,13 @@ mod tests {
     #[test]
     fn signature_ignores_missing_default_file() {
         let guard = temp_root("signature");
-        assert!(!guard.0.join("step2_compat_rules_default.toml").exists());
+        assert!(
+            !guard
+                .0
+                .join(crate::platform_defaults::CONFIG_DEFAULT_FOLDER)
+                .join("step2_compat_rules_default.toml")
+                .exists()
+        );
         let signature = rules_files_signature();
         assert!(signature.starts_with("builtin|"));
         assert!(

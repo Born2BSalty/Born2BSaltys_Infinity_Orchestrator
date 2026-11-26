@@ -105,7 +105,8 @@ pub(crate) fn handle_step2_action(
         } => open_compat_for_component(state, game_tab, tp_file, component_id, component_key),
         Step2Action::SelectBgeeViaLog
         | Step2Action::SelectBg2eeViaLog
-        | Step2Action::ImportWeiduLogs => {}
+        | Step2Action::ImportWeiduLogs
+        | Step2Action::RenameMod { .. } => {}
         other => handle_step2_download_source_action(state, step2_update_check_rx, other),
     }
 }
@@ -1505,9 +1506,20 @@ mod tests {
         );
 
         let written = std::fs::read_to_string(target_dir.join("mod_downloads_user.toml")).unwrap();
+        let own_name = crate::app::mod_downloads::load_mod_download_sources_from_texts(
+            crate::app::mod_downloads::default_mod_downloads_content(),
+            "",
+            "",
+        )
+        .mod_name("stratagems")
+        .expect("the catalog names stratagems");
         assert!(
-            written.contains("name = \"SCS Mod\""),
+            written.contains(&format!("name = \"{own_name}\"")),
             "written file must keep the mod's own name:\n{written}"
+        );
+        assert!(
+            !written.contains("name = \"SCS Mod\""),
+            "written file must not take the form's name:\n{written}"
         );
         assert!(
             !written.contains("name = \"Gibberlings3\""),
@@ -1708,6 +1720,12 @@ mod tests {
         };
         let header = crate::app::mod_downloads::template_mod_header("widget", "Widget");
         let block = crate::app::mod_downloads::complete_source_block(&current);
+        std::fs::create_dir_all(
+            crate::app::mod_downloads::mod_downloads_user_path()
+                .parent()
+                .unwrap(),
+        )
+        .unwrap();
         std::fs::write(
             crate::app::mod_downloads::mod_downloads_user_path(),
             format!("{header}\n\n{block}\n"),
@@ -1783,6 +1801,12 @@ mod tests {
             &current.categories,
         );
         let block = crate::app::mod_downloads::complete_source_block(&current);
+        std::fs::create_dir_all(
+            crate::app::mod_downloads::mod_downloads_user_path()
+                .parent()
+                .unwrap(),
+        )
+        .unwrap();
         std::fs::write(
             crate::app::mod_downloads::mod_downloads_user_path(),
             format!("{header}\n\n{block}\n"),
@@ -1938,6 +1962,12 @@ mod tests {
         };
         let header = crate::app::mod_downloads::template_mod_header("stratagems", "SCS");
         let old_block = crate::app::mod_downloads::complete_source_block(&old_source);
+        std::fs::create_dir_all(
+            crate::app::mod_downloads::mod_downloads_user_path()
+                .parent()
+                .unwrap(),
+        )
+        .unwrap();
         std::fs::write(
             crate::app::mod_downloads::mod_downloads_user_path(),
             format!("{header}\n\n{old_block}\n"),
@@ -2049,6 +2079,12 @@ mod tests {
         };
         let header = crate::app::mod_downloads::template_mod_header("stratagems", "SCS");
         let old_block = crate::app::mod_downloads::complete_source_block(&old_source);
+        std::fs::create_dir_all(
+            crate::app::mod_downloads::mod_downloads_user_path()
+                .parent()
+                .unwrap(),
+        )
+        .unwrap();
         std::fs::write(
             crate::app::mod_downloads::mod_downloads_user_path(),
             format!("{header}\n\n{old_block}\n"),
@@ -2265,6 +2301,7 @@ mod tests {
         let header = crate::app::mod_downloads::template_mod_header("widget", "Widget");
         let block = crate::app::mod_downloads::complete_source_block(&current);
         let global_path = crate::app::mod_downloads::mod_downloads_user_path();
+        std::fs::create_dir_all(global_path.parent().unwrap()).unwrap();
         let global_text = format!("{header}\n\n{block}\n");
         std::fs::write(&global_path, &global_text).unwrap();
 

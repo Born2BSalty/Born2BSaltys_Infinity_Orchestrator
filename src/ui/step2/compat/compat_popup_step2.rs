@@ -76,6 +76,7 @@ pub mod compat_popup_details {
 
     use crate::app::compat_issue::CompatIssue;
     use crate::app::compat_issue_text::display_source;
+    use crate::app::mod_display_name::mod_display_label;
     use crate::app::selected_details::selected_compat_issue;
     use crate::app::state::WizardState;
     use crate::ui::shared::redesign_tokens::{
@@ -98,10 +99,16 @@ pub mod compat_popup_details {
         let details = selected_details(state);
         let issue = selected_or_synth_issue(state);
         let issue_display = issue.as_ref().map(display_issue);
+        let mod_title = details.mod_name.as_deref().map(|mod_name| {
+            details
+                .tp_file
+                .as_deref()
+                .map_or_else(|| mod_name.to_string(), mod_display_label)
+        });
         let base_title = details
             .component_label
             .as_deref()
-            .or(details.mod_name.as_deref())
+            .or(mod_title.as_deref())
             .unwrap_or("No component selected");
         let title = match details.component_id.as_deref().map(str::trim) {
             Some(id) if !id.is_empty() && !base_title.trim_start().starts_with('#') => {

@@ -3,6 +3,7 @@
 
 use eframe::egui;
 
+use crate::app::mod_display_name::{display_mod_names, mod_display_label};
 use crate::app::state::{Step2ModState, Step2Selection};
 use crate::ui::orchestrator::widgets::{ButtonIcon, render_icon_button};
 use crate::ui::shared::redesign_tokens::ThemePalette;
@@ -19,6 +20,7 @@ pub(crate) struct ParentRowResult {
     pub selection: Option<Step2Selection>,
     pub open_compat_for_component: Option<(String, String, String)>,
     pub open_details: bool,
+    pub rename_mod: Option<String>,
 }
 
 #[derive(Clone, Copy)]
@@ -57,10 +59,10 @@ pub(crate) fn render_parent_row(
         jump_to_selected_requested,
         palette,
     } = input;
-    let mod_name = mod_state.name.clone();
+    let mod_label = mod_display_label(&mod_state.tp_file);
     let counts = parent_selection_counts(mod_state);
     let mod_header_label = format!(
-        "{mod_name} ({}/{})",
+        "{mod_label} ({}/{})",
         counts.selected_visible_count, counts.mod_visible_count
     );
     let parent_summary = parent_compat_summary(mod_state, palette);
@@ -239,6 +241,14 @@ fn render_parent_selection_label(
     if row.clicked() {
         select_parent(result, ctx.active_tab, &mod_state.tp_file);
     }
+    if display_mod_names() {
+        row.context_menu(|ui| {
+            if ui.button("Rename").clicked() {
+                result.rename_mod = Some(mod_state.tp_file.clone());
+                ui.close_menu();
+            }
+        });
+    }
 }
 
 fn render_parent_details_action(
@@ -305,3 +315,7 @@ fn render_parent_compat_pill(
         ));
     }
 }
+
+#[cfg(test)]
+#[path = "tree_parent_step2_tests.rs"]
+mod tests;

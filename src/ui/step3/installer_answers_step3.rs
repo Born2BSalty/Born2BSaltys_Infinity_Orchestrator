@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 
 use crate::app::answer_sets::{self, AnswerKey};
 use crate::app::game_authority::{self, GameSlot, slot_for_tab};
+use crate::app::mod_display_name::mod_display_label;
 use crate::app::mod_downloads::normalize_mod_download_tp2;
 use crate::app::prompt_eval_context::build_prompt_eval_context;
 use crate::app::prompt_eval_summary_step3::evaluate_step3_item_prompt_summary;
@@ -158,7 +159,9 @@ fn make_target(
         original_line: item.raw_line.clone(),
         title: format!(
             "{} #{} — {}",
-            item.mod_name, item.component_id, item.component_label
+            mod_display_label(&item.tp_file),
+            item.component_id,
+            item.component_label
         ),
         questions,
         answers: stored_drafts(marker_spec(&item.raw_line)).unwrap_or_else(blank_drafts),

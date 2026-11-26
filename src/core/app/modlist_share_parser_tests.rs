@@ -23,6 +23,26 @@ impl Drop for RecognitionTransportFixture {
     }
 }
 
+struct IsolatedImportRoot {
+    root: RecognitionTransportFixture,
+    config: std::path::PathBuf,
+}
+
+impl IsolatedImportRoot {
+    fn new() -> Self {
+        let root = RecognitionTransportFixture::new();
+        let config = root.0.join("config");
+        crate::platform_defaults::set_config_dir_override(Some(config.clone()));
+        Self { root, config }
+    }
+}
+
+impl Drop for IsolatedImportRoot {
+    fn drop(&mut self) {
+        crate::platform_defaults::clear_config_dir_override_if(&self.config);
+    }
+}
+
 #[test]
 fn combination_red_public_import_export_retains_finished_recognition() {
     let _lock = crate::app::mod_downloads::AMBIENT_TEST_LOCK
@@ -293,16 +313,21 @@ fn parser_rules_transport_preserves_seven_fields_preview_import_and_legacy_mirro
     );
     assert_eq!(preview.parser_recognition_rules, expected);
     assert_eq!(preview.parser_choice_phrases, expected["choice_phrase"]);
-    let root = std::env::temp_dir().join(format!("bio-parser-rules-import-{}", std::process::id()));
+    let _lock = crate::app::mod_downloads::AMBIENT_TEST_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let isolated = IsolatedImportRoot::new();
     let mut state = WizardState::default();
-    state.step1.bgee_log_folder = root.to_string_lossy().into_owned();
+    state.step1.bgee_log_folder = isolated.root.0.join("logs").to_string_lossy().into_owned();
     import_modlist_share_code(&mut state, &code).unwrap();
+    assert!(
+        crate::app::modlist_config_files::pending_mod_configs_path().starts_with(&isolated.config)
+    );
     assert_eq!(state.parser_recognition_rules, expected);
     assert_eq!(state.parser_choice_phrases, expected["choice_phrase"]);
     state.reset_workflow_keep_step1();
     assert!(state.parser_recognition_rules.is_empty());
     assert_eq!(state.parser_choice_phrases, [] as [String; 0]);
-    std::fs::remove_dir_all(root).unwrap();
 }
 
 #[test]

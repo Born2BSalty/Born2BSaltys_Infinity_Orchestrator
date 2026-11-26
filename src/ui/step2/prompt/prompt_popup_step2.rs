@@ -3,6 +3,7 @@
 
 use eframe::egui;
 
+use crate::app::mod_display_name::mod_display_label;
 use crate::app::prompt_eval_context::build_prompt_eval_context;
 use crate::app::prompt_jump_targets::prompt_popup_mod_ref;
 use crate::app::prompt_popup_nav;
@@ -221,12 +222,11 @@ fn render_prompt_toolbar_popup(ui: &egui::Ui, state: &mut WizardState) {
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
                     for entry in &entries {
-                        let header = format!(
-                            "{} ({})",
-                            entry.mod_name,
-                            prompt_toolbar_count(std::slice::from_ref(entry))
-                        );
+                        let count = prompt_toolbar_count(std::slice::from_ref(entry));
+                        let header_id = format!("{} ({count})", entry.mod_name);
+                        let header = format!("{} ({count})", mod_display_label(&entry.tp_file));
                         egui::CollapsingHeader::new(header)
+                            .id_salt(header_id.as_str())
                             .default_open(false)
                             .show(ui, |ui| {
                                 if entry.mod_level

@@ -380,6 +380,30 @@ fn catalog_counts_unique_rows_across_mixed_alternatives_and_refresh() {
 }
 
 #[test]
+fn catalog_row_label_follows_the_display_format() {
+    use crate::app::mod_display_name::{NamesShownForTest, set_display_mod_names};
+
+    let state = fixture_state();
+    let row = state.rows.iter().find(|row| row.tp2 == "tdd").unwrap();
+    let _names = NamesShownForTest::new(false);
+    for (show_names, expected) in [(true, "The Darkest Day"), (false, "tdd")] {
+        set_display_mod_names(show_names);
+        assert_eq!(row.display_label(), expected);
+    }
+    assert_eq!(row.name, "The Darkest Day");
+    assert_eq!(row.tp2, "tdd");
+
+    let mut state = fixture_state();
+    state.query = "darkest day tdd".to_string();
+    assert!(
+        state
+            .visible_rows()
+            .iter()
+            .any(|&index| state.rows[index].tp2 == "tdd")
+    );
+}
+
+#[test]
 fn catalog_search_filters_keep_selection_and_focus() {
     let mut state = fixture_state();
     state.focus("setup-tdd.tp2");
@@ -6349,4 +6373,27 @@ fn custom_tag_suggestion_blank_known_partial_and_trimmed_values() {
             expected
         );
     }
+}
+
+#[test]
+fn catalog_search_finds_a_mod_by_its_rename() {
+    let _names = crate::app::mod_display_name::NamesShownForTest::new(true);
+    let mut state = CatalogScreenState::default();
+    state.replace_from_texts(
+        &source_text(&fixture_sources()),
+        "format = 2
+
+[[mods]]
+name = \"Long Night Saga\"
+tp2 = \"tdd\"
+",
+    );
+    assert!(state.error.is_none(), "{:?}", state.error);
+    state.query = "long night".to_string();
+    assert!(
+        state
+            .visible_rows()
+            .iter()
+            .any(|&index| state.rows[index].tp2 == "tdd")
+    );
 }

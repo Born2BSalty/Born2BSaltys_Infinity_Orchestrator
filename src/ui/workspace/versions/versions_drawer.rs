@@ -344,8 +344,11 @@ fn card_passes(
     search: &str,
     chip: VersionsChip,
     missing: Option<&BTreeSet<String>>,
+    title: impl FnOnce() -> String,
 ) -> bool {
-    let matches_search = search.is_empty() || card.name.to_ascii_lowercase().contains(search);
+    let matches_search = search.is_empty()
+        || card.name.to_ascii_lowercase().contains(search)
+        || title().to_ascii_lowercase().contains(search);
     let matches_filter =
         missing.map_or_else(|| chip_matches(card, chip), |keys| keys.contains(&card.tp2));
     matches_search && matches_filter
@@ -1019,7 +1022,11 @@ fn render_card_list(
     let card_inner_width = (ui.available_width() - 32.0).max(0.0);
     let selector_width = (card_inner_width * 0.46).clamp(260.0, 460.0);
 
-    let pass = |card: &VersionCard| card_passes(card, &search, chip, missing);
+    let pass = |card: &VersionCard| {
+        card_passes(card, &search, chip, missing, || {
+            versions_card::card_title(card)
+        })
+    };
 
     let fetch_cards: Vec<&VersionCard> = view
         .cards
@@ -1959,15 +1966,59 @@ mod tests {
             VersionsChip::Attention,
             VersionsChip::Locked,
         ] {
-            assert!(card_passes(&gone, "", chip, missing));
-            assert!(!card_passes(&added, "", chip, missing));
-            assert!(!card_passes(&scanned, "", chip, missing));
+            assert!(card_passes(&gone, "", chip, missing, String::new));
+            assert!(!card_passes(&added, "", chip, missing, String::new));
+            assert!(!card_passes(&scanned, "", chip, missing, String::new));
         }
-        assert!(card_passes(&gone, "go", VersionsChip::All, missing));
-        assert!(!card_passes(&gone, "zz", VersionsChip::All, missing));
+        assert!(card_passes(
+            &gone,
+            "go",
+            VersionsChip::All,
+            missing,
+            String::new
+        ));
+        assert!(!card_passes(
+            &gone,
+            "zz",
+            VersionsChip::All,
+            missing,
+            String::new
+        ));
 
-        assert!(card_passes(&scanned, "", VersionsChip::Locked, None));
-        assert!(!card_passes(&gone, "", VersionsChip::Locked, None));
+        assert!(card_passes(
+            &scanned,
+            "",
+            VersionsChip::Locked,
+            None,
+            String::new
+        ));
+        assert!(!card_passes(
+            &gone,
+            "",
+            VersionsChip::Locked,
+            None,
+            String::new
+        ));
+    }
+
+    #[test]
+    fn versions_search_matches_the_shown_title_as_well_as_the_name() {
+        let card = refetch_test_card("cdtweaks", false);
+        let shown = || "Tweaks Anthology (cdtweaks)".to_string();
+        assert!(card_passes(
+            &card,
+            "tweaks anthology",
+            VersionsChip::All,
+            None,
+            shown
+        ));
+        assert!(!card_passes(
+            &card,
+            "tweaks anthology",
+            VersionsChip::All,
+            None,
+            String::new
+        ));
     }
 
     #[test]
