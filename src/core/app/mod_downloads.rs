@@ -3,6 +3,7 @@
 
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
+use std::collections::HashMap;
 use std::fs;
 use std::io;
 use std::path::Path;
@@ -594,6 +595,23 @@ pub(crate) struct SourceTiers {
     resolved: ModDownloadsLoad,
     user_keys: BTreeSet<String>,
     modlist_keys: BTreeSet<String>,
+    sources_by_tp2: HashMap<String, Vec<usize>>,
+}
+
+fn index_sources_by_tp2(sources: &[ModDownloadSource]) -> HashMap<String, Vec<usize>> {
+    let mut index = HashMap::<String, Vec<usize>>::new();
+    for (position, source) in sources.iter().enumerate() {
+        let keys = std::iter::once(&source.tp2)
+            .chain(source.aliases.iter())
+            .map(|tp2| normalize_mod_download_tp2(tp2));
+        for key in keys {
+            let positions = index.entry(key).or_default();
+            if positions.last() != Some(&position) {
+                positions.push(position);
+            }
+        }
+    }
+    index
 }
 
 impl SourceTiers {
@@ -621,7 +639,7 @@ impl SourceTiers {
     }
 
     pub(crate) fn resolve(&self, tp2: &str) -> Option<(ModDownloadSource, SourceTier)> {
-        let source = self.resolved.resolve_source(tp2, None)?;
+        let source = self.find_sources(tp2).into_iter().next()?;
         let tier = self.tier_of(&source.tp2, &source.source_id);
         Some((source, tier))
     }
@@ -642,7 +660,16 @@ impl SourceTiers {
     }
 
     pub(crate) fn find_sources(&self, tp2: &str) -> Vec<ModDownloadSource> {
-        self.resolved.find_sources(tp2)
+        let Some(positions) = self.sources_by_tp2.get(&normalize_mod_download_tp2(tp2)) else {
+            return Vec::new();
+        };
+        let mut sources = positions
+            .iter()
+            .filter_map(|position| self.resolved.sources.get(*position))
+            .cloned()
+            .collect::<Vec<_>>();
+        sort_sources(&mut sources);
+        sources
     }
 }
 
@@ -673,10 +700,12 @@ pub(crate) fn source_tiers_from_texts(
         modlist_keys
     };
 
+    let sources_by_tp2 = index_sources_by_tp2(&resolved.sources);
     SourceTiers {
         resolved,
         user_keys,
         modlist_keys,
+        sources_by_tp2,
     }
 }
 
@@ -2852,6 +2881,39 @@ mod tests {
         let default_text = overlay_source_toml("testmod", "main", "https://github.com/A/B");
         let tiers = source_tiers_from_texts(&default_text, "", "");
         assert!(tiers.resolve("othermod").is_none());
+    }
+
+    #[test]
+    fn tiers_find_the_same_sources_as_a_full_scan_by_tp2_alias_or_file_path() {
+        let user_text = "[[mods]]\nname = \"Test\"\ntp2 = \"testmod\"\n\n  [[mods.sources]]\n  id = \"main\"\n  label = \"Main\"\n  type = \"github\"\n  url = \"https://github.com/A/B\"\n  repo = \"A/B\"\n  aliases = [\"oldname\", \"TESTMOD\"]\n\n  [[mods.sources]]\n  id = \"fork\"\n  label = \"Fork\"\n  type = \"github\"\n  url = \"https://github.com/C/B\"\n  repo = \"C/B\"\n";
+        let tiers = source_tiers_from_texts(default_mod_downloads_content(), user_text, "");
+        let names = tiers
+            .resolved
+            .sources
+            .iter()
+            .flat_map(|source| std::iter::once(&source.tp2).chain(source.aliases.iter()))
+            .cloned()
+            .chain(
+                [
+                    "Setup-TestMod.tp2",
+                    "mods\\testmod\\oldname.tp2",
+                    "unknown",
+                    "",
+                ]
+                .map(str::to_string),
+            )
+            .collect::<Vec<_>>();
+        for name in &names {
+            assert_eq!(
+                tiers.find_sources(name),
+                tiers.resolved.find_sources(name),
+                "{name}"
+            );
+        }
+        let by_alias = tiers.find_sources("oldname");
+        assert_eq!(by_alias.len(), 1);
+        assert_eq!(by_alias[0].source_id, "main");
+        assert_eq!(tiers.find_sources("setup-testmod").len(), 2);
     }
 
     #[test]
