@@ -761,7 +761,7 @@ fn queue_source_request(
             source_id: source.source_id.clone(),
             repo: String::new(),
             exact_github: Vec::new(),
-            source_url: source.url.clone(),
+            source_url: super::app_step2_update_sentrizeal::PAGE_URL.to_string(),
             channel: None,
             tag: None,
             commit: None,
@@ -899,6 +899,34 @@ fn resolve_selected_source(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sentrizeal_preview_canonicalizes_legacy_source_and_preserves_requested_version() {
+        use crate::app::app_step2_update_sentrizeal::PAGE_URL;
+        use crate::app::app_step2_update_sentrizeal::test_support::DOWNLOAD_URL;
+
+        for url in [PAGE_URL, DOWNLOAD_URL] {
+            let source = ModDownloadSource {
+                tp2: "Sentrizeal_AA_Pack.tp2".to_string(),
+                source_id: "primary".to_string(),
+                url: url.to_string(),
+                ..Default::default()
+            };
+            let mut requests = Vec::new();
+            queue_source_request(
+                "BGEE",
+                &source.tp2,
+                "Sentrizeal",
+                Some("1.5"),
+                &source,
+                &mut requests,
+            );
+            assert_eq!(requests.len(), 1);
+            assert_eq!(requests[0].source_url, PAGE_URL);
+            assert_eq!(requests[0].requested_version.as_deref(), Some("1.5"));
+            assert_eq!(source.url, url);
+        }
+    }
 
     #[test]
     fn clear_full_update_preview_results_clears_extracted_and_failed_lists() {
