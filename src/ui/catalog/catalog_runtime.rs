@@ -786,3 +786,38 @@ fn extract_resolved_assets(
         emit(tx, run_id, CatalogTransferEvent::Item { tp2: key, outcome });
     }
 }
+
+#[cfg(test)]
+mod sentrizeal_tests {
+    use super::*;
+    use crate::app::app_step2_update_download::test_download_assets;
+    use crate::app::app_step2_update_sentrizeal::PAGE_URL;
+    use crate::app::app_step2_update_sentrizeal::test_support::{
+        Fixture, TestRoot, resolve_for_test,
+    };
+
+    #[test]
+    fn sentrizeal_catalog_materialization_keeps_download_fetchable() {
+        let root = TestRoot::new();
+        let fixture = Fixture::pack();
+        let outcome = resolve_for_test(&fixture.agent, PAGE_URL);
+        assert_eq!(outcome.error, None);
+        let (tx, _rx) = std::sync::mpsc::channel();
+        let mut settled = BTreeSet::new();
+        let resolved = collect_resolved_assets(7, vec![outcome], &tx, &mut settled);
+        assert!(settled.is_empty());
+        assert_eq!(resolved.assets.len(), 1);
+        assert_eq!(resolved.assets[0].asset_name, "SentrizealAvatarPack.zip");
+        assert_eq!(resolved.assets[0].tag, "1.6");
+        let paths = test_download_assets(&fixture.agent, &resolved.assets, &root.0);
+        assert_eq!(paths.len(), 1);
+        assert_eq!(
+            std::fs::read(paths[0].as_ref().unwrap()).unwrap(),
+            fixture.archive
+        );
+        let requests = fixture.requests();
+        assert_eq!(requests.len(), 3);
+        assert!(requests[2].contains("Referer: https://www.sentrizeal.com/pst_7.htm\r\n"));
+        assert!(!requests[2].contains("Range:"));
+    }
+}

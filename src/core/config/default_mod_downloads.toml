@@ -2324,6 +2324,28 @@ config_files = []
   pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
+categories = ["Romance", "Encounters", "BG1", "BGEE", "EET", "Tutu", "BGT"]
+name = "Baldur's Gate Romantic Encounters Modification (BG1RE)"
+tp2 = "bg1re"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Gibberlings3"
+  type = "github"
+  url = "https://github.com/Gibberlings3/BG1_Romantic_Encounters"
+  repo = "Gibberlings3/BG1_Romantic_Encounters"
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
 categories = ["Romance", "BG2", "BG2EE", "EET", "BGT"]
 name = "Romantic Encounters"
 tp2 = "RE"
@@ -13265,6 +13287,31 @@ config_files = []
 #////////////////////////////////////////////////#
 
 [[mods]]
+categories = ["Spells", "Items"]
+name = "Urkodoël"
+tp2 = "derats_urkodoel"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Deratiseur"
+  type = "github"
+  url = "https://github.com/Deratiseur/Urkodoel"
+  repo = "Deratiseur/Urkodoel"
+  exact_github = []
+  commit = ""
+  tag = ""
+  branch = ""
+  release = ""
+  channel = ""
+  asset = ""
+  subdir_require = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+[[mods]]
 categories = ["Tweaks", "BG2", "BGEE", "BG2EE", "EET", "BGT", "IWDEE", "PSTEE"]
 name = "AutoRest"
 tp2 = "Derats_AutoRest"
@@ -22701,6 +22748,34 @@ config_files = []
 #////////////////////////////////////////////////#
 
 #////////////////////////////////////////////////#
+#//                   Tresset                  //#
+#////////////////////////////////////////////////#
+
+[[mods]]
+categories = ["Items", "Encounters", "BG2EE"]
+name = "Galeforce of Faenya-Dail"
+tp2 = "galeforce_of_faenyadail"
+aliases = []
+config_files = []
+
+  [[mods.sources]]
+  id = "primary"
+  label = "Tresset"
+  type = "url"
+  url = "https://forums.beamdog.com/uploads/editor/sr/nbvrwdj4iau2.zip"
+  repo = ""
+  commit = ""
+  tag = ""
+  branch = ""
+  channel = ""
+  asset = ""
+  pkg_windows = "wzp,rar,7z,zip"
+  pkg_linux = "lin,rar,7z,zip"
+  pkg_macos = "mac,rar,7z,zip"
+
+#////////////////////////////////////////////////#
+
+#////////////////////////////////////////////////#
 #//                   Boooof                   //#
 #////////////////////////////////////////////////#
 
@@ -26142,7 +26217,7 @@ config_files = []
   id = "primary"
   label = "Sentrizeal"
   type = "url"
-  url = "https://www.sentrizeal.com/downloaditm5"
+  url = "https://www.sentrizeal.com/pst_7.htm"
   repo = ""
   commit = ""
   tag = ""
@@ -28596,28 +28671,6 @@ config_files = []
 #/////////////////////////////////////////////////////////////////////////////////////////#
 #//                                  Gibberlings Three                                  //#
 #/////////////////////////////////////////////////////////////////////////////////////////#
-
-[[mods]]
-categories = ["Romance", "Encounters", "BG1", "BGEE", "EET", "Tutu", "BGT"]
-name = "Baldur's Gate Romantic Encounters Modification (BG1RE)"
-tp2 = "bg1re"
-aliases = []
-config_files = []
-
-  [[mods.sources]]
-  id = "primary"
-  label = "Source"
-  type = "url"
-  url = "https://www.gibberlings3.net/mods/npcs/bg-romantic-encounters/"
-  repo = ""
-  commit = ""
-  tag = ""
-  branch = ""
-  channel = ""
-  asset = ""
-  pkg_windows = "wzp,rar,7z,zip"
-  pkg_linux = "lin,rar,7z,zip"
-  pkg_macos = "mac,rar,7z,zip"
 
 [[mods]]
 categories = ["NPC", "Quests", "BG2"]

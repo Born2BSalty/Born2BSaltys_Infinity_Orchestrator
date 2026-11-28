@@ -495,6 +495,8 @@ pub(super) fn check_latest_release_for_worker(
         super::app_step2_update_weaselmods::check_weaselmods_download_page(agent, &request)
     } else if mod_downloads::source_is_morpheus_mart_page_url(&request.source_url) {
         super::app_step2_update_morpheus_mart::check_morpheus_mart_download_page(agent, &request)
+    } else if mod_downloads::source_is_sentrizeal_download_url(&request.source_url) {
+        super::app_step2_update_sentrizeal::check_sentrizeal_download_page(agent, &request)
     } else if mod_downloads::is_direct_archive_url(&request.source_url) {
         super::app_step2_update_direct_archive::check_direct_archive(&request, &|url| {
             super::app_step2_update_direct_archive::probe_remote_file(agent, url)
@@ -736,6 +738,40 @@ fn push_exact_version_retry_request(state: &mut WizardState, game_tab: &str, tp_
 mod tests {
     use super::*;
     use crate::app::app_step2_update_source_refs::InstalledArchiveRecord;
+
+    #[test]
+    fn sentrizeal_worker_outcome_survives_versions_materialization_and_grouped_download() {
+        use crate::app::app_step2_update_download::test_download_assets;
+        use crate::app::app_step2_update_sentrizeal::test_support::{
+            DOWNLOAD_URL, Fixture, TestRoot, request,
+        };
+
+        let root = TestRoot::new();
+        let fixture = Fixture::pack();
+        let outcome = check_latest_release_for_worker(&fixture.agent, request(DOWNLOAD_URL));
+        assert_eq!(outcome.error, None);
+        let mut state = WizardState::default();
+        push_update_asset_if_available(&mut state, &outcome, "1.6", "", false);
+        push_update_asset_if_available(&mut state, &outcome, "1.6", "", false);
+        let assets = &state.step2.update_selected_update_assets;
+        assert_eq!(assets.len(), 2);
+        assert_eq!(assets[0].asset_name, "SentrizealAvatarPack.zip");
+        let paths = test_download_assets(&fixture.agent, assets, &root.0);
+        assert_eq!(paths.len(), 2);
+        assert_eq!(paths[0], paths[1]);
+        let bytes = std::fs::read(paths[0].as_ref().unwrap()).unwrap();
+        assert_eq!(bytes, fixture.archive);
+        let mut zip = zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
+        assert!(
+            zip.by_name("Sentrizeal_AA_Pack/Sentrizeal_AA_Pack.tp2")
+                .is_ok()
+        );
+        let requests = fixture.requests();
+        assert_eq!(requests.len(), 3);
+        assert!(requests[2].contains("Referer: https://www.sentrizeal.com/pst_7.htm\r\n"));
+        assert!(!requests[2].contains("Range:"));
+        assert!(requests[2].contains("User-Agent: BIO-update-download\r\n"));
+    }
 
     #[test]
     fn reproduce_exact_gate_fires_only_in_reproduce_mode() {

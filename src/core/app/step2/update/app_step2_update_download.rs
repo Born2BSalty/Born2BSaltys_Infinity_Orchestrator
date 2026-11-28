@@ -685,8 +685,7 @@ fn stream_into_part(
     if cancel.is_some_and(|token| token.load(Ordering::Relaxed)) {
         return Err(StreamFailure::new(0, None, "Canceled".to_string()));
     }
-    let response = agent
-        .get(url)
+    let response = super::app_step2_update_sentrizeal::download_request(agent, url)
         .set("User-Agent", "BIO-update-download")
         .call()
         .map_err(|err| StreamFailure::new(0, None, err.to_string()))?;
@@ -697,10 +696,18 @@ fn stream_into_part(
     let total = response
         .header("Content-Length")
         .and_then(|value| value.trim().parse::<u64>().ok());
+    let mut reader = response.into_reader();
+    let prefix = if super::app_step2_update_sentrizeal::download_referer(url).is_some() {
+        super::app_step2_update_sentrizeal::archive_prefix(&mut reader)
+            .map_err(|error| StreamFailure::new(0, total, error))?
+            .to_vec()
+    } else {
+        Vec::new()
+    };
+    let mut reader = io::Cursor::new(prefix).chain(reader);
     let mut file =
         fs::File::create(part).map_err(|err| StreamFailure::new(0, total, err.to_string()))?;
     send_progress(tx, members, 0, total);
-    let mut reader = response.into_reader();
     let mut buffer = vec![0_u8; READ_CHUNK];
     let (mut done, mut sent_done, mut sent_at) = (0_u64, 0_u64, Instant::now());
     loop {
@@ -787,6 +794,20 @@ pub(crate) fn safe_archive_segment(value: &str) -> String {
     } else {
         sanitized.to_string()
     }
+}
+
+#[cfg(test)]
+pub(crate) fn test_download_assets(
+    agent: &ureq::Agent,
+    assets: &[Step2UpdateAsset],
+    destination: &Path,
+) -> Vec<Result<PathBuf, String>> {
+    let (tx, _rx) = mpsc::channel();
+    destination_groups(destination, assets, &HashSet::new())
+        .iter()
+        .flat_map(|group| download_group(agent, group, &tx, None))
+        .map(|outcome| outcome.result)
+        .collect()
 }
 
 #[cfg(test)]
@@ -1065,6 +1086,30 @@ mod tests {
             final_bytes: 10,
             total: Some(10),
             error: error.map(str::to_string),
+        }
+    }
+
+    #[test]
+    fn sentrizeal_actual_download_rejects_empty_or_nonarchive_and_cleans_part() {
+        use crate::app::app_step2_update_sentrizeal::test_support::{
+            DISPOSITION, DOWNLOAD_URL, Fixture, HTML,
+        };
+
+        for body in [b"".as_slice(), b"<html>not an archive</html>".as_slice()] {
+            let root = EngineTestRoot::new();
+            let fixture = Fixture::new(HTML, Some(DISPOSITION), body);
+            let asset = asset(
+                "Sentrizeal_AA_Pack.tp2",
+                "Sentrizeal",
+                DOWNLOAD_URL.to_string(),
+            );
+            let outcomes =
+                test_download_assets(&fixture.agent, std::slice::from_ref(&asset), &root.path);
+            assert_eq!(outcomes.len(), 1);
+            assert!(outcomes[0].is_err());
+            let destination = root.path.join(archive_file_name(&asset));
+            assert!(!destination.exists());
+            assert!(!part_path(&destination).exists());
         }
     }
 

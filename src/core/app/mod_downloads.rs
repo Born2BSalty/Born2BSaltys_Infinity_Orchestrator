@@ -1343,11 +1343,7 @@ pub(crate) fn is_direct_archive_url(url: &str) -> bool {
 }
 
 pub(crate) fn source_is_sentrizeal_download_url(url: &str) -> bool {
-    let lower = url.trim().to_ascii_lowercase();
-    lower.starts_with("https://www.sentrizeal.com/downloaditm")
-        || lower.starts_with("http://www.sentrizeal.com/downloaditm")
-        || lower.starts_with("https://sentrizeal.com/downloaditm")
-        || lower.starts_with("http://sentrizeal.com/downloaditm")
+    super::app_step2_update_sentrizeal::is_source_url(url)
 }
 
 #[cfg(test)]

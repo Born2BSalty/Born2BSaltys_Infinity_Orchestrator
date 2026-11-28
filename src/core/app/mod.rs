@@ -39,6 +39,8 @@ pub mod app_step2_update_morpheus_mart;
 pub mod app_step2_update_policy;
 #[path = "step2/update/app_step2_update_preview.rs"]
 pub mod app_step2_update_preview;
+#[path = "step2/update/app_step2_update_sentrizeal.rs"]
+pub mod app_step2_update_sentrizeal;
 #[path = "step2/update/app_step2_update_source_refs.rs"]
 pub mod app_step2_update_source_refs;
 #[path = "step2/update/app_step2_update_weaselmods.rs"]
